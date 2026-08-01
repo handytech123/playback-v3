@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "dist/src/desktop/main.js",
   "description": "DAW-speed worship playback foundation",
   "dependencies": {
     "fast-xml-parser": "^5.2.5",
@@ -30,12 +31,44 @@
     "confirm:cornerstone-arrangement": "npm run build && node tools/confirm-cornerstone-arrangement.mjs",
     "ui:build": "vite build",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/bootstrap-native.ps1",
-    "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js"
+    "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js",
+    "runtime:prepare": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/prepare-runtime.ps1",
+    "build:win:installer": "npm run runtime:prepare && npm run build && npm run ui:build && npm run native:build && electron-builder --win nsis"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "vite": "^7.0.0",
     "typescript": "^5.8.0"
+  },
+  "build": {
+    "appId": "com.worship.playbackv3",
+    "productName": "Playback App V3",
+    "asar": false,
+    "directories": { "output": "artifacts/installer" },
+    "files": [
+      "dist/src/**/*",
+      "ui-dist/**/*",
+      "desktop-preload.cjs",
+      "package.json",
+      "node_modules/fast-xml-parser/**/*",
+      "node_modules/fflate/**/*",
+      "node_modules/strnum/**/*",
+      "native/build/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe",
+      ".playback-cache/milestone-1-cornerstone-performance-v3/**/*",
+      ".playback-metadata/**/*"
+    ],
+    "extraResources": [
+      { "from": "vendor/runtime", "to": "tools", "filter": ["**/*"] }
+    ],
+    "win": { "target": ["nsis"] },
+    "nsis": {
+      "artifactName": "Playback-App-V3-${version}-Windows-Setup.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

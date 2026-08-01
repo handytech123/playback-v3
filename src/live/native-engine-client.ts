@@ -9,7 +9,16 @@ export interface NativeReadyState {
   readonly outputChannels?: number; readonly routingReady?: boolean; readonly iemReady?: boolean;
   readonly stereoFallback?: boolean; readonly nextReady?: boolean; readonly nextIndex?: number;
 }
-export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; }
+export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; readonly outputChannels?: number; readonly maxOutputChannels?: number; }
+export interface NativeRoutingSelection {
+  readonly music: { readonly firstOutput: number; readonly channels: 2 };
+  readonly click: { readonly firstOutput: number; readonly channels: 1 };
+  readonly cue: { readonly firstOutput: number; readonly channels: 1 };
+  readonly pad: { readonly firstOutput: number; readonly channels: 2 };
+  readonly iemFirstOutput: number;
+  readonly instrumentOutputs: Readonly<Record<string, number>>;
+}
+export interface NativeStemRoute { readonly firstOutput:number;readonly channels:1|2; }
 export interface NativeTransportState { readonly state: "playing" | "paused"; readonly positionSeconds: number; readonly startLatencyMs?: number; }
 export interface NativeSongSelectionState extends NativeReadyState { readonly index: number; }
 export interface NativeMidiInputEvent { readonly status: number; readonly data1: number; readonly data2: number; }
@@ -51,12 +60,14 @@ export class NativeEngineClient extends EventEmitter {
   private process: ChildProcessWithoutNullStreams | null = null;
   private readonly expectedExits = new WeakSet<ChildProcessWithoutNullStreams>();
 
-  async start(executablePath: string, manifestPath: string, songIndex = 0, midiOutputName?: string | null, audioDevice?: NativeAudioDeviceSelection | null, midiInputName?: string | null): Promise<NativeReadyState> {
+  async start(executablePath: string, manifestPath: string, songIndex = 0, midiOutputName?: string | null, audioDevice?: NativeAudioDeviceSelection | null, midiInputName?: string | null, routing?: NativeRoutingSelection, stemRoutes:readonly NativeStemRoute[]=[]): Promise<NativeReadyState> {
     if (this.process) throw new Error("Native engine is already running");
     const args = [manifestPath, "--interactive", "--song-index", String(songIndex)];
     if (midiOutputName === null) args.push("--disable-midi"); else if (midiOutputName) args.push("--midi-output", midiOutputName);
     if (midiInputName === null) args.push("--disable-midi-input"); else if (midiInputName) args.push("--midi-input", midiInputName);
-    if (audioDevice) args.push("--audio-device-type", audioDevice.type, "--audio-device-name", audioDevice.name);
+    if (audioDevice) { args.push("--audio-device-type", audioDevice.type, "--audio-device-name", audioDevice.name);if(audioDevice.outputChannels)args.push("--output-count",String(audioDevice.outputChannels)); }
+    if (routing) args.push("--music-output",String(routing.music.firstOutput),"--click-output",String(routing.click.firstOutput),"--cue-output",String(routing.cue.firstOutput),"--pad-output",String(routing.pad.firstOutput),"--iem-output",String(routing.iemFirstOutput));
+    if(stemRoutes.length)args.push("--stem-routes",stemRoutes.map(route=>`${route.firstOutput}:${route.channels}`).join(","));
     const child = spawn(executablePath, args, { stdio: ["pipe", "pipe", "pipe"] });
     this.process = child;
     child.once("exit", (code) => { if (this.process === child) this.process = null; if (!this.expectedExits.has(child)) this.emit("fault", new Error(`Native audio engine stopped unexpectedly (${code ?? "no exit code"})`)); });
@@ -89,7 +100,7 @@ export class NativeEngineClient extends EventEmitter {
   setBusGain(bus: "music" | "click" | "cue" | "pad", gain: number): void { validateGain(gain); this.send(`gain ${bus} ${gain}`); }
   setMixerChannel(index: number, gain: number, muted: boolean, solo: boolean, iem: boolean): void { if (!Number.isInteger(index) || index < 0) throw new Error("Mixer channel index must be non-negative"); validateGain(gain); this.send(`mixer_channel ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
   setMasterGain(gain: number): void { validateGain(gain); this.send(`master_gain ${gain}`); }
-  selectSong(index: number): Promise<NativeSongSelectionState> {
+  selectSong(index: number,stemRoutes:readonly NativeStemRoute[]=[]): Promise<NativeSongSelectionState> {
     if (!Number.isInteger(index) || index < 0) throw new Error("Song index must be non-negative");
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => { this.off("native-line", onLine); reject(new Error("Native song selection timed out")); }, 10000);
@@ -97,7 +108,7 @@ export class NativeEngineClient extends EventEmitter {
         if (line.startsWith("SELECT_FAILED ")) { clearTimeout(timeout); this.off("native-line", onLine); reject(new Error(line)); }
         else if (line.startsWith("SELECTED ")) { clearTimeout(timeout); this.off("native-line", onLine); const fields = fieldsFromLine(line); resolve({ index: numberField(fields, "index"), deviceOpenMs: numberField(fields, "device_open_ms"), armMs: numberField(fields, "arm_ms"), stems: numberField(fields, "stems"), clickEvents: numberField(fields, "click_events"), cueEvents: numberField(fields, "cue_events"), padKey: fields.pad_key ?? "", midiEvents: numberField(fields, "midi_events"), midiEnabled: fields.midi_enabled === "1", outputChannels: numberField(fields, "output_channels"), routingReady: fields.routing_ready === "1", iemReady: fields.iem_ready === "1", stereoFallback: fields.stereo_fallback === "1", nextReady: fields.next_ready === "1", nextIndex: numberField(fields, "next_index") }); }
       };
-      this.on("native-line", onLine); this.send(`select_song ${index}`);
+      this.on("native-line", onLine);if(stemRoutes.length)this.send(`stem_routes ${stemRoutes.length} ${stemRoutes.map(route=>`${route.firstOutput} ${route.channels}`).join(" ")}`);this.send(`select_song ${index}`);
     });
   }
   close(): void { if (this.process) { this.expectedExits.add(this.process); this.process.stdin.write("quit\n"); this.process = null; } }

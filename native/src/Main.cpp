@@ -98,14 +98,15 @@ private:
 
 class RoutedAudioSource final : public juce::AudioSource {
 public:
-    RoutedAudioSource(juce::AudioSource& sourceToUse,int sourceChannelCount,int firstDestinationChannelToUse):source(sourceToUse),sourceChannels(sourceChannelCount),firstDestination(firstDestinationChannelToUse){}
-    void prepareToPlay(int blockSize,double rate)override{scratch.setSize(sourceChannels,blockSize);source.prepareToPlay(blockSize,rate);}
+    RoutedAudioSource(juce::AudioSource& sourceToUse,int routeChannelCount,int firstDestinationChannelToUse,int iemDestinationToUse=6):source(sourceToUse),routeChannels(routeChannelCount),firstDestination(firstDestinationChannelToUse),iemDestination(iemDestinationToUse){}
+    void prepareToPlay(int blockSize,double rate)override{scratch.setSize(2,blockSize);source.prepareToPlay(blockSize,rate);}
     void releaseResources()override{source.releaseResources();scratch.setSize(0,0);}
+    void setDestinations(int first,int iem){firstDestination=first;iemDestination=iem;}
     void setIemEnabled(bool enabled){iemEnabled.store(enabled,std::memory_order_release);}
     bool isIemEnabled()const{return iemEnabled.load(std::memory_order_acquire);}
-    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info)override{if(scratch.getNumSamples()<info.numSamples)scratch.setSize(sourceChannels,info.numSamples,false,false,true);scratch.clear();juce::AudioSourceChannelInfo sourceInfo(&scratch,0,info.numSamples);source.getNextAudioBlock(sourceInfo);info.clearActiveBufferRegion();const auto available=info.buffer->getNumChannels();if(available<=0)return;for(int channel=0;channel<sourceChannels;++channel){const auto requested=firstDestination+channel,destination=requested<available?requested:channel%available;info.buffer->addFrom(destination,info.startSample,scratch,juce::jmin(channel,scratch.getNumChannels()-1),0,info.numSamples,requested<available?1.0f:0.7f);}if(iemEnabled.load(std::memory_order_acquire)){for(int iemChannel=0;iemChannel<2;++iemChannel){const auto iemDestination=6+iemChannel;if(iemDestination<available)info.buffer->addFrom(iemDestination,info.startSample,scratch,sourceChannels==1?0:juce::jmin(iemChannel,scratch.getNumChannels()-1),0,info.numSamples);}}}
+    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info)override{if(scratch.getNumSamples()<info.numSamples)scratch.setSize(2,info.numSamples,false,false,true);scratch.clear();juce::AudioSourceChannelInfo sourceInfo(&scratch,0,info.numSamples);source.getNextAudioBlock(sourceInfo);info.clearActiveBufferRegion();const auto available=info.buffer->getNumChannels();if(available<=0)return;if(routeChannels==1){const bool valid=firstDestination<available;const int destination=valid?firstDestination:0;const float gain=valid?0.5f:0.35f;info.buffer->addFrom(destination,info.startSample,scratch,0,0,info.numSamples,gain);if(scratch.getNumChannels()>1)info.buffer->addFrom(destination,info.startSample,scratch,1,0,info.numSamples,gain);}else for(int channel=0;channel<2;++channel){const auto requested=firstDestination+channel,destination=requested<available?requested:channel%available;info.buffer->addFrom(destination,info.startSample,scratch,channel,0,info.numSamples,requested<available?1.0f:0.7f);}if(iemEnabled.load(std::memory_order_acquire)){for(int channel=0;channel<2;++channel){const auto destination=iemDestination+channel;if(destination<available)info.buffer->addFrom(destination,info.startSample,scratch,channel,0,info.numSamples);}}}
 private:
-    juce::AudioSource& source;int sourceChannels,firstDestination;juce::AudioBuffer<float> scratch;std::atomic<bool> iemEnabled{false};
+    juce::AudioSource& source;int routeChannels,firstDestination,iemDestination;juce::AudioBuffer<float> scratch;std::atomic<bool> iemEnabled{false};
 };
 
 class RecoveryCueSource final : public juce::AudioSource {
@@ -166,21 +167,25 @@ public:
     }
     juce::String openDefaultDevice() {
         const auto start = Clock::now();
+        const auto requestedOutputs=configuredOutputCount>0?configuredOutputCount:requiredOutputChannels();
         juce::String error;
-        if(audioOverrideSet){error=deviceManager.initialise(0,0,nullptr,true);if(error.isEmpty()){deviceManager.setCurrentAudioDeviceType(audioOverrideType,true);juce::AudioDeviceManager::AudioDeviceSetup setup;deviceManager.getAudioDeviceSetup(setup);setup.outputDeviceName=audioOverrideName;setup.inputDeviceName={};setup.useDefaultInputChannels=false;setup.useDefaultOutputChannels=false;setup.outputChannels.clear();setup.outputChannels.setRange(0,8,true);error=deviceManager.setAudioDeviceSetup(setup,true);if(error.isNotEmpty()){setup.outputChannels.clear();setup.outputChannels.setRange(0,6,true);error=deviceManager.setAudioDeviceSetup(setup,true);}}}
-        else {error = deviceManager.initialiseWithDefaultDevices(0,8);if(error.isNotEmpty()){deviceManager.closeAudioDevice();error=deviceManager.initialiseWithDefaultDevices(0,6);}}
+        if(audioOverrideSet){error=deviceManager.initialise(0,0,nullptr,true);if(error.isEmpty()){deviceManager.setCurrentAudioDeviceType(audioOverrideType,true);juce::AudioDeviceManager::AudioDeviceSetup setup;deviceManager.getAudioDeviceSetup(setup);setup.outputDeviceName=audioOverrideName;setup.inputDeviceName={};setup.useDefaultInputChannels=false;setup.useDefaultOutputChannels=false;setup.outputChannels.clear();setup.outputChannels.setRange(0,requestedOutputs,true);error=deviceManager.setAudioDeviceSetup(setup,true);if(error.isNotEmpty()&&configuredOutputCount==0){for(const auto fallback:{6,2}){setup.outputChannels.clear();setup.outputChannels.setRange(0,fallback,true);error=deviceManager.setAudioDeviceSetup(setup,true);if(error.isEmpty()){stereoFallback=fallback<requiredOutputChannels();break;}}}}}
+        else error=deviceManager.initialiseWithDefaultDevices(0,requestedOutputs);
         if(error.isNotEmpty()&&!audioOverrideSet){deviceManager.closeAudioDevice();error=deviceManager.initialiseWithDefaultDevices(0,2);stereoFallback=true;}
         if (error.isNotEmpty()) return error;
         player.setSource(&gate);
         deviceManager.addAudioCallback(&player);
         deviceOpenMs = elapsedMs(start);
-        if (auto* device=deviceManager.getCurrentAudioDevice()){outputSampleRate=device->getCurrentSampleRate();outputChannelCount=device->getActiveOutputChannels().countNumberOfSetBits();routeReady=outputChannelCount>=6;iemReady=outputChannelCount>=8;if(!routeReady)stereoFallback=true;}
+        if (auto* device=deviceManager.getCurrentAudioDevice()){outputSampleRate=device->getCurrentSampleRate();outputChannelCount=device->getActiveOutputChannels().countNumberOfSetBits();routeReady=outputChannelCount>=requiredProgramOutputChannels();iemReady=outputChannelCount>=iemFirst+2;if(!routeReady)stereoFallback=true;}
         if(midiInputOverrideSet&&midiInputOverrideEnabled)midiInputCapture.open(midiInputOverrideName);
         return {};
     }
     void setMidiOutputOverride(const juce::String& name,bool enabled){midiOverrideSet=true;midiOverrideEnabled=enabled;midiOverrideName=name;}
     void setMidiInputOverride(const juce::String& name,bool enabled){midiInputOverrideSet=true;midiInputOverrideEnabled=enabled;midiInputOverrideName=name;}
     void setAudioDeviceOverride(const juce::String& type,const juce::String& name){audioOverrideSet=true;audioOverrideType=type;audioOverrideName=name;}
+    void setOutputChannelCount(int channels){configuredOutputCount=channels>=2?channels:0;}
+    void setRouting(int music,int click,int cue,int pad,int iem){musicFirst=juce::jmax(0,music);clickFirst=juce::jmax(0,click);cueFirst=juce::jmax(0,cue);padFirst=juce::jmax(0,pad);iemFirst=juce::jmax(0,iem);clickRoute.setDestinations(clickFirst,iemFirst);cueRoute.setDestinations(cueFirst,iemFirst);}
+    void setStemOutputRoutes(std::vector<std::pair<int,int>> routes){stemOutputRoutes=std::move(routes);}
     juce::Result arm(const juce::File& manifestFile, int songIndex) {
         const auto start = Clock::now();
         const auto parsed = juce::JSON::parse(manifestFile);
@@ -209,7 +214,8 @@ public:
             std::unique_ptr<juce::AudioFormatReaderSource> readerSource;std::unique_ptr<juce::AudioTransportSource> transport;
             if(stemIndex<static_cast<int>(preparedReaders.size())&&stemIndex<static_cast<int>(preparedTransports.size())){readerSource=std::move(preparedReaders[stemIndex]);transport=std::move(preparedTransports[stemIndex]);}
             else{auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(audioFile));if(!reader)return juce::Result::fail("Cannot decode cached stem: "+audioFile.getFullPathName());readerSource=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);transport=std::make_unique<juce::AudioTransportSource>();transport->setSource(readerSource.get(),32768,&readAheadThread,readerSource->getAudioFormatReader()->sampleRate,2);}++stemIndex;
-            auto stemGain=std::make_unique<GainRampAudioSource>(*transport);auto stemRoute=std::make_unique<RoutedAudioSource>(*stemGain,2,0);mixer.addInputSource(stemRoute.get(),false);
+            const auto configured=stemIndex-1<static_cast<int>(stemOutputRoutes.size())?stemOutputRoutes[stemIndex-1]:std::pair<int,int>{musicFirst,1};
+            auto stemGain=std::make_unique<GainRampAudioSource>(*transport);auto stemRoute=std::make_unique<RoutedAudioSource>(*stemGain,configured.second,configured.first,iemFirst);mixer.addInputSource(stemRoute.get(),false);
             stemFaders.push_back(1.0f);stemMuted.push_back(false);stemSolo.push_back(false);stemIem.push_back(false);stemGains.push_back(std::move(stemGain));stemRoutes.push_back(std::move(stemRoute));
             readers.push_back(std::move(readerSource));
             transports.push_back(std::move(transport));
@@ -253,7 +259,7 @@ public:
                 if(preparedPadReader&&preparedPadTransport){padReader=std::move(preparedPadReader);padTransport=std::move(preparedPadTransport);}else{auto padReaderRaw=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(padFile));if(!padReaderRaw)return juce::Result::fail("Cannot decode prepared pad");padReader=std::make_unique<juce::AudioFormatReaderSource>(padReaderRaw.release(),true);padTransport=std::make_unique<juce::AudioTransportSource>();padTransport->setSource(padReader.get(),32768,&readAheadThread,padReader->getAudioFormatReader()->sampleRate,2);}
                 padTransport->setLooping(true); padTransport->start();
                 padGain=std::make_unique<GainRampAudioSource>(*padTransport);padGain->setGain(0.0f);
-                padMix=std::make_unique<GainRampAudioSource>(static_cast<juce::AudioSource&>(*padGain));padGate=std::make_unique<TransportGate>(*padMix);padGate->setOpen(true);padRoute=std::make_unique<RoutedAudioSource>(*padGate,2,4);mixer.addInputSource(padRoute.get(),false);
+                padMix=std::make_unique<GainRampAudioSource>(static_cast<juce::AudioSource&>(*padGain));padGate=std::make_unique<TransportGate>(*padMix);padGate->setOpen(true);padRoute=std::make_unique<RoutedAudioSource>(*padGate,2,padFirst,iemFirst);mixer.addInputSource(padRoute.get(),false);
             }
         }
         armMs = elapsedMs(start);
@@ -332,6 +338,8 @@ public:
         readAheadThread.stopThread(2000);
     }
 private:
+    int requiredProgramOutputChannels()const{int result=std::max({musicFirst+2,clickFirst+1,cueFirst+1,padFirst+2});for(const auto& route:stemOutputRoutes)result=juce::jmax(result,route.first+route.second);return result;}
+    int requiredOutputChannels()const{return juce::jmax(requiredProgramOutputChannels(),iemFirst+2);}
     bool anyMixerSolo()const{if(std::any_of(stemSolo.begin(),stemSolo.end(),[](bool value){return value;}))return true;return auxSolo[0]||auxSolo[1]||auxSolo[2];}
     void applyStemMix(double rampSeconds){const auto anySolo=anyMixerSolo();for(size_t index=0;index<stemGains.size();++index){const auto audible=musicEnabled&&!stemMuted[index]&&(!anySolo||stemSolo[index]);stemGains[index]->setGain(audible?stemFaders[index]*musicBusGain*panicAttenuation:0.0f,rampSeconds);}}
     void applyAuxMix(){const auto anySolo=anyMixerSolo();const auto factor=[&](int index,float busGain){return !auxMuted[index]&&(!anySolo||auxSolo[index])?auxFaders[index]*busGain:0.0f;};clickGain.setGain(factor(0,clickBusGain),0.03);cueGain.setGain(factor(1,cueBusGain),0.03);if(padMix)padMix->setGain(factor(2,padBusGain),0.03);}
@@ -354,6 +362,7 @@ private:
     std::vector<std::future<void>> cleanupTasks;
     double deviceOpenMs=0, armMs=0,lastResetMs=0,lastStemMs=0,lastLiveMs=0;
     double outputSampleRate=0;int outputChannelCount=0;bool routeReady=false,iemReady=false,stereoFallback=false;
+    int musicFirst=0,clickFirst=2,cueFirst=3,padFirst=4,iemFirst=6;std::vector<std::pair<int,int>> stemOutputRoutes;
     bool playing=false;
     int clickEventCount=0, cueEventCount=0;
     juce::String padKey;
@@ -383,7 +392,7 @@ private:
     juce::String midiOutputName,midiWarning;
     bool midiOverrideSet=false,midiOverrideEnabled=false;juce::String midiOverrideName;
     bool midiInputOverrideSet=false,midiInputOverrideEnabled=false;juce::String midiInputOverrideName;MidiInputCapture midiInputCapture;
-    bool audioOverrideSet=false;juce::String audioOverrideType,audioOverrideName;
+    bool audioOverrideSet=false;juce::String audioOverrideType,audioOverrideName;int configuredOutputCount=0;
     juce::File armedManifestFile;int preloadedNextIndex=-1;std::vector<std::unique_ptr<juce::AudioFormatReaderSource>> preloadedReaders;std::vector<std::unique_ptr<juce::AudioTransportSource>> preloadedTransports;std::unique_ptr<juce::AudioFormatReaderSource> preloadedPadReader;std::unique_ptr<juce::AudioTransportSource> preloadedPadTransport;
 
     void resetSong(){gate.setOpen(false);playing=false;mixer.removeAllInputs();cueMixer.removeAllInputs();stemRoutes.clear();stemGains.clear();stemFaders.clear();stemMuted.clear();stemSolo.clear();stemIem.clear();for(auto& transport:transports)retiredTransports.push_back(std::move(transport));for(auto& reader:readers)retiredReaders.push_back(std::move(reader));transports.clear();readers.clear();padRoute.reset();padGate.reset();padMix.reset();padGain.reset();if(padTransport)retiredTransports.push_back(std::move(padTransport));if(padReader)retiredReaders.push_back(std::move(padReader));clickScheduled.clearEvents();cueScheduled.clearEvents();midiScheduled.clearEvents();recoveryCue.stop();repeatCueSource.stop();recoveryCues.clear();repeatCue.reset();clickEventCount=0;cueEventCount=0;padKey={};gate.setPositionSamples(0);masterGain.setGain(globalOutputTrimGain);for(int index=0;index<3;++index){auxFaders[index]=1;auxMuted[index]=false;auxSolo[index]=false;auxIem[index]=false;}clickRoute.setIemEnabled(false);cueRoute.setIemEnabled(false);}
@@ -396,10 +405,12 @@ int main(int argc, char* argv[]) {
     juce::ScopedJuceInitialiser_GUI init;
     if(argc>=2&&std::string(argv[1])=="--list-midi"){for(const auto& device:juce::MidiOutput::getAvailableDevices())std::cout<<device.name<<'\n';return 0;}
     if(argc>=2&&std::string(argv[1])=="--list-midi-inputs"){for(const auto& device:juce::MidiInput::getAvailableDevices())std::cout<<device.name<<'\n';return 0;}
-    if(argc>=2&&std::string(argv[1])=="--list-audio-devices"){juce::AudioDeviceManager manager;manager.initialise(0,0,nullptr,true);for(auto* type:manager.getAvailableDeviceTypes()){type->scanForDevices();for(const auto& name:type->getDeviceNames(false))std::cout<<type->getTypeName()<<'\t'<<name<<'\n';}return 0;}
+    if(argc>=2&&std::string(argv[1])=="--list-audio-devices"){juce::AudioDeviceManager manager;manager.initialise(0,0,nullptr,true);for(auto* type:manager.getAvailableDeviceTypes()){type->scanForDevices();for(const auto& name:type->getDeviceNames(false)){std::unique_ptr<juce::AudioIODevice> device(type->createDevice(name,{}));std::cout<<type->getTypeName()<<'\t'<<name<<'\t'<<(device?device->getOutputChannelNames().size():0)<<'\n';}}return 0;}
     if (argc < 2) { std::cerr << "Usage: PlaybackEngineProbe <confirmed-set.json> [--interactive]\n"; return 2; }
     ArmedSetEngine engine;
-    juce::String audioType,audioName;for(int index=2;index<argc;++index){const auto argument=std::string(argv[index]);if(argument=="--disable-midi")engine.setMidiOutputOverride({},false);else if(argument=="--midi-output"&&index+1<argc)engine.setMidiOutputOverride(argv[++index],true);else if(argument=="--midi-input"&&index+1<argc)engine.setMidiInputOverride(argv[++index],true);else if(argument=="--disable-midi-input")engine.setMidiInputOverride({},false);else if(argument=="--audio-device-type"&&index+1<argc)audioType=argv[++index];else if(argument=="--audio-device-name"&&index+1<argc)audioName=argv[++index];}if(audioType.isNotEmpty()&&audioName.isNotEmpty())engine.setAudioDeviceOverride(audioType,audioName);
+    juce::String audioType,audioName;int musicOutput=1,clickOutput=3,cueOutput=4,padOutput=5,iemOutput=7,outputCount=0;std::vector<std::pair<int,int>> stemRoutes;
+    for(int index=2;index<argc;++index){const auto argument=std::string(argv[index]);if(argument=="--disable-midi")engine.setMidiOutputOverride({},false);else if(argument=="--midi-output"&&index+1<argc)engine.setMidiOutputOverride(argv[++index],true);else if(argument=="--midi-input"&&index+1<argc)engine.setMidiInputOverride(argv[++index],true);else if(argument=="--disable-midi-input")engine.setMidiInputOverride({},false);else if(argument=="--audio-device-type"&&index+1<argc)audioType=argv[++index];else if(argument=="--audio-device-name"&&index+1<argc)audioName=argv[++index];else if(argument=="--output-count"&&index+1<argc)outputCount=std::stoi(argv[++index]);else if(argument=="--music-output"&&index+1<argc)musicOutput=std::stoi(argv[++index]);else if(argument=="--click-output"&&index+1<argc)clickOutput=std::stoi(argv[++index]);else if(argument=="--cue-output"&&index+1<argc)cueOutput=std::stoi(argv[++index]);else if(argument=="--pad-output"&&index+1<argc)padOutput=std::stoi(argv[++index]);else if(argument=="--iem-output"&&index+1<argc)iemOutput=std::stoi(argv[++index]);else if(argument=="--stem-routes"&&index+1<argc){juce::StringArray tokens;tokens.addTokens(argv[++index],",","");for(const auto& token:tokens){const auto separator=token.indexOfChar(':');if(separator>0)stemRoutes.push_back({juce::jmax(0,token.substring(0,separator).getIntValue()-1),token.substring(separator+1).getIntValue()==2?2:1});}}}
+    engine.setRouting(musicOutput-1,clickOutput-1,cueOutput-1,padOutput-1,iemOutput-1);engine.setStemOutputRoutes(stemRoutes);engine.setOutputChannelCount(outputCount);if(audioType.isNotEmpty()&&audioName.isNotEmpty())engine.setAudioDeviceOverride(audioType,audioName);
     if (const auto error=engine.openDefaultDevice(); error.isNotEmpty()) { std::cerr << "Audio device error: " << error << '\n'; return 3; }
     const juce::File manifest(argv[1]);
     int songIndex=0;
@@ -425,6 +436,7 @@ int main(int argc, char* argv[]) {
         else if(command=="gain"){std::string bus;float value=1;std::cin>>bus>>value;engine.setBusGain(bus,value);std::cout<<"GAIN bus="<<bus<<" value="<<value<<"\n";}
         else if(command=="mixer_channel"){int index=0,muted=0,solo=0,iem=0;float value=1;std::cin>>index>>value>>muted>>solo>>iem;if(engine.setMixerChannel(index,value,muted!=0,solo!=0,iem!=0))std::cout<<"MIXER_CHANNEL index="<<index<<" value="<<value<<" muted="<<muted<<" solo="<<solo<<" iem="<<iem<<"\n";else std::cout<<"MIXER_CHANNEL_FAILED index="<<index<<"\n";}
         else if(command=="master_gain"){float value=1;std::cin>>value;engine.setMasterGain(value);std::cout<<"MASTER_GAIN value="<<value<<"\n";}
+        else if(command=="stem_routes"){int count=0;std::cin>>count;std::vector<std::pair<int,int>> routes;for(int index=0;index<count;++index){int first=1,channels=1;std::cin>>first>>channels;routes.push_back({juce::jmax(0,first-1),channels==2?2:1});}engine.setStemOutputRoutes(std::move(routes));std::cout<<"STEM_ROUTES count="<<count<<"\n";}
         else if(command=="select_song"){int index=0;std::cin>>index;const auto result=engine.selectSong(index);if(result.failed())std::cout<<"SELECT_FAILED index="<<index<<" error=\""<<result.getErrorMessage()<<"\"\n";else std::cout<<"SELECTED index="<<index<<" device_open_ms="<<engine.getDeviceOpenMs()<<" arm_ms="<<engine.getArmMs()<<" stems="<<engine.stemCount()<<" click_events="<<engine.getClickEventCount()<<" cue_events="<<engine.getCueEventCount()<<" pad_key="<<engine.getPadKey()<<" midi_events="<<engine.getMidiEventCount()<<" midi_enabled="<<(engine.midiEnabled()?1:0)<<" output_channels="<<engine.getOutputChannelCount()<<" routing_ready="<<(engine.routingReady()?1:0)<<" iem_ready="<<(engine.isIemReady()?1:0)<<" stereo_fallback="<<(engine.isStereoFallback()?1:0)<<" next_ready="<<(engine.isNextReady()?1:0)<<" next_index="<<engine.nextSongIndex()<<" reset_ms="<<engine.getResetMs()<<" stem_ms="<<engine.getStemMs()<<" live_ms="<<engine.getLiveMs()<<"\n";}
         else if (command=="panic") { engine.panic(); std::cout << "PANIC state=safe\n"; }
         else if (command=="announce_recovery") { std::string target;double at=0,repeatAt=-1;std::cin>>target>>at>>repeatAt;if(engine.announceRecovery(target,at,repeatAt))std::cout << "RECOVERY_CUE state=armed target=" << target << " at_seconds=" << at << " repeat_at_seconds=" << repeatAt << "\n";else std::cout << "RECOVERY_CUE state=missing target=" << target << "\n"; }

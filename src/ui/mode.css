@@ -270,6 +270,14 @@ body.mixer-collapsed.performance-mode main{padding-bottom:54px}body.mixer-collap
 .settings-readout span{color:#718796;font-size:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 .settings-readout strong{color:#e5f0f6;font-size:11px}
 .settings-readout .route-status,.settings-readout .midi-status{align-self:auto}
+.settings-subheading{display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;padding-top:16px;border-top:1px solid #293945;color:#63d8ff;font-size:9px;font-weight:900;letter-spacing:.12em}
+.settings-subheading strong{color:#9db0bc;font-size:8px}
+.dante-routing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:12px}
+.dante-routing-grid label{display:grid;gap:6px;padding:10px;border:1px solid #304654;border-radius:6px;background:#0d1820;color:#e8f2f7;font-size:9px;font-weight:900;letter-spacing:.05em}
+.dante-routing-grid label span{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dante-routing-grid label b{padding:2px 5px;border:1px solid #3d687d;border-radius:3px;color:#63d8ff;font-size:7px;letter-spacing:.1em}
+.dante-routing-grid select{width:100%;min-height:38px;padding:7px 9px;border:1px solid #3b5060;border-radius:5px;background:#071017;color:#edf6fb;font-size:11px}
+.dante-aux-routes{grid-template-columns:repeat(4,minmax(0,1fr));padding-top:12px;border-top:1px dashed #304654}
 .settings-help{margin:0;padding:12px;border-left:3px solid #576d7c;background:#101a22;color:#8fa3b0;font-size:10px;line-height:1.55}
 .settings-report{padding:13px;border:1px solid #31434f;border-radius:6px;background:#081016;color:#93a7b4;font-size:10px;line-height:1.5}
 .settings-action-list{display:grid;gap:10px}
@@ -281,4 +289,4 @@ body.mixer-collapsed.performance-mode main{padding-bottom:54px}body.mixer-collap
 .settings-page .remote-settings{padding:0}.settings-page .remote-settings>p:first-child{margin-top:0}
 .settings-page .midi-input-settings{padding-top:16px}
 .performance-mode .settings-window #importReaper{display:grid!important}
-@media(max-width:800px){#remoteSettings.settings-window{width:calc(100vw - 20px);height:calc(100vh - 20px)}.settings-grid{grid-template-columns:1fr}.settings-wide{grid-column:auto}.diagnostic-line{grid-template-columns:1fr}.settings-tabs button{min-width:105px}}
+@media(max-width:800px){#remoteSettings.settings-window{width:calc(100vw - 20px);height:calc(100vh - 20px)}.settings-grid,.dante-routing-grid,.dante-aux-routes{grid-template-columns:1fr}.settings-wide{grid-column:auto}.diagnostic-line{grid-template-columns:1fr}.settings-tabs button{min-width:105px}}
