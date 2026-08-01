@@ -1,0 +1,13 @@
+import { createHash } from "node:crypto";
+import { createReadStream,createWriteStream } from "node:fs";
+import { mkdir,readFile,rename,stat,writeFile } from "node:fs/promises";
+import { basename,join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import type { ArrangementVersion } from "./arrangement.js";
+
+export interface PreparedArrangement {readonly manifestPath:string;readonly arrangement:ArrangementVersion;readonly copiedMediaFiles:number;readonly copiedBytes:number;}
+export async function prepareArrangementCache(arrangement:ArrangementVersion,cacheRoot:string):Promise<PreparedArrangement>{
+  const final=join(cacheRoot,arrangement.id),manifestPath=join(final,"arrangement.json"),temporary=`${final}.preparing-${process.pid}-${Date.now()}`;try{const existing=JSON.parse(await readFile(manifestPath,"utf8")) as ArrangementVersion;if(existing.sourceSha256===arrangement.sourceSha256)return{manifestPath,arrangement:existing,copiedMediaFiles:0,copiedBytes:0};throw new Error("Prepared arrangement id collision");}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}await mkdir(join(temporary,"media"),{recursive:true});const copied=new Map<string,string>();let copiedBytes=0;
+  try{for(const item of arrangement.mediaItems){if(!item.sourcePath||copied.has(item.sourcePath))continue;const sourceStat=await stat(item.sourcePath),hash=createHash("sha256").update(item.sourcePath).digest("hex").slice(0,10),destination=join(temporary,"media",`${hash}-${basename(item.sourcePath)}`);await pipeline(createReadStream(item.sourcePath),createWriteStream(destination,{flags:"wx"}));copied.set(item.sourcePath,destination);copiedBytes+=sourceStat.size;}
+    const sourceSnapshot=join(temporary,"source.rpp");await pipeline(createReadStream(arrangement.sourcePath),createWriteStream(sourceSnapshot,{flags:"wx"}));const draft={...arrangement,sourcePath:sourceSnapshot,mediaItems:arrangement.mediaItems.map((item)=>({...item,sourcePath:item.sourcePath?copied.get(item.sourcePath)??null:null}))};const draftPath=join(temporary,"arrangement.json");await writeFile(draftPath,JSON.stringify(draft,null,2),{encoding:"utf8",flag:"wx"});await rename(temporary,final);const replace=(value:string)=>join(final,value.slice(temporary.length));const prepared={...draft,sourcePath:replace(draft.sourcePath),mediaItems:draft.mediaItems.map((item)=>({...item,sourcePath:item.sourcePath?replace(item.sourcePath):null}))};await writeFile(manifestPath,JSON.stringify(prepared,null,2),"utf8");return{manifestPath,arrangement:prepared,copiedMediaFiles:copied.size,copiedBytes};
+  }catch(error){const{rm}=await import("node:fs/promises");await rm(temporary,{recursive:true,force:true});throw error;}}

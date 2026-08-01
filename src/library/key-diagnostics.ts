@@ -1,0 +1,24 @@
+import { createHash } from "node:crypto";
+import type { MasterSongRow } from "./normalize-song.js";
+
+export type KeyStatus="confirmed"|"estimated"|"unknown"|"conflict";
+export interface StemKeyEvidence { readonly path:string;readonly key:string;readonly confidence:number;readonly eligible:boolean;readonly reason:string|null; }
+export interface RawKeyEstimate { readonly key:string|null;readonly confidence:number;readonly alternatives:readonly [string,number][];readonly stems:readonly StemKeyEvidence[]; }
+export interface KeyApproval { readonly schemaVersion:1;readonly songId:string;readonly approvedKey:string;readonly estimateFingerprint:string;readonly approvedAt:string;readonly operator:string|null; }
+export interface SongKeyDiagnostic { readonly songId:string;readonly title:string;readonly masterKey:string|null;readonly detectedKey:string|null;readonly confidence:number;readonly status:KeyStatus;readonly effectiveKey:string|null;readonly estimateFingerprint:string;readonly supportingStems:readonly StemKeyEvidence[];readonly excludedStems:readonly StemKeyEvidence[];readonly alternatives:readonly [string,number][];readonly message:string; }
+export interface KeyReadinessReport {readonly total:number;readonly confirmed:number;readonly estimated:number;readonly unknown:number;readonly conflicts:number;readonly missingMaster:number;readonly songs:readonly SongKeyDiagnostic[];}
+
+export function evaluateSongKey(master:Pick<MasterSongRow,"catalogId"|"title"|"key">,estimate:RawKeyEstimate,approval:KeyApproval|null=null):SongKeyDiagnostic{
+  const detectedKey=estimate.key?canonicalKey(estimate.key):null,masterKey=master.key?canonicalKey(master.key):null,fingerprint=estimateFingerprint(estimate),eligible=estimate.stems.filter((stem)=>stem.eligible),excluded=estimate.stems.filter((stem)=>!stem.eligible);
+  if(approval){if(approval.songId!==master.catalogId)throw new Error("Key approval belongs to another song");return base("confirmed",canonicalKey(approval.approvedKey),`Approved ${canonicalKey(approval.approvedKey)} by operator`);}
+  if(masterKey){if(detectedKey&&estimate.confidence>=.45&&!sameKey(masterKey,detectedKey))return base("conflict",masterKey,`Master key ${masterKey} conflicts with detected ${detectedKey}`);return base("confirmed",masterKey,detectedKey?`Master key ${masterKey} agrees with or outranks stem evidence`:`Master key ${masterKey}; no reliable stem estimate`);}
+  if(detectedKey&&estimate.confidence>=.45)return base("estimated",detectedKey,`Detected ${detectedKey}; operator approval required`);
+  return base("unknown",null,"No master key and stem evidence is not reliable enough");
+  function base(status:KeyStatus,effectiveKey:string|null,message:string):SongKeyDiagnostic{return{songId:master.catalogId,title:master.title,masterKey,detectedKey,confidence:estimate.confidence,status,effectiveKey,estimateFingerprint:fingerprint,supportingStems:eligible,excludedStems:excluded,alternatives:estimate.alternatives,message};}
+}
+
+export function createKeyApproval(diagnostic:SongKeyDiagnostic,approvedKey:string,operator:string|null=null,approvedAt=new Date().toISOString()):KeyApproval{if(!approvedKey.trim())throw new Error("Approved key is required");return{schemaVersion:1,songId:diagnostic.songId,approvedKey:canonicalKey(approvedKey),estimateFingerprint:diagnostic.estimateFingerprint,approvedAt,operator};}
+export function buildKeyReadinessReport(songs:readonly SongKeyDiagnostic[]):KeyReadinessReport{return{total:songs.length,confirmed:songs.filter((x)=>x.status==="confirmed").length,estimated:songs.filter((x)=>x.status==="estimated").length,unknown:songs.filter((x)=>x.status==="unknown").length,conflicts:songs.filter((x)=>x.status==="conflict").length,missingMaster:songs.filter((x)=>!x.masterKey).length,songs};}
+export function estimateFingerprint(estimate:RawKeyEstimate):string{return createHash("sha256").update(JSON.stringify({key:estimate.key,confidence:estimate.confidence,stems:estimate.stems.map((stem)=>[stem.path,stem.key,stem.confidence,stem.eligible])})).digest("hex");}
+export function canonicalKey(value:string):string{const match=value.trim().replace(/♭/g,"b").replace(/♯/g,"#").match(/^([A-Ga-g])([#b]?)(?:\s*(major|minor|maj|min|m))?$/i);if(!match)throw new Error(`Unsupported musical key: ${value}`);const root=`${match[1]!.toUpperCase()}${match[2]??""}`,mode=(match[3]??"").toLowerCase();return`${root}${mode==="minor"||mode==="min"||mode==="m"?"m":""}`;}
+function sameKey(left:string,right:string):boolean{const pitch=(key:string)=>{const normalized=canonicalKey(key),minor=normalized.endsWith("m"),root=minor?normalized.slice(0,-1):normalized,values:Record<string,number>={C:0,"C#":1,Db:1,D:2,"D#":3,Eb:3,E:4,F:5,"F#":6,Gb:6,G:7,"G#":8,Ab:8,A:9,"A#":10,Bb:10,B:11};return[values[root],minor] as const;};const a=pitch(left),b=pitch(right);return a[0]===b[0]&&a[1]===b[1];}

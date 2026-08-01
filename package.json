@@ -1,0 +1,41 @@
+{
+  "name": "playback-v3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DAW-speed worship playback foundation",
+  "dependencies": {
+    "fast-xml-parser": "^5.2.5",
+    "fflate": "^0.8.2"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "verify:milestone2": "npm run build && node tools/verify-milestone2.mjs",
+    "verify:milestone3": "npm run build && node tools/verify-milestone3.mjs",
+    "report:keys": "npm run build && node tools/report-library-keys.mjs",
+    "scan:library": "npm run build && node tools/scan-production-library.mjs",
+    "build:transition-test": "npm run build && node tools/build-transition-test-set.mjs",
+    "verify:app-arrangement": "npm run build && node tools/verify-app-arrangement.mjs",
+    "verify:editor-workspace": "npm run build && node tools/verify-editor-workspace.mjs",
+    "verify:milestone35": "npm run build && node tools/verify-milestone35.mjs",
+    "verify:milestone4": "npm run build && node tools/verify-milestone4.mjs",
+    "verify:production-performance": "npm run build && node tools/verify-production-performance.mjs",
+    "verify:prep-workflow": "npm run build && npm run ui:build && node tools/verify-prep-workflow.mjs",
+    "verify:control": "npm run build && npm run ui:build && node tools/verify-control-milestone.mjs",
+    "verify:hardware-control": "npm run build && npm run ui:build && node tools/verify-hardware-control-milestone.mjs && node tools/verify-control-milestone.mjs",
+    "copy:cornerstone-midi-to-original": "node tools/copy-cornerstone-midi-to-original.mjs",
+    "render:cornerstone-arrangement": "npm run build && node tools/render-cornerstone-arrangement.mjs",
+    "confirm:cornerstone-arrangement": "npm run build && node tools/confirm-cornerstone-arrangement.mjs",
+    "ui:build": "vite build",
+    "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/bootstrap-native.ps1",
+    "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^43.2.0",
+    "vite": "^7.0.0",
+    "typescript": "^5.8.0"
+  }
+}

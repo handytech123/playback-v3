@@ -1,0 +1,478 @@
+import { createHash, randomUUID } from "node:crypto";
+import type {
+  Cue,
+  PreparedMidiEvent,
+  PreparedSong,
+  Region,
+  TimeSignature,
+} from "../domain/song.js";
+import { preparedControl } from "../domain/song.js";
+
+export interface ArrangementSection extends Region {
+  readonly sourceRegionId: string;
+  readonly sourceStartSeconds: number;
+  readonly sourceEndSeconds: number;
+}
+
+export interface ArrangementCue extends Cue {
+  readonly id: string;
+  readonly enabled: boolean;
+  readonly sourceRegionId: string;
+  readonly sourceLeadSeconds: number;
+}
+
+export interface ArrangementMidiEvent extends PreparedMidiEvent {
+  readonly id: string;
+  readonly enabled: boolean;
+  readonly sourceRegionId: string;
+  readonly sourceAtSeconds: number;
+}
+
+export interface AppArrangementDraft {
+  readonly schemaVersion: 1;
+  readonly baseSongId: string;
+  readonly name: string;
+  readonly baseKey: string;
+  readonly baseBpm: number;
+  readonly selectedKey: string;
+  readonly selectedBpm: number;
+  readonly timeSignature: TimeSignature;
+  readonly durationSeconds: number;
+  readonly sections: readonly ArrangementSection[];
+  readonly cues: readonly ArrangementCue[];
+  readonly midi: readonly ArrangementMidiEvent[];
+  readonly revision: number;
+}
+
+export type ArrangementCommand =
+  | { readonly type: "rename-section"; readonly sectionId: string; readonly name: string }
+  | { readonly type: "move-section"; readonly sectionId: string; readonly toIndex: number }
+  | { readonly type: "duplicate-section"; readonly sectionId: string; readonly newSectionId?: string }
+  | { readonly type: "delete-section"; readonly sectionId: string }
+  | { readonly type: "split-section"; readonly atSeconds: number; readonly newSectionId?: string }
+  | { readonly type: "create-region-from-selection"; readonly startSeconds: number; readonly endSeconds: number; readonly name: string }
+  | { readonly type: "trim-start"; readonly atSeconds: number }
+  | { readonly type: "trim-end"; readonly atSeconds: number }
+  | { readonly type: "set-key-tempo"; readonly key: string; readonly bpm: number }
+  | { readonly type: "set-name"; readonly name: string }
+  | { readonly type: "set-cue-enabled"; readonly cueId: string; readonly enabled: boolean }
+  | { readonly type: "set-cue-target"; readonly cueId: string; readonly targetRegionId: string }
+  | { readonly type: "set-midi-enabled"; readonly eventId: string; readonly enabled: boolean };
+
+export function createArrangementDraft(
+  song: PreparedSong,
+  name = `${song.song.title} Arrangement`,
+): AppArrangementDraft {
+  const sections: ArrangementSection[] = renumberOccurrences(song.regions.map((region) => ({
+    ...region,
+    sourceRegionId: region.id,
+    sourceStartSeconds: region.startSeconds,
+    sourceEndSeconds: region.endSeconds,
+  })));
+  const sourceCues = song.liveAssets?.cues.map((cue) => ({
+    phrase: cue.label,
+    atSeconds: cue.atSeconds,
+    targetRegionId: cue.targetRegionId,
+  })) ?? song.cues;
+  const cues = sections.map((section, index) => {
+    const source = sourceCues.find((cue) => cue.targetRegionId === section.id);
+    return {
+      id: `cue-${section.id}`,
+      phrase: section.name,
+      atSeconds: source?.atSeconds ?? section.startSeconds,
+      targetRegionId: section.id,
+      enabled: true,
+      sourceRegionId: section.sourceRegionId,
+      sourceLeadSeconds: source
+        ? Math.max(0, section.startSeconds - source.atSeconds)
+        : index === 0
+          ? 0
+          : beatDuration(song.selectedBpm, song.timeSignature) * 2,
+    } satisfies ArrangementCue;
+  });
+  const midi = (preparedControl(song)?.proPresenterMidi ?? []).map((event, index) => {
+    const section = sectionAt(sections, event.atSeconds) ?? sections.at(-1)!;
+    return {
+      ...event,
+      id: `midi-${index + 1}`,
+      enabled: true,
+      sourceRegionId: section.sourceRegionId,
+      sourceAtSeconds: event.atSeconds,
+    } satisfies ArrangementMidiEvent;
+  });
+  return {
+    schemaVersion: 1,
+    baseSongId: String(song.song.id),
+    name,
+    baseKey: song.selectedKey,
+    baseBpm: song.selectedBpm,
+    selectedKey: song.selectedKey,
+    selectedBpm: song.selectedBpm,
+    timeSignature: song.timeSignature,
+    durationSeconds: song.durationSeconds,
+    sections,
+    cues,
+    midi,
+    revision: 0,
+  };
+}
+
+export function applyArrangementCommand(
+  draft: AppArrangementDraft,
+  command: ArrangementCommand,
+): AppArrangementDraft {
+  let sections = [...draft.sections];
+  let cues = [...draft.cues];
+  let midi = [...draft.midi];
+  let key = draft.selectedKey;
+  let bpm = draft.selectedBpm;
+  let name = draft.name;
+  const oldScale = draft.baseBpm / draft.selectedBpm;
+
+  if (command.type === "rename-section") {
+    assertName(command.name);
+    sections = replace(sections, command.sectionId, (section) => ({
+      ...section,
+      name: command.name.trim(),
+    }));
+  } else if (command.type === "move-section") {
+    const index = sections.findIndex((section) => section.id === command.sectionId);
+    if (index < 0) throw new Error("Section not found");
+    if (command.toIndex < 0 || command.toIndex >= sections.length) {
+      throw new Error("Section destination is outside the arrangement");
+    }
+    const [item] = sections.splice(index, 1);
+    sections.splice(command.toIndex, 0, item!);
+  } else if (command.type === "duplicate-section") {
+    const index = sections.findIndex((section) => section.id === command.sectionId);
+    if (index < 0) throw new Error("Section not found");
+    const source = sections[index]!;
+    const id = command.newSectionId ?? `app-${randomUUID()}`;
+    if (sections.some((section) => section.id === id)) throw new Error("Duplicate section ID");
+    sections.splice(index + 1, 0, { ...source, id });
+  } else if (command.type === "delete-section") {
+    if (sections.length === 1) throw new Error("An arrangement must retain at least one section");
+    const before = sections.length;
+    sections = sections.filter((section) => section.id !== command.sectionId);
+    if (sections.length === before) throw new Error("Section not found");
+  } else if (command.type === "split-section") {
+    sections = splitAt(sections, command.atSeconds, oldScale, command.newSectionId);
+  } else if (command.type === "create-region-from-selection") {
+    assertName(command.name);
+    sections = createFromSelection(
+      sections,
+      command.startSeconds,
+      command.endSeconds,
+      command.name.trim(),
+      oldScale,
+    );
+  } else if (command.type === "trim-start") {
+    sections = trimStart(sections, command.atSeconds, oldScale);
+  } else if (command.type === "trim-end") {
+    sections = trimEnd(sections, command.atSeconds, oldScale);
+  } else if (command.type === "set-key-tempo") {
+    if (!command.key.trim()) throw new Error("Arrangement key is required");
+    if (!Number.isFinite(command.bpm) || command.bpm <= 0) {
+      throw new Error("Arrangement BPM must be positive");
+    }
+    key = command.key.trim();
+    bpm = command.bpm;
+  } else if (command.type === "set-name") {
+    assertName(command.name);
+    name = command.name.trim();
+  } else if (command.type === "set-cue-enabled") {
+    cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, enabled: command.enabled }));
+  } else if (command.type === "set-cue-target") {
+    const target = sections.find((section) => section.id === command.targetRegionId);
+    if (!target) throw new Error("Cue destination section was not found");
+    const selected = cues.find((cue) => cue.id === command.cueId);
+    if (!selected) throw new Error("Cue not found");
+    const previousTarget = sections.find((section) => section.id === selected.targetRegionId)!;
+    const displaced = cues.find((cue) => cue.targetRegionId === target.id && cue.id !== selected.id);
+    cues = cues.map((cue) => {
+      if (cue.id === selected.id) return { ...cue, phrase: target.name, targetRegionId: target.id, sourceRegionId: target.sourceRegionId, sourceLeadSeconds: Math.max(0, target.startSeconds - cue.atSeconds) / oldScale };
+      if (displaced && cue.id === displaced.id) return { ...cue, phrase: previousTarget.name, targetRegionId: previousTarget.id, sourceRegionId: previousTarget.sourceRegionId, sourceLeadSeconds: Math.max(0, previousTarget.startSeconds - cue.atSeconds) / oldScale };
+      return cue;
+    });
+  } else if (command.type === "set-midi-enabled") {
+    let found = false;
+    midi = midi.map((event) => {
+      if (event.id !== command.eventId) return event;
+      found = true;
+      return { ...event, enabled: command.enabled };
+    });
+    if (!found) throw new Error("MIDI event was not found");
+  }
+
+  sections = renumberOccurrences(sections);
+  const scale = draft.baseBpm / bpm;
+  const reflowed = reflow(sections, scale);
+  const retimedCues = retimeCues(draft.sections, cues, reflowed, scale);
+  const retimedMidi = retimeMidi(midi, reflowed, scale);
+  return {
+    ...draft,
+    name,
+    selectedKey: key,
+    selectedBpm: bpm,
+    durationSeconds: reflowed.at(-1)!.endSeconds,
+    sections: reflowed,
+    cues: retimedCues,
+    midi: retimedMidi,
+    revision: draft.revision + 1,
+  };
+}
+
+export function arrangementFingerprint(draft: AppArrangementDraft): string {
+  return createHash("sha256").update(JSON.stringify(draft)).digest("hex");
+}
+
+export function validateArrangementDraft(draft: AppArrangementDraft): readonly string[] {
+  const issues: string[] = [];
+  if (!draft.name.trim()) issues.push("Arrangement name is missing");
+  if (!draft.selectedKey.trim()) issues.push("Arrangement key is missing");
+  if (!Number.isFinite(draft.selectedBpm) || draft.selectedBpm <= 0) issues.push("Arrangement BPM is invalid");
+  if (!draft.sections.length) issues.push("Arrangement has no sections");
+  const ids = new Set<string>();
+  for (const [index, section] of draft.sections.entries()) {
+    if (ids.has(section.id)) issues.push(`Duplicate section ID: ${section.id}`);
+    else ids.add(section.id);
+    if (!section.name.trim()) issues.push(`Section ${index + 1} has no name`);
+    if (section.sourceEndSeconds <= section.sourceStartSeconds) issues.push(`Empty source slice: ${section.name}`);
+    if (section.endSeconds <= section.startSeconds) issues.push(`Empty timeline section: ${section.name}`);
+    if (index === 0 && Math.abs(section.startSeconds) > 0.0001) issues.push("Arrangement does not start at zero");
+    if (index > 0 && Math.abs(draft.sections[index - 1]!.endSeconds - section.startSeconds) > 0.0001) {
+      issues.push(`Gap or overlap before ${section.name}`);
+    }
+  }
+  const finalEnd = draft.sections.at(-1)?.endSeconds ?? 0;
+  if (Math.abs(finalEnd - draft.durationSeconds) > 0.0001) issues.push("Arrangement duration does not match its sections");
+  for (const cue of draft.cues) {
+    const target = draft.sections.find((section) => section.id === cue.targetRegionId);
+    if (!target || cue.atSeconds < 0 || cue.atSeconds > draft.durationSeconds) issues.push(`Invalid cue: ${cue.phrase}`);
+    else if (cue.phrase !== target.name) issues.push(`Cue ${cue.phrase} does not announce ${target.name}`);
+  }
+  for (const event of draft.midi) {
+    if (event.atSeconds < 0 || event.atSeconds > draft.durationSeconds) issues.push(`Invalid MIDI event at ${event.atSeconds}`);
+  }
+  return issues;
+}
+
+export class ArrangementEditorHistory {
+  private past: AppArrangementDraft[] = [];
+  private future: AppArrangementDraft[] = [];
+  constructor(private current: AppArrangementDraft) {}
+  get draft() { return this.current; }
+  get canUndo() { return this.past.length > 0; }
+  get canRedo() { return this.future.length > 0; }
+  execute(command: ArrangementCommand) {
+    this.past.push(this.current);
+    this.current = applyArrangementCommand(this.current, command);
+    this.future = [];
+    return this.current;
+  }
+  undo() {
+    const value = this.past.pop();
+    if (!value) throw new Error("Nothing to undo");
+    this.future.push(this.current);
+    return (this.current = value);
+  }
+  redo() {
+    const value = this.future.pop();
+    if (!value) throw new Error("Nothing to redo");
+    this.past.push(this.current);
+    return (this.current = value);
+  }
+  replace(draft: AppArrangementDraft) {
+    this.current = draft;
+    this.past = [];
+    this.future = [];
+    return this.current;
+  }
+}
+
+function reflow(sections: readonly ArrangementSection[], scale = 1): ArrangementSection[] {
+  let at = 0;
+  return sections.map((section) => {
+    const duration = (section.sourceEndSeconds - section.sourceStartSeconds) * scale;
+    const result = { ...section, startSeconds: at, endSeconds: at + duration };
+    at += duration;
+    return result;
+  });
+}
+
+function retimeCues(
+  oldSections: readonly ArrangementSection[],
+  cues: readonly ArrangementCue[],
+  next: readonly ArrangementSection[],
+  scale: number,
+): ArrangementCue[] {
+  return next.map((section) => {
+    const existing = cues.find((cue) => cue.targetRegionId === section.id);
+    const source = existing ?? cues.find((cue) => cue.sourceRegionId === section.sourceRegionId);
+    const oldTarget = source
+      ? oldSections.find((item) => item.id === source.targetRegionId)
+      : undefined;
+    const sourceLead = source?.sourceLeadSeconds ?? (
+      source && oldTarget ? Math.max(0, oldTarget.startSeconds - source.atSeconds) / scale : 0
+    );
+    return {
+      id: existing?.id ?? `cue-${section.id}`,
+      phrase: section.name,
+      atSeconds: Math.max(0, section.startSeconds - sourceLead * scale),
+      targetRegionId: section.id,
+      enabled: source?.enabled ?? true,
+      sourceRegionId: section.sourceRegionId,
+      sourceLeadSeconds: sourceLead,
+    };
+  });
+}
+
+function retimeMidi(
+  events: readonly ArrangementMidiEvent[],
+  sections: readonly ArrangementSection[],
+  scale: number,
+): ArrangementMidiEvent[] {
+  const templates = new Map<string, ArrangementMidiEvent>();
+  for (const event of events) {
+    const key = `${event.sourceRegionId}:${event.sourceAtSeconds}:${event.status}:${event.data1}:${event.data2}`;
+    if (!templates.has(key)) templates.set(key, event);
+  }
+  const result: ArrangementMidiEvent[] = [];
+  for (const section of sections) {
+    for (const template of templates.values()) {
+      if (
+        template.sourceRegionId !== section.sourceRegionId ||
+        template.sourceAtSeconds < section.sourceStartSeconds ||
+        template.sourceAtSeconds >= section.sourceEndSeconds
+      ) continue;
+      const existing = events.find((event) =>
+        event.id.startsWith(`${section.id}:`) &&
+        event.sourceAtSeconds === template.sourceAtSeconds &&
+        event.status === template.status &&
+        event.data1 === template.data1 &&
+        event.data2 === template.data2,
+      );
+      result.push({
+        ...template,
+        enabled: existing?.enabled ?? template.enabled,
+        id: `${section.id}:${template.sourceAtSeconds}:${template.status}:${template.data1}`,
+        atSeconds: section.startSeconds + (template.sourceAtSeconds - section.sourceStartSeconds) * scale,
+      });
+    }
+  }
+  return result.sort((a, b) => a.atSeconds - b.atSeconds);
+}
+
+function splitAt(
+  sections: readonly ArrangementSection[],
+  at: number,
+  scale: number,
+  newSectionId = `app-${randomUUID()}`,
+): ArrangementSection[] {
+  if (!Number.isFinite(at)) throw new Error("Split position is invalid");
+  const index = sections.findIndex((section) => at > section.startSeconds + 0.0001 && at < section.endSeconds - 0.0001);
+  if (index < 0) throw new Error("Split must be inside a section");
+  const source = sections[index]!;
+  const sourceSplit = source.sourceStartSeconds + (at - source.startSeconds) / scale;
+  const left = { ...source, endSeconds: at, sourceEndSeconds: sourceSplit };
+  const right = {
+    ...source,
+    id: newSectionId,
+    startSeconds: at,
+    sourceStartSeconds: sourceSplit,
+  };
+  return [...sections.slice(0, index), left, right, ...sections.slice(index + 1)];
+}
+
+function createFromSelection(
+  sections: readonly ArrangementSection[],
+  start: number,
+  end: number,
+  name: string,
+  scale: number,
+): ArrangementSection[] {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) throw new Error("Selection must have a start before its end");
+  const containing = sections.find((section) => start >= section.startSeconds && end <= section.endSeconds);
+  if (!containing) throw new Error("Create Region currently requires a selection inside one source section");
+  let result = [...sections];
+  if (start > containing.startSeconds + 0.0001) result = splitAt(result, start, scale);
+  if (end < containing.endSeconds - 0.0001) result = splitAt(result, end, scale);
+  const selected = result.find((section) => Math.abs(section.startSeconds - start) < 0.0001 && Math.abs(section.endSeconds - end) < 0.0001);
+  if (!selected) throw new Error("Selection could not be aligned to a region");
+  return replace(result, selected.id, (section) => ({ ...section, name }));
+}
+
+function trimStart(sections: readonly ArrangementSection[], at: number, scale: number): ArrangementSection[] {
+  if (!Number.isFinite(at) || at < 0 || at >= sections.at(-1)!.endSeconds) throw new Error("Trim start is outside the arrangement");
+  return sections
+    .filter((section) => section.endSeconds > at)
+    .map((section, index) => index === 0 && section.startSeconds < at
+      ? { ...section, sourceStartSeconds: section.sourceStartSeconds + (at - section.startSeconds) / scale }
+      : section);
+}
+
+function trimEnd(sections: readonly ArrangementSection[], at: number, scale: number): ArrangementSection[] {
+  if (!Number.isFinite(at) || at <= 0 || at > sections.at(-1)!.endSeconds) throw new Error("Trim end is outside the arrangement");
+  return sections
+    .filter((section) => section.startSeconds < at)
+    .map((section, index, array) => index === array.length - 1 && section.endSeconds > at
+      ? { ...section, sourceEndSeconds: section.sourceStartSeconds + (at - section.startSeconds) / scale }
+      : section);
+}
+
+function replace(
+  items: ArrangementSection[],
+  id: string,
+  change: (section: ArrangementSection) => ArrangementSection,
+): ArrangementSection[] {
+  let found = false;
+  const result = items.map((item) => {
+    if (item.id !== id) return item;
+    found = true;
+    return change(item);
+  });
+  if (!found) throw new Error("Section not found");
+  return result;
+}
+
+function replaceCue(
+  items: ArrangementCue[],
+  id: string,
+  change: (cue: ArrangementCue) => ArrangementCue,
+): ArrangementCue[] {
+  let found = false;
+  const result = items.map((item) => {
+    if (item.id !== id) return item;
+    found = true;
+    return change(item);
+  });
+  if (!found) throw new Error("Cue not found");
+  return result;
+}
+
+function sectionAt(sections: readonly ArrangementSection[], at: number) {
+  return sections.find((section, index) => at >= section.startSeconds && (at < section.endSeconds || index === sections.length - 1));
+}
+
+function renumberOccurrences(sections: readonly ArrangementSection[]): ArrangementSection[] {
+  const parsed = sections.map((section) => ({ section, match: section.name.trim().match(/^(Intro|Verse|Pre[- ]Chorus|Chorus|Bridge|Tag|Turnaround|Interlude|Instrumental|Breakdown|Outro|End)(?:\s+\d+)?$/i) }));
+  const totals = new Map<string, number>();
+  for (const item of parsed) if (item.match) { const key = item.match[1]!.toLowerCase().replace("-", " "); totals.set(key, (totals.get(key) ?? 0) + 1); }
+  const seen = new Map<string, number>();
+  return parsed.map(({ section, match }) => {
+    if (!match) return section;
+    const key = match[1]!.toLowerCase().replace("-", " "), total = totals.get(key) ?? 1;
+    if (total < 2) return section;
+    const occurrence = (seen.get(key) ?? 0) + 1; seen.set(key, occurrence);
+    const canonical = key.split(" ").map((part) => part[0]!.toUpperCase() + part.slice(1)).join(" ");
+    return { ...section, name: `${canonical} ${occurrence}` };
+  });
+}
+
+function beatDuration(bpm: number, signature: TimeSignature) {
+  return (60 / bpm) * (4 / signature.denominator);
+}
+
+function assertName(value: string) {
+  if (!value.trim()) throw new Error("Arrangement name must not be empty");
+}

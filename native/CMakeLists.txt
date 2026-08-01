@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(PlaybackNativeEngine VERSION 0.1.0 LANGUAGES C CXX)
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../external/JUCE" JUCE)
+juce_add_console_app(PlaybackEngineProbe PRODUCT_NAME "Playback Engine Probe")
+target_sources(PlaybackEngineProbe PRIVATE src/Main.cpp)
+target_compile_features(PlaybackEngineProbe PRIVATE cxx_std_20)
+target_compile_definitions(PlaybackEngineProbe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(PlaybackEngineProbe PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)

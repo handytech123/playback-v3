@@ -1,0 +1,11 @@
+node_modules/
+tools/node_modules/
+external/JUCE/
+dist/
+native/build/
+ui-dist/
+.playback-cache/
+.playback-data/
+.playback-metadata/
+artifacts/
+*.log

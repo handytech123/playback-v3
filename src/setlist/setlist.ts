@@ -1,0 +1,7 @@
+import type { SongId } from "../domain/song.js";
+export interface SetlistItem { readonly id:string; readonly songId:SongId; readonly arrangementId:string; }
+export interface DraftSetlist { readonly id:string; readonly name:string; readonly items:readonly SetlistItem[]; }
+export function createSetlist(id:string,name:string):DraftSetlist{if(!id.trim()||!name.trim())throw new Error("Setlist ID and name are required");return{id,name,items:[]};}
+export function addSetlistSong(setlist:DraftSetlist,item:SetlistItem,index=setlist.items.length):DraftSetlist{if(setlist.items.some((x)=>x.id===item.id))throw new Error(`Duplicate setlist item ID: ${item.id}`);if(index<0||index>setlist.items.length)throw new Error("Setlist insertion index is outside the list");const items=[...setlist.items];items.splice(index,0,item);return{...setlist,items};}
+export function moveSetlistSong(setlist:DraftSetlist,from:number,to:number):DraftSetlist{if(from<0||from>=setlist.items.length||to<0||to>=setlist.items.length)throw new Error("Setlist move index is outside the list");const items=[...setlist.items],[item]=items.splice(from,1);items.splice(to,0,item!);return{...setlist,items};}
+export function removeSetlistSong(setlist:DraftSetlist,itemId:string):DraftSetlist{const items=setlist.items.filter((item)=>item.id!==itemId);if(items.length===setlist.items.length)throw new Error(`Setlist item not found: ${itemId}`);return{...setlist,items};}
