@@ -11,10 +11,11 @@ export interface NativeReadyState {
 }
 export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; readonly outputChannels?: number; readonly maxOutputChannels?: number; }
 export interface NativeRoutingSelection {
-  readonly music: { readonly firstOutput: number; readonly channels: 2 };
+  readonly profile?: string;
+  readonly music: { readonly firstOutput: number; readonly channels: 1 };
   readonly click: { readonly firstOutput: number; readonly channels: 1 };
   readonly cue: { readonly firstOutput: number; readonly channels: 1 };
-  readonly pad: { readonly firstOutput: number; readonly channels: 2 };
+  readonly pad: { readonly firstOutput: number; readonly channels: 1 };
   readonly iemFirstOutput: number;
   readonly instrumentOutputs: Readonly<Record<string, number>>;
 }

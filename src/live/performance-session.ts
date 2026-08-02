@@ -27,8 +27,8 @@ export interface PerformanceSnapshot {
 }
 
 export const DEFAULT_ROUTES: RoutingPlan = {
-  music: { firstOutput: 1, channels: 2 }, click: { firstOutput: 3, channels: 1 },
-  cue: { firstOutput: 4, channels: 1 }, pad: { firstOutput: 5, channels: 2 },
+  music: { firstOutput: 15, channels: 1 }, click: { firstOutput: 1, channels: 1 },
+  cue: { firstOutput: 2, channels: 1 }, pad: { firstOutput: 16, channels: 1 },
 };
 
 export class PerformanceSession {
