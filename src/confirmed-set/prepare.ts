@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import { pipeline } from "node:stream/promises";
+import { basename, dirname, extname, join } from "node:path";
 import { CONFIRMED_SET_SCHEMA_VERSION, DEFAULT_SHOW_STATE, validateConfirmedSet, type ConfirmedSetManifest, type ConfirmedSetShowState, type ReadinessReport } from "./manifest.js";
 import type { PreparedSong } from "../domain/song.js";
 import { writeWaveformSummary } from "../prep/wav-waveform.js";
+import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 
 export interface StemSource {
   readonly relativePath: string;
@@ -34,6 +34,7 @@ export interface ConfirmSetInput {
   readonly cacheRoot: string;
   readonly songs: readonly SongPreparationInput[];
   readonly show?: ConfirmedSetShowState;
+  readonly ffmpegPath?: string;
 }
 
 export interface ConfirmSetResult {
@@ -58,15 +59,20 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
       await mkdir(songDirectory, { recursive: true });
       const cachedStems = [];
 
+      const destinationNames = new Set<string>();
       for (const source of inputSong.stems) {
         const sourcePath = join(inputSong.sourceFolder, source.relativePath);
-        const destinationPath = join(songDirectory, basename(source.relativePath));
+        const sourceName = basename(source.relativePath);
+        const destinationName = extname(sourceName).toLowerCase() === ".m4a" ? preparedAudioFilename(sourceName) : sourceName;
+        if (destinationNames.has(destinationName.toLowerCase())) throw new Error(`Prepared stem filename collision: ${destinationName}`);
+        destinationNames.add(destinationName.toLowerCase());
+        const destinationPath = join(songDirectory, destinationName);
         const before = await stat(sourcePath);
-        await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath, { flags: "wx" }));
-        const actualHash = await sha256File(destinationPath);
-        if (actualHash.toLowerCase() !== source.sha256.toLowerCase()) {
+        const sourceHash = await sha256File(sourcePath);
+        if (sourceHash.toLowerCase() !== source.sha256.toLowerCase()) {
           throw new Error(`Hash verification failed for ${source.relativePath}`);
         }
+        await prepareAudioSource(sourcePath, destinationPath, input.ffmpegPath);
         copiedBytes += before.size;
         cachedStems.push({ role: source.role, sourcePath: destinationPath, durationSeconds: source.durationSeconds });
       }
@@ -75,7 +81,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
       const waveformSource = cachedStems.find((stem) => stem.role === "music-stem") ?? cachedStems[0];
       if (!waveformSource) throw new Error(`No waveform source available for ${inputSong.preparedSong.song.title}`);
       await writeWaveformSummary(waveformSource.sourcePath, waveformPath);
-      const liveAssets = inputSong.liveAssets ? await prepareLiveAssets(inputSong.liveAssets, songDirectory) : undefined;
+      const liveAssets = inputSong.liveAssets ? await prepareLiveAssets(inputSong.liveAssets, songDirectory, input.ffmpegPath) : undefined;
       songs.push({ ...inputSong.preparedSong, stems: cachedStems, waveformPath, ...(liveAssets ? { liveAssets } : {}) });
     }
 
@@ -146,26 +152,21 @@ function replacePathPrefix(manifest: ConfirmedSetManifest, from: string, to: str
   };
 }
 
-async function prepareLiveAssets(sources: LiveAssetSources, songDirectory: string) {
+async function prepareLiveAssets(sources: LiveAssetSources, songDirectory: string, ffmpegPath?: string) {
   const assetDirectory = join(songDirectory, "live-assets"); await mkdir(assetDirectory, { recursive: true });
   const regularPath = join(assetDirectory, "click-regular.wav"), accentPath = join(assetDirectory, "click-accent.wav");
-  await copyUnchecked(sources.click.regularPath, regularPath); await copyUnchecked(sources.click.accentPath, accentPath);
+  await prepareAudioSource(sources.click.regularPath, regularPath, ffmpegPath); await prepareAudioSource(sources.click.accentPath, accentPath, ffmpegPath);
   const cueDirectory = join(assetDirectory, "cues"); await mkdir(cueDirectory, { recursive: true });
   const copied = new Map<string, string>();
   const cues = [];
   for (const cue of sources.cues) {
     let audioPath = copied.get(cue.sourcePath);
-    if (!audioPath) { audioPath = join(cueDirectory, `${safeFilename(cue.label)}.wav`); await copyUnchecked(cue.sourcePath, audioPath); copied.set(cue.sourcePath, audioPath); }
+    if (!audioPath) { audioPath = join(cueDirectory, `${safeFilename(cue.label)}.wav`); await prepareAudioSource(cue.sourcePath, audioPath, ffmpegPath); copied.set(cue.sourcePath, audioPath); }
     cues.push({ atSeconds: cue.atSeconds, label: cue.label, audioPath, targetRegionId: cue.targetRegionId });
   }
-  const repeatCuePath = join(cueDirectory, "repeat.wav"); await copyUnchecked(sources.repeatCuePath, repeatCuePath);
-  const padPath = join(assetDirectory, `pad-${safeFilename(sources.pad.key)}.wav`); await copyUnchecked(sources.pad.sourcePath, padPath);
+  const repeatCuePath = join(cueDirectory, "repeat.wav"); await prepareAudioSource(sources.repeatCuePath, repeatCuePath, ffmpegPath);
+  const padPath = join(assetDirectory, `pad-${safeFilename(sources.pad.key)}.wav`); await prepareAudioSource(sources.pad.sourcePath, padPath, ffmpegPath);
   return { click: { regularPath, accentPath, events: sources.click.events }, cues, repeatCuePath, pad: { key: sources.pad.key, audioPath: padPath } };
-}
-
-async function copyUnchecked(sourcePath: string, destinationPath: string): Promise<void> {
-  await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath, { flags: "wx" }));
-  if ((await stat(destinationPath)).size === 0) throw new Error(`Prepared live asset is empty: ${sourcePath}`);
 }
 
 function safeFilename(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }

@@ -27,8 +27,8 @@ export interface PerformanceSnapshot {
 }
 
 export const DEFAULT_ROUTES: RoutingPlan = {
-  music: { firstOutput: 1, channels: 2 }, click: { firstOutput: 3, channels: 1 },
-  cue: { firstOutput: 4, channels: 1 }, pad: { firstOutput: 5, channels: 2 },
+  music: { firstOutput: 15, channels: 1 }, click: { firstOutput: 1, channels: 1 },
+  cue: { firstOutput: 2, channels: 1 }, pad: { firstOutput: 16, channels: 1 },
 };
 
 export class PerformanceSession {
@@ -61,6 +61,7 @@ export class PerformanceSession {
   setBusGain(bus:LiveBus,gain:number):void{this.requireReady();if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("Bus gain must be between 0 and 125%");this.effects.setBusGain?.(bus,gain);this.current={...this.current,gains:{...this.current.gains,[bus]:gain}};}
   setMixerChannel(index:number,patch:Partial<Pick<MixerChannelState,"gain"|"muted"|"solo"|"iem">>):void{this.requireReady();const current=this.current.mixer.channels[index];if(!current)throw new Error("Mixer channel is outside the armed song");const next={...current,...patch};if(!Number.isFinite(next.gain)||next.gain<0||next.gain>1.25)throw new Error("Mixer gain must be between 0 and 125%");this.effects.setMixerChannel?.(next);const channels=[...this.current.mixer.channels];channels[index]=next;this.current={...this.current,mixer:{...this.current.mixer,channels}};}
   setMasterGain(gain:number):void{this.requireReady();if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("Master gain must be between 0 and 125%");this.effects.setMasterGain?.(gain);this.current={...this.current,mixer:{...this.current.mixer,masterGain:gain}};}
+  setRoutingPlan(routes:RoutingPlan):void{validateRoutingPlan(routes);this.current={...this.current,routes:structuredClone(routes)};}
   async selectSong(index:number):Promise<void>{const song=this.manifest.songs[index];if(!song)throw new Error("Song is outside the confirmed set");this.effects.stop();const readiness=await this.effects.selectSong(index),nextReadiness=readiness??this.current.readiness;this.current={...this.current,readiness:nextReadiness,ready:nextReadiness.ready,songIndex:index,positionSeconds:0,playing:false,currentRegionId:song.regions[0]?.id??null,loopRegionId:null,fault:null,channels:{...this.current.channels,pad:false},mixer:createMixerState(song),panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};}
   async cueNext():Promise<void>{const index=this.current.songIndex+1,song=this.manifest.songs[index];if(!song)throw new Error("There is no next song in the confirmed set");this.effects.stop();const readiness=await this.effects.selectSong(index),nextReadiness=readiness??this.current.readiness;if(!nextReadiness.ready)throw new Error("Next song did not pass performance readiness");this.effects.setBus("pad",true);this.current={...this.current,readiness:nextReadiness,ready:true,songIndex:index,positionSeconds:0,playing:false,currentRegionId:song.regions[0]?.id??null,loopRegionId:null,fault:null,channels:{...this.current.channels,pad:true},mixer:createMixerState(song),panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};}
   private region(id:string|null):Region|undefined{return id?this.song.regions.find((x)=>x.id===id):undefined;}

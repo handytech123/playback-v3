@@ -18,6 +18,7 @@ export interface SaveAppArrangementInput {
   readonly metadataRoot: string;
   readonly cacheRoot: string;
   readonly stemDisplayLabels?: readonly string[];
+  readonly ffmpegPath?: string;
 }
 
 export async function saveAppArrangement(input: SaveAppArrangementInput) {
@@ -35,7 +36,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     input.draft,
     input.source,
     join(directory, "rendered-stems"),
-    "ffmpeg",
+    input.ffmpegPath ?? "ffmpeg",
     input.stemDisplayLabels,
   );
   const arrangement: ArrangementVersion = {
@@ -100,6 +101,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     clickRegularPath: join(productionDefaults.clickFolder, "CLICK.wav"),
     clickAccentPath: join(productionDefaults.clickFolder, "CLICK ACCENT.wav"),
     padPath: join(productionDefaults.padFolder, padFile),
+    ...(input.ffmpegPath ? { ffmpegPath: input.ffmpegPath } : {}),
   });
   return { id, savedPath, manifestPath: confirmed.manifestPath, arrangement };
 }

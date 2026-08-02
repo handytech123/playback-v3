@@ -8,4 +8,5 @@ ui-dist/
 .playback-data/
 .playback-metadata/
 artifacts/
+vendor/
 *.log

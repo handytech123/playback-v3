@@ -43,3 +43,10 @@ test("analyzer key is used only when the master key is missing", () => {
 test("an estimated key cannot silently enter a Confirmed Set",()=>{
   assert.throws(()=>normalizeOriginalSong({...master,key:null},{...analyzer,keyStatus:"estimated" as const},regions),/requires operator approval/);
 });
+
+test("normalizes the analyzer audioFiles field including M4A sources",()=>{
+  const { wavFiles: _legacy, ...base } = analyzer;
+  const result=normalizeOriginalSong(master,{...base,audioFiles:[{path:"PIANO.m4a",durationSeconds:410,playbackRole:"music-stem",playLive:true,sha256:"m4a"}]},regions);
+  assert.deepEqual(result.preparedSong.stems.map(stem=>stem.sourcePath),["D:\\Library\\Cornerstone\\PIANO.m4a"]);
+  assert.equal(result.preparedSong.cacheFingerprint,"m4a");
+});

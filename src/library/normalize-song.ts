@@ -29,7 +29,9 @@ export interface AnalyzerSongMetadata {
   readonly keyStatus?: "confirmed" | "estimated" | "unknown" | "conflict";
   readonly timeSignature?: string;
   readonly durationSeconds: number;
-  readonly wavFiles: readonly AnalyzerAudioFile[];
+  /** Legacy analyzer field retained for existing metadata. Entries may now be WAV or M4A. */
+  readonly wavFiles?: readonly AnalyzerAudioFile[];
+  readonly audioFiles?: readonly AnalyzerAudioFile[];
 }
 
 export interface AnalyzerRegionFile {
@@ -74,7 +76,9 @@ export function normalizeOriginalSong(
     originalTimeSignature: parseTimeSignature(master.timeSignature),
   };
 
-  const stems: AudioStem[] = analyzer.wavFiles
+  const audioFiles = analyzer.audioFiles ?? analyzer.wavFiles ?? [];
+  if (!audioFiles.length) throw new Error("Analyzer metadata contains no WAV or M4A audio files");
+  const stems: AudioStem[] = audioFiles
     .filter((audio) => audio.playLive && !["click-reference", "cue-reference", "pad-stem"].includes(audio.playbackRole))
     .map((audio) => ({
       role: audio.playbackRole,
@@ -110,7 +114,7 @@ export function normalizeOriginalSong(
       stems,
       regions,
       cues,
-      cacheFingerprint: analyzer.wavFiles.map((audio) => audio.sha256).sort().join(":"),
+      cacheFingerprint: audioFiles.map((audio) => audio.sha256).sort().join(":"),
     },
     warnings,
   };
