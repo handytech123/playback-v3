@@ -93,6 +93,10 @@ export function normalizeOriginalSong(
     endSeconds: region.endTimeSeconds,
   }));
   validateRegions(regions, analyzer.durationSeconds);
+  const finalRegion = regions.at(-1);
+  if (finalRegion && finalRegion.endSeconds < analyzer.durationSeconds) {
+    regions[regions.length - 1] = { ...finalRegion, endSeconds: analyzer.durationSeconds };
+  }
 
   const cues: Cue[] = regions.slice(1).map((region) => ({
     phrase: region.name.replace(/\s+\d+$/, ""),
