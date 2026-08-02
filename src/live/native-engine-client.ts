@@ -10,6 +10,7 @@ export interface NativeReadyState {
   readonly stereoFallback?: boolean; readonly nextReady?: boolean; readonly nextIndex?: number;
 }
 export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; }
+export interface NativeAudioRouting { readonly stems: readonly number[]; readonly stemChannels: readonly (1|2)[]; readonly click: number; readonly cue: number; readonly pad: number; readonly iem: number; }
 export interface NativeTransportState { readonly state: "playing" | "paused"; readonly positionSeconds: number; readonly startLatencyMs?: number; }
 export interface NativeSongSelectionState extends NativeReadyState { readonly index: number; }
 export interface NativeMidiInputEvent { readonly status: number; readonly data1: number; readonly data2: number; }
@@ -51,12 +52,13 @@ export class NativeEngineClient extends EventEmitter {
   private process: ChildProcessWithoutNullStreams | null = null;
   private readonly expectedExits = new WeakSet<ChildProcessWithoutNullStreams>();
 
-  async start(executablePath: string, manifestPath: string, songIndex = 0, midiOutputName?: string | null, audioDevice?: NativeAudioDeviceSelection | null, midiInputName?: string | null): Promise<NativeReadyState> {
+  async start(executablePath: string, manifestPath: string, songIndex = 0, midiOutputName?: string | null, audioDevice?: NativeAudioDeviceSelection | null, midiInputName?: string | null, routing?: NativeAudioRouting): Promise<NativeReadyState> {
     if (this.process) throw new Error("Native engine is already running");
     const args = [manifestPath, "--interactive", "--song-index", String(songIndex)];
     if (midiOutputName === null) args.push("--disable-midi"); else if (midiOutputName) args.push("--midi-output", midiOutputName);
     if (midiInputName === null) args.push("--disable-midi-input"); else if (midiInputName) args.push("--midi-input", midiInputName);
     if (audioDevice) args.push("--audio-device-type", audioDevice.type, "--audio-device-name", audioDevice.name);
+    if(routing){for(let index=0;index<routing.stems.length;index++)args.push("--stem-output",String(routing.stems[index]),"--stem-channels",String(routing.stemChannels[index]));args.push("--click-output",String(routing.click),"--cue-output",String(routing.cue),"--pad-output",String(routing.pad),"--iem-output",String(routing.iem));}
     const child = spawn(executablePath, args, { stdio: ["pipe", "pipe", "pipe"] });
     this.process = child;
     child.once("exit", (code) => { if (this.process === child) this.process = null; if (!this.expectedExits.has(child)) this.emit("fault", new Error(`Native audio engine stopped unexpectedly (${code ?? "no exit code"})`)); });

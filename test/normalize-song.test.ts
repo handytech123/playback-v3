@@ -25,6 +25,7 @@ const regions = { regions: [
 
 test("master facts always win and reference stems never enter live music", () => {
   const result = normalizeOriginalSong(master, analyzer, regions);
+  assert.equal(result.preparedSong.regions.at(-1)?.endSeconds, analyzer.durationSeconds);
   assert.equal(result.preparedSong.song.title, "Cornerstone");
   assert.equal(result.preparedSong.selectedBpm, 72);
   assert.equal(result.preparedSong.selectedKey, "C");
