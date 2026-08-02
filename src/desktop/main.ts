@@ -32,6 +32,7 @@ import { Gld112SafeClient, type GldIntent } from "../control/mixers/gld112.js";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 const ffmpegPath=app.isPackaged?join(process.resourcesPath,"tools","ffmpeg.exe"):"ffmpeg";
+process.env.PLAYBACK_FFMPEG_PATH=ffmpegPath;
 const originalManifestPath=join(projectRoot,".playback-cache","milestone-1-cornerstone-performance-v3","confirmed-set.json"),arrangementManifestPath=join(projectRoot,".playback-cache","arrangements","reaper-72091bdc9061","performance","confirmed-set.json");
 const manifestArgument=process.argv.find((value)=>value.startsWith("--manifest="))?.slice("--manifest=".length);
 const explicitManifestPath=manifestArgument ? resolve(manifestArgument) : process.env.PLAYBACK_MANIFEST_PATH ? resolve(process.env.PLAYBACK_MANIFEST_PATH) : null;
