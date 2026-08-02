@@ -1,6 +1,6 @@
 {
   "name": "playback-v3",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
@@ -45,13 +45,28 @@
     "appId": "org.handytech.playbackv3",
     "productName": "Playback V3",
     "asar": true,
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "ui-dist/**/*", "desktop-preload.cjs", "package.json"],
-    "extraResources": [
-      { "from": "native/build/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe", "to": "native/PlaybackEngineProbe.exe" },
-      { "from": ".playback-cache", "to": "seed-cache" }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "ui-dist/**/*",
+      "desktop-preload.cjs",
+      "package.json"
     ],
-    "win": { "target": "nsis" },
+    "extraResources": [
+      {
+        "from": "native/build/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe",
+        "to": "native/PlaybackEngineProbe.exe"
+      },
+      {
+        "from": ".playback-cache",
+        "to": "seed-cache"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
