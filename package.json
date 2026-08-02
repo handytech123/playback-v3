@@ -1,6 +1,7 @@
 {
   "name": "playback-v3",
   "version": "0.1.0",
+  "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
   "description": "DAW-speed worship playback foundation",
@@ -30,12 +31,34 @@
     "confirm:cornerstone-arrangement": "npm run build && node tools/confirm-cornerstone-arrangement.mjs",
     "ui:build": "vite build",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/bootstrap-native.ps1",
-    "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js"
+    "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js",
+    "package:win": "npm run build && npm run ui:build && electron-builder --win nsis"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "electron": "^43.2.0",
-    "vite": "^7.0.0",
-    "typescript": "^5.8.0"
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "org.handytech.playbackv3",
+    "productName": "Playback V3",
+    "asar": true,
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "ui-dist/**/*", "desktop-preload.cjs", "package.json"],
+    "extraResources": [
+      { "from": "native/build/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe", "to": "native/PlaybackEngineProbe.exe" },
+      { "from": ".playback-cache", "to": "seed-cache" }
+    ],
+    "win": { "target": "nsis" },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Playback V3",
+      "artifactName": "Playback-V3-Setup-${version}.${ext}"
+    }
   }
 }

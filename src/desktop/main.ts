@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { NativeEngineClient, type NativeAudioDeviceSelection, type NativeAudioRouting, type NativeMidiInputEvent, type NativeMixerMeters, type NativeReadyState, type NativeTransportState } from "../live/native-engine-client.js";
 import { MapEditorHistory, type MapCommand } from "../edit/map-editor.js";
@@ -30,12 +30,15 @@ import { networkInterfaces } from "node:os";
 import { FOOT_CONTROLLER_PROFILES, MidiInputRouter, type FootControllerProfileId } from "../control/midi-input.js";
 import { encodeGldIntent, Gld112SafeClient, type GldIntent } from "../control/mixers/gld112.js";
 
-const projectRoot = resolve(import.meta.dirname, "../../..");
+const sourceRoot = resolve(import.meta.dirname, "../../..");
+const projectRoot = app.isPackaged ? app.getPath("userData") : sourceRoot;
+const codeRoot = app.isPackaged ? app.getAppPath() : sourceRoot;
+const assetRoot = app.isPackaged ? process.resourcesPath : sourceRoot;
 const originalManifestPath=join(projectRoot,".playback-cache","milestone-1-cornerstone-performance-v3","confirmed-set.json"),arrangementManifestPath=join(projectRoot,".playback-cache","arrangements","reaper-72091bdc9061","performance","confirmed-set.json");
 const manifestArgument=process.argv.find((value)=>value.startsWith("--manifest="))?.slice("--manifest=".length);
 const explicitManifestPath=manifestArgument ? resolve(manifestArgument) : process.env.PLAYBACK_MANIFEST_PATH ? resolve(process.env.PLAYBACK_MANIFEST_PATH) : null;
 let manifestPath = explicitManifestPath ?? originalManifestPath;
-const enginePath = join(projectRoot, "native", "build", "PlaybackEngineProbe_artefacts", "Release", "PlaybackEngineProbe.exe");
+const enginePath = app.isPackaged ? join(assetRoot,"native","PlaybackEngineProbe.exe") : join(sourceRoot, "native", "build", "PlaybackEngineProbe_artefacts", "Release", "PlaybackEngineProbe.exe");
 let engine = new NativeEngineClient();
 let window: BrowserWindow | null = null;
 let statusTimer: NodeJS.Timeout | null = null;
@@ -54,6 +57,31 @@ let lastControlPublish=0;
 let midiInputRouter:MidiInputRouter|null=null;
 let libraryActivity:{sync:"idle"|"running"|"complete"|"fault";analyzer:"idle"|"scanning"|"waiting";startedAt:string|null;finishedAt:string|null;message:string;lastScan:any|null}={sync:"idle",analyzer:"idle",startedAt:null,finishedAt:null,message:"Library has not been scanned in this session.",lastScan:null};
 
+async function preparePackagedRuntime():Promise<void>{
+  if(!app.isPackaged)return;
+  const target=join(projectRoot,".playback-cache"),marker=join(target,"milestone-1-cornerstone-performance-v3","confirmed-set.json");
+  try{await readFile(marker);return;}catch{}
+  await mkdir(projectRoot,{recursive:true});
+  await cp(join(assetRoot,"seed-cache"),target,{recursive:true,force:false,errorOnExist:false});
+  await rewritePortableJson(target);
+}
+
+async function rewritePortableJson(directory:string):Promise<void>{
+  for(const entry of await readdir(directory,{withFileTypes:true})){
+    const path=join(directory,entry.name);
+    if(entry.isDirectory()){await rewritePortableJson(path);continue;}
+    if(!entry.isFile()||!entry.name.toLowerCase().endsWith(".json"))continue;
+    try{const parsed=JSON.parse(await readFile(path,"utf8"));await writeFile(path,JSON.stringify(relocateCachePaths(parsed),null,2));}catch{}
+  }
+}
+
+function relocateCachePaths(value:any):any{
+  if(typeof value==="string"){const normalized=value.replaceAll("/","\\"),marker="\\.playback-cache\\",index=normalized.toLowerCase().indexOf(marker);return index>=0?join(projectRoot,".playback-cache",normalized.slice(index+marker.length)):value;}
+  if(Array.isArray(value))return value.map(relocateCachePaths);
+  if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,relocateCachePaths(item)]));
+  return value;
+}
+
 async function armNativeSong(songIndex:number):Promise<NativeReadyState>{
   if(statusTimer){clearInterval(statusTimer);statusTimer=null;}
   await engine.closeAndWait();engine=new NativeEngineClient();
@@ -66,10 +94,11 @@ async function armNativeSong(songIndex:number):Promise<NativeReadyState>{
 }
 
 async function createWindow(): Promise<void> {
+  await preparePackagedRuntime();
   window = new BrowserWindow({
     width: 1920, height: 1080, minWidth: 1000, minHeight: 650, show:false,
     backgroundColor: "#0a0d12", title: "Playback V3",
-    webPreferences: { preload: join(projectRoot, "desktop-preload.cjs"), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: join(codeRoot, "desktop-preload.cjs"), contextIsolation: true, nodeIntegration: false },
   });
   try{const settings=JSON.parse(await readFile(join(projectRoot,".playback-data","device-settings.json"),"utf8"));selectedMidiOutput=typeof settings.midiOutputName==="string"?settings.midiOutputName:null;selectedMidiInput=typeof settings.midiInputName==="string"?settings.midiInputName:null;selectedAudioDevice=settings.audioDevice&&typeof settings.audioDevice.type==="string"&&typeof settings.audioDevice.name==="string"?settings.audioDevice:null;selectedAudioRouting=settings.audioRouting??null;}catch{}
   if(selectedAudioDevice){const savedDevice=selectedAudioDevice,devices=await listAudioDevices();if(!devices.some(device=>sameAudioDevice(device,savedDevice))){console.warn(`Saved audio device is unavailable; using the system default: ${savedDevice.type} / ${savedDevice.name}`);selectedAudioDevice=null;await saveDeviceSettings();}}
@@ -162,7 +191,7 @@ async function createWindow(): Promise<void> {
     else if (command === "pad_on") engine.padOn();
     else if (command === "pad_off") engine.padOff();
   });
-  await window.loadFile(join(projectRoot, "ui-dist", "index.html"));
+  await window.loadFile(join(codeRoot, "ui-dist", "index.html"));
   window.maximize();window.show();
   if(process.env.PLAYBACK_E2E_CONTROL){await new Promise(resolveDelay=>setTimeout(resolveDelay,500));const result=await window.webContents.executeJavaScript(`(async()=>{document.querySelector('#remoteControl').click();for(let i=0;i<50&&!document.querySelector('#remoteSettings').open;i++)await new Promise(r=>setTimeout(r,50));document.querySelector('#previewGld').click();await new Promise(r=>setTimeout(r,50));const control=await window.playback.control.get(),base=new URL(control.urls[0]).origin,response=await fetch(base+'/api/command',{method:'POST',headers:{Authorization:'Bearer '+control.token,'Content-Type':'application/json'},body:JSON.stringify({type:'transport.stop'})}),command=await response.json();return{dialog:document.querySelector('#remoteSettings').open,status:document.querySelector('#remoteStatus').textContent,urlHasToken:document.querySelector('#remoteUrl').value.includes('token='),address:control.address,lanEnabled:control.lanEnabled,oscEnabled:control.oscEnabled,regions:control.state.songs[0].regions.length,commandOk:command.ok,playing:command.state.playing,midiInputs:document.querySelector('#midiInputDevice').options.length-1,midiProfile:document.querySelector('#footControllerProfile').value,gldWritesLocked:control.gld.writesLocked,gldPreview:document.querySelector('#gldHex').textContent};})()`);console.log(`CONTROL_E2E ${JSON.stringify(result)}`);app.quit();return;}
   if(process.env.PLAYBACK_E2E_PREP){await new Promise(resolveDelay=>setTimeout(resolveDelay,600));const result=await window.webContents.executeJavaScript(`(async()=>{const wait=ms=>new Promise(r=>setTimeout(r,ms));document.querySelector('#prepMode').click();for(let i=0;i<100&&!document.querySelectorAll('#preparedLibrary article').length;i++)await wait(100);document.querySelector('#scanLibrary').click();for(let i=0;i<300&&document.querySelector('#scanLibrary').disabled;i++)await wait(100);return{visible:!document.querySelector('#prepWorkspace').hidden,prepared:document.querySelectorAll('#preparedLibrary article').length,catalog:document.querySelectorAll('#catalogRows article').length,summary:document.querySelector('#librarySummary').textContent.trim(),setName:document.querySelector('#setlistName').value,confirmDisabled:document.querySelector('#confirmSet').disabled};})()`);console.log(`PREP_WORKFLOW_E2E ${JSON.stringify(result)}`);app.quit();return;}
