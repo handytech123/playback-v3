@@ -7,7 +7,8 @@
   "description": "DAW-speed worship playback foundation",
   "dependencies": {
     "fast-xml-parser": "^5.2.5",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "qrcode": "^1.5.4"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -16,6 +17,10 @@
     "verify:milestone2": "npm run build && node tools/verify-milestone2.mjs",
     "verify:milestone3": "npm run build && node tools/verify-milestone3.mjs",
     "report:keys": "npm run build && node tools/report-library-keys.mjs",
+    "analyze:library-keys": "npm run build && node tools/analyze-library-keys.mjs",
+    "analyze:library-refresh": "npm run build && node tools/refresh-library-analyzer.mjs",
+    "analyze:library-finalize": "npm run build && node tools/finalize-library-refresh.mjs",
+    "sync:library-candidates": "npm run build && node tools/publish-library-candidates.mjs",
     "scan:library": "npm run build && node tools/scan-production-library.mjs",
     "build:transition-test": "npm run build && node tools/build-transition-test-set.mjs",
     "verify:app-arrangement": "npm run build && node tools/verify-app-arrangement.mjs",
@@ -36,6 +41,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "typescript": "^5.8.0",
@@ -60,8 +66,9 @@
         "to": "native/PlaybackEngineProbe.exe"
       },
       {
-        "from": ".playback-cache",
-        "to": "seed-cache"
+        "from": "vendor/runtime",
+        "to": "runtime",
+        "filter": ["ffmpeg.exe", "rubberband.exe", "*-LICENSE.txt", "FFMPEG-README.txt"]
       }
     ],
     "win": {

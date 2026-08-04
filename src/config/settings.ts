@@ -5,6 +5,7 @@ export interface PlaybackSettings {
   readonly cueFolder: string;
   readonly padFolder: string;
   readonly localCacheRoot: string;
+  readonly sharedMetadataRoot: string;
 }
 
 export const productionDefaults: PlaybackSettings = {
@@ -14,5 +15,5 @@ export const productionDefaults: PlaybackSettings = {
   cueFolder: "D:\\Dropbox\\Worship\\Cues",
   padFolder: "D:\\Dropbox\\Worship\\Pads",
   localCacheRoot: ".playback-cache",
+  sharedMetadataRoot: "D:\\Dropbox\\Worship\\Playback V3\\metadata",
 };
-

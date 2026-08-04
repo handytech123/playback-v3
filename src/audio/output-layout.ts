@@ -24,7 +24,7 @@ export const PLAYBACK_OUTPUTS: readonly PlaybackOutputDefinition[] = [
   { output: 12, key: "synths", appBus: "Playback Synths", danteLabel: "PB_SYNTHS", format: "mono", destination: "GLD Input 40" },
   { output: 13, key: "orchestra", appBus: "Playback Orchestra", danteLabel: "PB_ORCHESTRA", format: "mono", destination: "GLD Input 41" },
   { output: 14, key: "vocals", appBus: "Playback Vocals", danteLabel: "PB_VOCALS", format: "mono", destination: "GLD Input 42" },
-  { output: 15, key: "auxiliary", appBus: "Playback Auxiliary", danteLabel: "PB_AUX", format: "mono", destination: "GLD Input 43" },
+  { output: 15, key: "misc", appBus: "Playback Misc", danteLabel: "PB_MISC", format: "mono", destination: "GLD Input 43" },
   { output: 16, key: "pad", appBus: "Playback Pad", danteLabel: "PB_PAD", format: "mono", destination: "GLD Input 44" },
 ] as const;
 
@@ -41,8 +41,9 @@ export function classifyStemOutput(label: string): string {
   if (/\bpiano\b/.test(value)) return "piano";
   if (/\borgan\b/.test(value)) return "organ";
   if (/\b(synth|synths|keyboard|keys)\b/.test(value)) return "synths";
-  if (/\b(string|strings|cello|violin|viola|brass|horn|orchestra|orchestral)\b/.test(value)) return "orchestra";
+  if (/\b(string|strings|cello|violin|viola|orchestra|orchestral)\b/.test(value)) return "orchestra";
   if (/\b(vocal|vocals|bgv|bgvs|choir)\b/.test(value)) return "vocals";
   if (/\bpad\b/.test(value)) return "pad";
-  return "auxiliary";
+  if (/\b(horn|horns|brass|trumpet|trombone|sax|saxophone|flute|woodwind|loop|loops|fx|effect|effects|misc)\b/.test(value)) return "misc";
+  return "misc";
 }

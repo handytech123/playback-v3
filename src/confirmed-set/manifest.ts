@@ -1,4 +1,5 @@
 import type { PreparedSong } from "../domain/song.js";
+import { validateSongTransition, type SongTransitionPlan } from "../live/song-transition.js";
 
 export const CONFIRMED_SET_SCHEMA_VERSION = 1;
 
@@ -8,6 +9,7 @@ export interface ConfirmedSetManifest {
   readonly name: string;
   readonly confirmedAt: string;
   readonly songs: readonly PreparedSong[];
+  readonly transitions?:readonly SongTransitionPlan[];
   readonly show?: ConfirmedSetShowState;
 }
 
@@ -41,6 +43,7 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
     issues.push({ message: `Unsupported schema version: ${manifest.schemaVersion}` });
   }
   if (manifest.songs.length === 0) issues.push({ message: "Setlist is empty" });
+  for(const transition of manifest.transitions??[]){try{validateSongTransition(transition,manifest.songs.length);}catch(error){issues.push({message:error instanceof Error?error.message:String(error)});}}
 
   for (const prepared of manifest.songs) {
     const songTitle = prepared.song.title;
@@ -58,6 +61,7 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
       if (!prepared.liveAssets.repeatCuePath) issues.push({ songTitle, message: "Repeat cue is missing" });
       if (!prepared.liveAssets.pad.audioPath || prepared.liveAssets.pad.key !== prepared.selectedKey) issues.push({ songTitle, message: "Dynamic pad does not match selected key" });
       if (prepared.liveAssets.cues.some((cue) => cue.atSeconds < 0 || cue.atSeconds > prepared.durationSeconds || !cue.audioPath)) issues.push({ songTitle, message: "Dynamic cue plan contains an invalid event" });
+      if (prepared.liveAssets.countIn?.some((event) => event.atSeconds < 0 || event.atSeconds > prepared.durationSeconds || !event.audioPath)) issues.push({ songTitle, message: "Dynamic count-in plan contains an invalid event" });
     }
     for (const stem of prepared.stems) {
       if (!stem.sourcePath) issues.push({ songTitle, message: `Stem ${stem.role} has no cache path` });

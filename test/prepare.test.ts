@@ -17,8 +17,9 @@ test("Confirm Set copies, verifies, and atomically publishes a ready package", a
   const root = await mkdtemp(join(tmpdir(), "playback-v3-"));
   const sourceFolder = join(root, "source");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(sourceFolder));
-  const bytes = tinyWav();
+  const bytes = playableWav();
   await writeFile(join(sourceFolder, "music.wav"), bytes);
+  await writeCountCueFixtures(sourceFolder, bytes);
   const hash = createHash("sha256").update(bytes).digest("hex");
   const preparedSong: PreparedSong = {
     song: { id: songId("one"), title: "One", artist: "A", vendor: "V", originalKey: "C", originalBpm: 120, originalTimeSignature: { numerator: 4, denominator: 4 } },
@@ -30,7 +31,10 @@ test("Confirm Set copies, verifies, and atomically publishes a ready package", a
     setId: "test-set", setName: "Test", cacheRoot: join(root, "cache"),
     songs: [{ preparedSong, sourceFolder, stems: [{ relativePath: "music.wav", role: "music-stem", durationSeconds: 1, sha256: hash }], liveAssets: {
       click: { regularPath: join(sourceFolder, "music.wav"), accentPath: join(sourceFolder, "music.wav"), events: [{ atSeconds: 0, accent: true }] },
-      cues: [{ atSeconds: 0.5, label: "Verse", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" }],
+      cues: [
+        { atSeconds: 0.25, label: "Repeat", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" },
+        { atSeconds: 0.5, label: "Verse", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" },
+      ],
       repeatCuePath: join(sourceFolder, "music.wav"),
       pad: { key: "C", sourcePath: join(sourceFolder, "music.wav") },
     } }],
@@ -38,6 +42,8 @@ test("Confirm Set copies, verifies, and atomically publishes a ready package", a
   assert.equal(result.readiness.ready, true);
   assert.equal(result.copiedBytes, bytes.length);
   assert.deepEqual(await readFile(result.manifest.songs[0]!.stems[0]!.sourcePath), bytes);
+  assert.notEqual(result.manifest.songs[0]!.liveAssets?.cues[0]?.audioPath, result.manifest.songs[0]!.liveAssets?.repeatCuePath);
+  assert.match(result.manifest.songs[0]!.liveAssets?.repeatCuePath ?? "", /repeat-command\.wav$/);
 });
 
 function tinyWav(): Buffer {
@@ -65,12 +71,26 @@ test("Confirm Set rejects a bad hash without publishing a set", async () => {
   }), /Hash verification failed/);
 });
 
+test("Confirm Set accepts prepared stems stored in different source folders", async () => {
+  const root=await mkdtemp(join(tmpdir(),"playback-v3-mixed-folders-")),first=join(root,"rendered"),second=join(root,"media");
+  await Promise.all([mkdir(first),mkdir(second)]);
+  const bytes=playableWav(),firstPath=join(first,"music.wav"),secondPath=join(second,"percussion.wav");
+  await Promise.all([writeFile(firstPath,bytes),writeFile(secondPath,bytes)]);
+  await writeCountCueFixtures(first,bytes);
+  const hash=createHash("sha256").update(bytes).digest("hex");
+  const preparedSong:PreparedSong={song:{id:songId("mixed"),title:"Mixed",artist:"A",vendor:"V",originalKey:"C",originalBpm:120,originalTimeSignature:{numerator:4,denominator:4}},selectedKey:"C",selectedBpm:120,timeSignature:{numerator:4,denominator:4},durationSeconds:.01,stems:[{role:"Music",sourcePath:firstPath,durationSeconds:.01},{role:"Percussion",sourcePath:secondPath,durationSeconds:.01}],regions:[{id:"r1",name:"Intro",startSeconds:0,endSeconds:.01}],cues:[{phrase:"Intro",atSeconds:0,targetRegionId:"r1"}],cacheFingerprint:hash};
+  const result=await confirmSet({setId:"mixed-source-set",setName:"Mixed",cacheRoot:join(root,"cache"),songs:[{preparedSong,sourceFolder:first,stems:[{relativePath:"music.wav",sourcePath:firstPath,role:"Music",durationSeconds:.01,sha256:hash},{relativePath:"percussion.wav",sourcePath:secondPath,role:"Percussion",durationSeconds:.01,sha256:hash}],liveAssets:{click:{regularPath:firstPath,accentPath:firstPath,events:[{atSeconds:0,accent:true}]},cues:[{atSeconds:0,label:"Intro",sourcePath:firstPath,targetRegionId:"r1"}],repeatCuePath:firstPath,pad:{key:"C",sourcePath:firstPath}}}]});
+  assert.equal(result.readiness.ready,true);
+  assert.equal(result.manifest.songs[0]!.stems.length,2);
+});
+
 test("Confirm Set converts an M4A stem to PCM WAV before publishing", { skip: !existsSync(bundledFfmpeg) }, async () => {
   const root = await mkdtemp(join(tmpdir(), "playback-v3-m4a-")), sourceFolder = join(root, "source");
   await mkdir(sourceFolder);
   const wavPath = join(sourceFolder, "reference.wav"), m4aPath = join(sourceFolder, "music.m4a");
   const wav = playableWav();
   await writeFile(wavPath, wav);
+  await writeCountCueFixtures(sourceFolder, wav);
   await run(bundledFfmpeg, ["-hide_banner", "-loglevel", "error", "-y", "-i", wavPath, "-c:a", "aac", m4aPath]);
   const m4aHash = createHash("sha256").update(await readFile(m4aPath)).digest("hex");
   const preparedSong: PreparedSong = {
@@ -97,4 +117,8 @@ function playableWav(): Buffer {
   wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(48000, 24); wav.writeUInt32LE(96000, 28);
   wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(data.length, 40);
   return wav;
+}
+
+async function writeCountCueFixtures(folder: string, bytes: Buffer): Promise<void> {
+  await Promise.all(["TWO", "THREE", "FOUR", "FIVE", "SIX"].map(name => writeFile(join(folder, `${name}.wav`), bytes)));
 }

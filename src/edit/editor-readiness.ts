@@ -56,8 +56,8 @@ export async function evaluateEditorReadiness(
   checks.push(check(
     "cache",
     "Runtime cache isolation",
-    cacheEscapes.length ? "blocked" : "ready",
-    cacheEscapes.length ? `${cacheEscapes.length} stems still depend on external source media` : "All playable stems are local",
+    cacheEscapes.length ? "warning" : "ready",
+    cacheEscapes.length ? `${cacheEscapes.length} source stems will be rendered into the local arrangement cache when saved` : "All playable stems are local",
   ));
   const clickMissing = await missing([input.clickRegularPath, input.clickAccentPath]);
   checks.push(check(

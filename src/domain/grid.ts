@@ -1,4 +1,4 @@
-import type { TimeSignature } from "./song.js";
+import type { ClickEvent, TimeSignature } from "./song.js";
 
 export interface GridPosition {
   readonly measure: number;
@@ -9,8 +9,20 @@ export interface GridPosition {
 
 export function secondsPerNotatedBeat(bpm: number, meter: TimeSignature): number {
   assertMeterAndTempo(bpm, meter);
-  const compound = meter.denominator === 8 && meter.numerator % 3 === 0 && meter.numerator > 3;
-  return compound ? 60 / bpm / 3 : (60 / bpm) * (4 / meter.denominator);
+  const compoundEighthMeter = meter.denominator === 8 && meter.numerator % 3 === 0 && meter.numerator > 3;
+  if (compoundEighthMeter) return 60 / bpm;
+  return (60 / bpm) * (4 / meter.denominator);
+}
+
+/** Every written beat clicks; only beat 1 is accented, matching V2's six-click 6/8 pattern. */
+export function buildDynamicClickEvents(bpm: number, meter: TimeSignature, durationSeconds: number, rateMultiplier: 1 | 2 = 1): readonly ClickEvent[] {
+  if (rateMultiplier !== 1 && rateMultiplier !== 2) throw new Error("Click rate must be normal or double");
+  const step = secondsPerNotatedBeat(bpm, meter) / rateMultiplier;
+  const count = Math.floor((durationSeconds + Number.EPSILON) / step);
+  return Array.from({ length: count + 1 }, (_, index) => ({
+    atSeconds: index * step,
+    accent: index % (meter.numerator * rateMultiplier) === 0,
+  }));
 }
 
 export function buildZeroBasedGrid(
@@ -47,4 +59,3 @@ function assertMeterAndTempo(bpm: number, meter: TimeSignature): void {
     throw new Error("Unsupported time-signature denominator");
   }
 }
-

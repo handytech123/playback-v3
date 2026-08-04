@@ -1,0 +1,16 @@
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { productionDefaults } from "../dist/src/config/settings.js";
+import { importMasterCatalog } from "../dist/src/library/master-spreadsheet.js";
+
+const root=path.resolve("."),stagingRoot=path.join(root,".playback-metadata","analyzer-refresh-v3"),summary=await json(path.join(root,"artifacts","analyzer-refresh-v3-summary.json"),null);if(!summary)throw new Error("Run the analyzer refresh before publishing the shared library index");
+const catalog=await importMasterCatalog(productionDefaults.masterWorkbookPath),results=new Map((summary.entries??[]).map(item=>[item.catalogId,item])),targetRoot=process.env.PLAYBACK_SHARED_METADATA_ROOT??productionDefaults.sharedMetadataRoot,candidatesRoot=path.join(targetRoot,"candidates");await mkdir(candidatesRoot,{recursive:true});
+const entries=[];let published=0;
+for(const song of catalog.songs){const result=results.get(song.catalogId),safe=safeId(song.catalogId),source=path.join(stagingRoot,safe,"candidate-metadata.json"),target=path.join(candidatesRoot,`${safe}.json`);let candidate=null;try{candidate=JSON.parse(await readFile(source,"utf8"));}catch{}
+  if(result?.status==="analyzed"&&candidate?.approvalStatus==="review"){const portable={...candidate,audioEvidence:{...candidate.audioEvidence,files:(candidate.audioEvidence?.files??[]).map(file=>{const{sourcePath,...rest}=file;return rest;})},library:{folderRelativePath:path.relative(productionDefaults.libraryRoot,song.folderPath).replaceAll("\\","/"),sourceRootPolicy:"resolve-against-local-library-root"}};await atomicJson(target,portable);published++;entries.push(entry(song,"review",path.posix.join("candidates",`${safe}.json`),null,candidate.keyEvidence?.estimate??null));}
+  else{const status=result?.status??"failed",issue=result?.reason??result?.error??(status==="missing-folder"?"Master folder is unavailable":"Analyzer candidate is unavailable");entries.push(entry(song,status,null,issue,null));}}
+const index={schema:"playback-v3-shared-library",schemaVersion:1,generatedAt:new Date().toISOString(),catalogSongs:catalog.songs.length,publishedCandidates:published,entries};await atomicJson(path.join(targetRoot,"library-index-v3.json"),index);console.log(JSON.stringify({targetRoot,catalogSongs:entries.length,publishedCandidates:published,statuses:entries.reduce((counts,item)=>({...counts,[item.status]:(counts[item.status]??0)+1}),{})},null,2));
+function entry(song,status,candidateFile,issue,estimatedKey){return{catalogId:song.catalogId,title:song.title,artist:song.artist,vendor:song.vendor,bpm:song.bpm,key:song.key,estimatedKey,timeSignature:song.timeSignature,folderRelativePath:path.relative(productionDefaults.libraryRoot,song.folderPath).replaceAll("\\","/"),status,candidateFile,issue};}
+function safeId(value){return value.replace(/[^a-z0-9._-]+/gi,"_");}
+async function json(file,fallback){try{return JSON.parse(await readFile(file,"utf8"));}catch{return fallback;}}
+async function atomicJson(file,value){await mkdir(path.dirname(file),{recursive:true});const temporary=`${file}.${process.pid}.tmp`;await writeFile(temporary,`${JSON.stringify(value,null,2)}\n`,"utf8");await rename(temporary,file);}

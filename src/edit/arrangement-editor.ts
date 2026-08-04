@@ -37,6 +37,7 @@ export interface AppArrangementDraft {
   readonly selectedKey: string;
   readonly selectedBpm: number;
   readonly timeSignature: TimeSignature;
+  readonly clickRate: 1 | 2;
   readonly durationSeconds: number;
   readonly sections: readonly ArrangementSection[];
   readonly cues: readonly ArrangementCue[];
@@ -54,9 +55,12 @@ export type ArrangementCommand =
   | { readonly type: "trim-start"; readonly atSeconds: number }
   | { readonly type: "trim-end"; readonly atSeconds: number }
   | { readonly type: "set-key-tempo"; readonly key: string; readonly bpm: number }
+  | { readonly type: "set-click-rate"; readonly rate: 1 | 2 }
   | { readonly type: "set-name"; readonly name: string }
+  | { readonly type: "set-section-boundary"; readonly sectionId: string; readonly edge: "start" | "end"; readonly atSeconds: number }
   | { readonly type: "set-cue-enabled"; readonly cueId: string; readonly enabled: boolean }
   | { readonly type: "set-cue-target"; readonly cueId: string; readonly targetRegionId: string }
+  | { readonly type: "set-cue-time"; readonly cueId: string; readonly atSeconds: number }
   | { readonly type: "set-midi-enabled"; readonly eventId: string; readonly enabled: boolean };
 
 export function createArrangementDraft(
@@ -74,20 +78,17 @@ export function createArrangementDraft(
     atSeconds: cue.atSeconds,
     targetRegionId: cue.targetRegionId,
   })) ?? song.cues;
-  const cues = sections.map((section, index) => {
-    const source = sourceCues.find((cue) => cue.targetRegionId === section.id);
+  const cues = sourceCues.flatMap((source) => {
+    const section = sections.find((candidate) => candidate.id === source.targetRegionId);
+    if (!section) return [];
     return {
       id: `cue-${section.id}`,
       phrase: section.name,
-      atSeconds: source?.atSeconds ?? section.startSeconds,
+      atSeconds: source.atSeconds,
       targetRegionId: section.id,
       enabled: true,
       sourceRegionId: section.sourceRegionId,
-      sourceLeadSeconds: source
-        ? Math.max(0, section.startSeconds - source.atSeconds)
-        : index === 0
-          ? 0
-          : beatDuration(song.selectedBpm, song.timeSignature) * 2,
+      sourceLeadSeconds: Math.max(0, section.startSeconds - source.atSeconds),
     } satisfies ArrangementCue;
   });
   const midi = (preparedControl(song)?.proPresenterMidi ?? []).map((event, index) => {
@@ -109,6 +110,7 @@ export function createArrangementDraft(
     selectedKey: song.selectedKey,
     selectedBpm: song.selectedBpm,
     timeSignature: song.timeSignature,
+    clickRate: song.liveAssets?.click.rateMultiplier ?? 1,
     durationSeconds: song.durationSeconds,
     sections,
     cues,
@@ -127,6 +129,7 @@ export function applyArrangementCommand(
   let key = draft.selectedKey;
   let bpm = draft.selectedBpm;
   let name = draft.name;
+  let clickRate = draft.clickRate ?? 1;
   const oldScale = draft.baseBpm / draft.selectedBpm;
 
   if (command.type === "rename-section") {
@@ -180,6 +183,11 @@ export function applyArrangementCommand(
   } else if (command.type === "set-name") {
     assertName(command.name);
     name = command.name.trim();
+  } else if (command.type === "set-click-rate") {
+    if (command.rate !== 1 && command.rate !== 2) throw new Error("Click rate must be Normal or Double");
+    clickRate = command.rate;
+  } else if (command.type === "set-section-boundary") {
+    sections = setSectionBoundary(sections, command.sectionId, command.edge, command.atSeconds, oldScale);
   } else if (command.type === "set-cue-enabled") {
     cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, enabled: command.enabled }));
   } else if (command.type === "set-cue-target") {
@@ -194,6 +202,14 @@ export function applyArrangementCommand(
       if (displaced && cue.id === displaced.id) return { ...cue, phrase: previousTarget.name, targetRegionId: previousTarget.id, sourceRegionId: previousTarget.sourceRegionId, sourceLeadSeconds: Math.max(0, previousTarget.startSeconds - cue.atSeconds) / oldScale };
       return cue;
     });
+  } else if (command.type === "set-cue-time") {
+    if (!Number.isFinite(command.atSeconds)) throw new Error("Cue position is invalid");
+    const selected = cues.find((cue) => cue.id === command.cueId);
+    if (!selected) throw new Error("Cue not found");
+    const target = sections.find((section) => section.id === selected.targetRegionId);
+    if (!target) throw new Error("Cue destination section was not found");
+    const atSeconds = Math.max(0, Math.min(target.startSeconds, command.atSeconds));
+    cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, atSeconds, sourceLeadSeconds: Math.max(0, target.startSeconds - atSeconds) / oldScale }));
   } else if (command.type === "set-midi-enabled") {
     let found = false;
     midi = midi.map((event) => {
@@ -214,6 +230,7 @@ export function applyArrangementCommand(
     name,
     selectedKey: key,
     selectedBpm: bpm,
+    clickRate,
     durationSeconds: reflowed.at(-1)!.endSeconds,
     sections: reflowed,
     cues: retimedCues,
@@ -231,6 +248,7 @@ export function validateArrangementDraft(draft: AppArrangementDraft): readonly s
   if (!draft.name.trim()) issues.push("Arrangement name is missing");
   if (!draft.selectedKey.trim()) issues.push("Arrangement key is missing");
   if (!Number.isFinite(draft.selectedBpm) || draft.selectedBpm <= 0) issues.push("Arrangement BPM is invalid");
+  if ((draft.clickRate ?? 1) !== 1 && draft.clickRate !== 2) issues.push("Arrangement click rate is invalid");
   if (!draft.sections.length) issues.push("Arrangement has no sections");
   const ids = new Set<string>();
   for (const [index, section] of draft.sections.entries()) {
@@ -300,20 +318,50 @@ function reflow(sections: readonly ArrangementSection[], scale = 1): Arrangement
   });
 }
 
+function setSectionBoundary(
+  sections: readonly ArrangementSection[],
+  sectionId: string,
+  edge: "start" | "end",
+  atSeconds: number,
+  scale: number,
+): ArrangementSection[] {
+  if (!Number.isFinite(atSeconds)) throw new Error("Region boundary is invalid");
+  const index = sections.findIndex(section => section.id === sectionId);
+  if (index < 0) throw new Error("Section not found");
+  const leftIndex = edge === "start" ? index - 1 : index;
+  const rightIndex = leftIndex + 1;
+  if (leftIndex < 0) throw new Error("The arrangement must begin at 1.1; trim the song start to change it");
+  if (rightIndex >= sections.length) throw new Error("Use Trim End to change the final song boundary");
+  const left = sections[leftIndex]!;
+  const right = sections[rightIndex]!;
+  const minimum = Math.max(0.001, (60 / 400) * scale);
+  if (atSeconds <= left.startSeconds + minimum || atSeconds >= right.endSeconds - minimum) {
+    throw new Error("A region boundary must leave playable audio on both sides");
+  }
+  const delta = (atSeconds - left.endSeconds) / scale;
+  const nextLeft = { ...left, sourceEndSeconds: left.sourceEndSeconds + delta };
+  const nextRight = { ...right, sourceStartSeconds: right.sourceStartSeconds + delta };
+  if (nextLeft.sourceEndSeconds <= nextLeft.sourceStartSeconds || nextRight.sourceEndSeconds <= nextRight.sourceStartSeconds) {
+    throw new Error("That boundary would create an empty region");
+  }
+  return sections.map((section, itemIndex) => itemIndex === leftIndex ? nextLeft : itemIndex === rightIndex ? nextRight : section);
+}
+
 function retimeCues(
   oldSections: readonly ArrangementSection[],
   cues: readonly ArrangementCue[],
   next: readonly ArrangementSection[],
   scale: number,
 ): ArrangementCue[] {
-  return next.map((section) => {
+  return next.flatMap((section) => {
     const existing = cues.find((cue) => cue.targetRegionId === section.id);
     const source = existing ?? cues.find((cue) => cue.sourceRegionId === section.sourceRegionId);
+    if (!source) return [];
     const oldTarget = source
       ? oldSections.find((item) => item.id === source.targetRegionId)
       : undefined;
-    const sourceLead = source?.sourceLeadSeconds ?? (
-      source && oldTarget ? Math.max(0, oldTarget.startSeconds - source.atSeconds) / scale : 0
+    const sourceLead = source.sourceLeadSeconds ?? (
+      oldTarget ? Math.max(0, oldTarget.startSeconds - source.atSeconds) / scale : 0
     );
     return {
       id: existing?.id ?? `cue-${section.id}`,
@@ -467,10 +515,6 @@ function renumberOccurrences(sections: readonly ArrangementSection[]): Arrangeme
     const canonical = key.split(" ").map((part) => part[0]!.toUpperCase() + part.slice(1)).join(" ");
     return { ...section, name: `${canonical} ${occurrence}` };
   });
-}
-
-function beatDuration(bpm: number, signature: TimeSignature) {
-  return (60 / bpm) * (4 / signature.denominator);
 }
 
 function assertName(value: string) {

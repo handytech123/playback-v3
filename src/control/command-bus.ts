@@ -1,4 +1,5 @@
 import type { LiveBus, PerformanceSession, PerformanceSnapshot } from "../live/performance-session.js";
+import { preparedControl } from "../domain/song.js";
 
 export type ControlSource = "ui" | "keyboard" | "remote" | "osc" | "midi" | "system";
 export type PlaybackCommand =
@@ -12,7 +13,7 @@ export type PlaybackCommand =
 
 export interface CommandEnvelope { readonly id: string; readonly source: ControlSource; readonly issuedAt: string; readonly command: PlaybackCommand; }
 export interface CommandResult { readonly id: string; readonly ok: boolean; readonly completedAt: string; readonly state: PerformanceSnapshot; readonly error?: string; }
-export interface ControlState { readonly revision: number; readonly updatedAt: string; readonly setName: string; readonly songs: readonly { index: number; title: string; artist: string; regions: readonly { id: string; name: string; startSeconds: number; endSeconds: number }[] }[]; readonly performance: PerformanceSnapshot; }
+export interface ControlState { readonly revision: number; readonly updatedAt: string; readonly setName: string; readonly songs: readonly { index: number; title: string; artist: string; arrangement:string;key:string;bpm:number;durationSeconds:number;regions: readonly { id: string; name: string; startSeconds: number; endSeconds: number }[];proPresenterMidi:readonly {atSeconds:number;status:number;data1:number;data2:number}[] }[]; readonly transitions:readonly {fromSongIndex:number;toSongIndex:number;type:string;durationSeconds:number;continuePad:boolean}[];readonly performance: PerformanceSnapshot; }
 
 type StateListener = (state: ControlState) => void;
 type ResultListener = (result: CommandResult) => void;
@@ -27,7 +28,7 @@ export class PlaybackCommandBus {
 
   state(): ControlState {
     const manifest = this.session.confirmedSet;
-    return { revision: this.revision, updatedAt: new Date().toISOString(), setName: this.setName, songs: manifest.songs.map((song, index) => ({ index, title: song.song.title, artist: song.song.artist, regions: song.regions.map(({ id, name, startSeconds, endSeconds }) => ({ id, name, startSeconds, endSeconds })) })), performance: this.session.snapshot };
+    return { revision: this.revision, updatedAt: new Date().toISOString(), setName: this.setName, songs: manifest.songs.map((song, index) => ({ index, title: song.song.title, artist: song.song.artist, arrangement:song.arrangement?.name??"Original Song",key:song.selectedKey,bpm:song.selectedBpm,durationSeconds:song.durationSeconds,regions: song.regions.map(({ id, name, startSeconds, endSeconds }) => ({ id, name, startSeconds, endSeconds })),proPresenterMidi:(preparedControl(song)?.proPresenterMidi??[]).map(({atSeconds,status,data1,data2})=>({atSeconds,status,data1,data2})) })),transitions:(manifest.transitions??[]).map(({fromSongIndex,toSongIndex,type,durationSeconds,continuePad})=>({fromSongIndex,toSongIndex,type,durationSeconds,continuePad})), performance: this.session.snapshot };
   }
 
   dispatch(command: PlaybackCommand, source: ControlSource = "system"): Promise<CommandResult> {

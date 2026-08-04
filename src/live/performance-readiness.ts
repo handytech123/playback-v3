@@ -16,7 +16,8 @@ export async function evaluatePerformanceReadiness(input: PerformanceReadinessIn
   const active = input.manifest.songs[input.songIndex];
   checks.push(check("selection", "Armed song", active ? "ready" : "blocked", active ? `${active.song.title} · ${active.selectedKey} · ${active.selectedBpm} BPM` : `Song index ${input.songIndex} is outside the confirmed set`));
   const structureIssues = input.manifest.songs.flatMap((song) => validatePreparedStructure(song).map((message) => `${song.song.title}: ${message}`));
-  checks.push(check("structure", "Song structure", structureIssues.length ? "blocked" : "ready", structureIssues.length ? structureIssues.join("; ") : "Regions, cues, duration, key, BPM, and grid are internally consistent"));
+  const controlPrerolls=input.manifest.songs.filter(hasValidReaperControlPreroll);
+  checks.push(check("structure", "Song structure", structureIssues.length ? "blocked" : "ready", structureIssues.length ? structureIssues.join("; ") : controlPrerolls.length?`Regions and cues are valid; ${controlPrerolls.map(song=>song.song.title).join(", ")} includes a one-measure ProPresenter MIDI control preroll` : "Regions, cues, duration, key, BPM, and grid are internally consistent"));
   const manifestDirectory = dirname(resolve(input.manifestPath));
   const packageRoot = basename(manifestDirectory).toLowerCase() === "performance" ? dirname(manifestDirectory) : manifestDirectory;
   const assetPaths = input.manifest.songs.flatMap(runtimeAssetPaths);
@@ -32,7 +33,7 @@ export async function evaluatePerformanceReadiness(input: PerformanceReadinessIn
     checks.push(check("next", "Next-song preload", input.manifest.songs.length > input.songIndex + 1 ? "blocked" : "ready", input.manifest.songs.length > input.songIndex + 1 ? "Next song is not armed" : "End of confirmed set"));
     return report(checks);
   }
-  const expectedClick = active.liveAssets?.click.events.length ?? 0, expectedCues = active.liveAssets?.cues.length ?? 0;
+  const expectedClick = active.liveAssets?.click.events.length ?? 0, expectedCues = (active.liveAssets?.cues.length ?? 0) + (active.liveAssets?.countIn?.length ?? 0);
   const engineIssues = [input.native.stems !== active.stems.length ? `stems ${input.native.stems}/${active.stems.length}` : null, input.native.clickEvents !== expectedClick ? `click events ${input.native.clickEvents ?? 0}/${expectedClick}` : null, input.native.cueEvents !== expectedCues ? `cue events ${input.native.cueEvents ?? 0}/${expectedCues}` : null, input.native.padKey !== active.selectedKey ? `pad ${input.native.padKey ?? "none"}/${active.selectedKey}` : null].filter((value): value is string => value !== null);
   checks.push(check("engine", "Native audio engine", engineIssues.length ? "blocked" : "ready", engineIssues.length ? `Armed-state mismatch: ${engineIssues.join(", ")}` : `${input.native.stems} stems, ${expectedClick} click events, ${expectedCues} cues, ${active.selectedKey} pad armed in ${input.native.armMs.toFixed(1)} ms`));
   const channels = input.native.outputChannels ?? 0;
@@ -53,13 +54,14 @@ export function manifestReadiness(manifest: ConfirmedSetManifest): PerformanceRe
 function validatePreparedStructure(song: PreparedSong): string[] {
   const issues: string[] = [];
   if (!song.regions.length) issues.push("no regions");
-  if (song.regions[0] && Math.abs(song.regions[0].startSeconds) > .001) issues.push("first region does not begin at 0.000");
+  if (song.regions[0] && Math.abs(song.regions[0].startSeconds) > .001&&!hasValidReaperControlPreroll(song)) issues.push("first region does not begin at 0.000");
   for (let index = 0; index < song.regions.length; index += 1) { const region = song.regions[index]!; if (!region.id || !region.name.trim() || region.endSeconds <= region.startSeconds) issues.push(`invalid region ${index + 1}`); const next = song.regions[index + 1]; if (next && Math.abs(region.endSeconds - next.startSeconds) > .001) issues.push(`gap or overlap after ${region.name}`); }
   const final = song.regions.at(-1); if (final && Math.abs(final.endSeconds - song.durationSeconds) > .05) issues.push("final region does not match song duration");
   const ids = new Set(song.regions.map((region) => region.id)); if (song.liveAssets?.cues.some((cue) => !ids.has(cue.targetRegionId))) issues.push("cue targets a missing region");
   return issues;
 }
-function runtimeAssetPaths(song: PreparedSong): string[] { return [song.waveformPath, ...song.stems.map((stem) => stem.sourcePath), song.liveAssets?.click.regularPath, song.liveAssets?.click.accentPath, song.liveAssets?.repeatCuePath, song.liveAssets?.pad.audioPath, ...(song.liveAssets?.cues.map((cue) => cue.audioPath) ?? [])].filter((value): value is string => Boolean(value)); }
+function hasValidReaperControlPreroll(song:PreparedSong):boolean{const start=song.regions[0]?.startSeconds??0,midi=preparedControl(song)?.proPresenterMidi??[],measureSeconds=song.timeSignature.numerator*(60/song.selectedBpm)*(4/song.timeSignature.denominator);return song.arrangement?.sourceType==="reaper-import"&&start>.001&&start<=measureSeconds+.05&&midi.some(event=>event.atSeconds>=0&&event.atSeconds<start);}
+function runtimeAssetPaths(song: PreparedSong): string[] { return [song.waveformPath, ...song.stems.map((stem) => stem.sourcePath), song.liveAssets?.click.regularPath, song.liveAssets?.click.accentPath, song.liveAssets?.repeatCuePath, song.liveAssets?.pad.audioPath, ...(song.liveAssets?.cues.map((cue) => cue.audioPath) ?? []), ...(song.liveAssets?.countIn?.map((event) => event.audioPath) ?? [])].filter((value): value is string => Boolean(value)); }
 function hasMidi(song: PreparedSong | undefined) { return (preparedControl(song)?.proPresenterMidi.length ?? 0) > 0; }
 function check(id: string, label: string, level: PerformanceReadinessLevel, detail: string): PerformanceReadinessCheck { return { id, label, level, detail }; }
 function report(checks: readonly PerformanceReadinessCheck[]): PerformanceReadinessReport { const status = checks.some((item) => item.level === "blocked") ? "Blocked" : checks.some((item) => item.level === "warning") ? "Ready with warnings" : "Ready"; return { ready: status !== "Blocked", status, checks }; }

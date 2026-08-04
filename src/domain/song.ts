@@ -66,9 +66,12 @@ export function preparedControl(song: PreparedSong | undefined): PreparedControl
 
 export interface ClickEvent { readonly atSeconds: number; readonly accent: boolean; }
 export interface CueEvent { readonly atSeconds: number; readonly label: string; readonly audioPath: string; readonly targetRegionId: string; }
+export interface CountInEvent { readonly atSeconds: number; readonly label: string; readonly audioPath: string; }
 export interface LiveAssetPlan {
-  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly ClickEvent[] };
+  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly ClickEvent[]; readonly rateMultiplier?: 1 | 2 };
   readonly cues: readonly CueEvent[];
+  readonly countIn?: readonly CountInEvent[];
+  readonly cueCountVersion?: 1 | 2;
   readonly repeatCuePath: string;
   readonly pad: { readonly key: string; readonly audioPath: string };
 }

@@ -9,8 +9,8 @@ export interface NativeReadyState {
   readonly outputChannels?: number; readonly routingReady?: boolean; readonly iemReady?: boolean;
   readonly stereoFallback?: boolean; readonly nextReady?: boolean; readonly nextIndex?: number;
 }
-export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; }
-export interface NativeAudioRouting { readonly stems: readonly number[]; readonly stemChannels: readonly (1|2)[]; readonly click: number; readonly cue: number; readonly pad: number; readonly iem: number; }
+export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; readonly outputChannels?: number; readonly maxOutputChannels?: number; }
+export interface NativeAudioRouting { readonly stems: readonly number[]; readonly stemChannels: readonly (1|2)[]; readonly click: number; readonly clickChannels:1|2; readonly cue: number; readonly cueChannels:1|2; readonly pad: number; readonly padChannels:1|2; readonly iem: number; readonly iemChannels:1|2; }
 export interface NativeTransportState { readonly state: "playing" | "paused"; readonly positionSeconds: number; readonly startLatencyMs?: number; }
 export interface NativeSongSelectionState extends NativeReadyState { readonly index: number; }
 export interface NativeMidiInputEvent { readonly status: number; readonly data1: number; readonly data2: number; }
@@ -57,8 +57,8 @@ export class NativeEngineClient extends EventEmitter {
     const args = [manifestPath, "--interactive", "--song-index", String(songIndex)];
     if (midiOutputName === null) args.push("--disable-midi"); else if (midiOutputName) args.push("--midi-output", midiOutputName);
     if (midiInputName === null) args.push("--disable-midi-input"); else if (midiInputName) args.push("--midi-input", midiInputName);
-    if (audioDevice) args.push("--audio-device-type", audioDevice.type, "--audio-device-name", audioDevice.name);
-    if(routing){for(let index=0;index<routing.stems.length;index++)args.push("--stem-output",String(routing.stems[index]),"--stem-channels",String(routing.stemChannels[index]));args.push("--click-output",String(routing.click),"--cue-output",String(routing.cue),"--pad-output",String(routing.pad),"--iem-output",String(routing.iem));}
+    if (audioDevice) { args.push("--audio-device-type", audioDevice.type, "--audio-device-name", audioDevice.name); if(audioDevice.outputChannels)args.push("--output-count",String(audioDevice.outputChannels)); }
+    if(routing){for(let index=0;index<routing.stems.length;index++)args.push("--stem-output",String(routing.stems[index]),"--stem-channels",String(routing.stemChannels[index]));args.push("--click-output",String(routing.click),"--click-channels",String(routing.clickChannels),"--cue-output",String(routing.cue),"--cue-channels",String(routing.cueChannels),"--pad-output",String(routing.pad),"--pad-channels",String(routing.padChannels),"--iem-output",String(routing.iem),"--iem-channels",String(routing.iemChannels));}
     const child = spawn(executablePath, args, { stdio: ["pipe", "pipe", "pipe"] });
     this.process = child;
     child.once("exit", (code) => { if (this.process === child) this.process = null; if (!this.expectedExits.has(child)) this.emit("fault", new Error(`Native audio engine stopped unexpectedly (${code ?? "no exit code"})`)); });
@@ -85,6 +85,7 @@ export class NativeEngineClient extends EventEmitter {
   musicOn(): void { this.send("music_on"); } musicOff(): void { this.send("music_off"); }
   clickOn(): void { this.send("click_on"); } clickOff(): void { this.send("click_off"); }
   cueOn(): void { this.send("cue_on"); } cueOff(): void { this.send("cue_off"); }
+  setCueTime(targetRegionId:string,atSeconds:number):void { if(!/^[a-zA-Z0-9._:-]+$/.test(targetRegionId)||!Number.isFinite(atSeconds)||atSeconds<0)throw new Error("Cue schedule update is invalid");this.send(`cue_time ${targetRegionId} ${atSeconds}`); }
   panic(): void { this.send("panic"); }
   announceRecovery(regionId: string, atSeconds: number, repeatAtSeconds: number | null): void { if (!/^[a-zA-Z0-9._:-]+$/.test(regionId) || !Number.isFinite(atSeconds) || atSeconds < 0 || repeatAtSeconds !== null && (!Number.isFinite(repeatAtSeconds) || repeatAtSeconds < 0 || repeatAtSeconds >= atSeconds)) throw new Error("Recovery announcement is invalid"); this.send(`announce_recovery ${regionId} ${atSeconds} ${repeatAtSeconds ?? -1}`); }
   cancelTransition(): void { this.send("cancel_transition"); } recover(): void { this.send("recover"); }
@@ -100,6 +101,17 @@ export class NativeEngineClient extends EventEmitter {
         else if (line.startsWith("SELECTED ")) { clearTimeout(timeout); this.off("native-line", onLine); const fields = fieldsFromLine(line); resolve({ index: numberField(fields, "index"), deviceOpenMs: numberField(fields, "device_open_ms"), armMs: numberField(fields, "arm_ms"), stems: numberField(fields, "stems"), clickEvents: numberField(fields, "click_events"), cueEvents: numberField(fields, "cue_events"), padKey: fields.pad_key ?? "", midiEvents: numberField(fields, "midi_events"), midiEnabled: fields.midi_enabled === "1", outputChannels: numberField(fields, "output_channels"), routingReady: fields.routing_ready === "1", iemReady: fields.iem_ready === "1", stereoFallback: fields.stereo_fallback === "1", nextReady: fields.next_ready === "1", nextIndex: numberField(fields, "next_index") }); }
       };
       this.on("native-line", onLine); this.send(`select_song ${index}`);
+    });
+  }
+  selectManifest(manifestPath:string,index:number):Promise<NativeSongSelectionState>{
+    if(!manifestPath||!Number.isInteger(index)||index<0)throw new Error("Manifest song selection is invalid");
+    return new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>{this.off("native-line",onLine);reject(new Error("Native manifest selection timed out"));},10000);
+      const onLine=(line:string):void=>{
+        if(line.startsWith("SELECT_FAILED ")){clearTimeout(timeout);this.off("native-line",onLine);reject(new Error(line));}
+        else if(line.startsWith("SELECTED ")){clearTimeout(timeout);this.off("native-line",onLine);const fields=fieldsFromLine(line);resolve({index:numberField(fields,"index"),deviceOpenMs:numberField(fields,"device_open_ms"),armMs:numberField(fields,"arm_ms"),stems:numberField(fields,"stems"),clickEvents:numberField(fields,"click_events"),cueEvents:numberField(fields,"cue_events"),padKey:fields.pad_key??"",midiEvents:numberField(fields,"midi_events"),midiEnabled:fields.midi_enabled==="1",outputChannels:numberField(fields,"output_channels"),routingReady:fields.routing_ready==="1",iemReady:fields.iem_ready==="1",stereoFallback:fields.stereo_fallback==="1",nextReady:fields.next_ready==="1",nextIndex:numberField(fields,"next_index")});}
+      };
+      this.on("native-line",onLine);this.send(`select_manifest ${index} ${JSON.stringify(manifestPath)}`);
     });
   }
   close(): void { if (this.process) { this.expectedExits.add(this.process); this.process.stdin.write("quit\n"); this.process = null; } }

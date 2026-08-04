@@ -8,6 +8,7 @@ export interface ArrangementVersion {
   readonly schemaVersion:1;readonly id:string;readonly songId:SongId;readonly name:string;readonly sourceType:"reaper-import"|"app-edit";
   readonly sourcePath:string;readonly sourceSha256:string;readonly importedAt:string;readonly selectedKey:string|null;readonly selectedBpm:number;
   readonly timeSignature:TimeSignature;readonly durationSeconds:number;readonly regions:readonly Region[];readonly cueMarkers:readonly ArrangementCue[];
+  readonly clickRate?: 1 | 2;
   readonly markers:readonly ReaperMarker[];readonly mediaItems:readonly ArrangementMediaItem[];readonly proPresenterMidi:readonly ProPresenterMidiEvent[];
   readonly slidesTrackName:string|null;readonly warnings:readonly string[];
 }

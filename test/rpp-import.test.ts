@@ -33,3 +33,37 @@ const fixture=`<REAPER_PROJECT 0.1 "7.0/x64" 1
 test("imports regions, advance cues, and Slides MIDI into a new arrangement",async()=>{const root=await mkdtemp(join(tmpdir(),"rpp-import-")),path=join(root,"Cornerstone 72 B.RPP");await writeFile(path,fixture);const preview=await importReaperProject(path,songId("cornerstone"));assert.equal(preview.defaultAction,"import-as-new-version");assert.equal(preview.arrangement.selectedKey,"B");assert.equal(preview.arrangement.selectedBpm,72);assert.deepEqual(preview.arrangement.regions.map((x)=>x.name),["Intro","Verse"]);assert.equal(preview.arrangement.cueMarkers[1]?.targetRegionId,"reaper-region-0002");assert.equal(preview.arrangement.slidesTrackName,"Slides");assert.equal(preview.arrangement.proPresenterMidi[0]?.kind,"note-on");assert.equal(preview.arrangement.proPresenterMidi[0]?.channel,1);assert.equal(preview.arrangement.proPresenterMidi[0]?.data1,0x13);assert.ok(Math.abs(preview.arrangement.proPresenterMidi[0]!.atSeconds-60/72)<1e-9);const saved=await saveArrangementVersion(join(root,"metadata"),preview.arrangement);assert.equal(await saveArrangementVersion(join(root,"metadata"),preview.arrangement),saved);});
 
 test("does not classify MIDI outside a Slides track as ProPresenter",async()=>{const root=await mkdtemp(join(tmpdir(),"rpp-no-slides-")),path=join(root,"Song 72 C.RPP");await writeFile(path,fixture.replace("NAME Slides","NAME Lighting"));const preview=await importReaperProject(path,songId("song"));assert.equal(preview.arrangement.proPresenterMidi.length,0);assert.match(preview.arrangement.warnings.join(" "),/No Slides track/);});
+
+test("reads underscore-delimited keys and ignores REAPER FILE flags",async()=>{const root=await mkdtemp(join(tmpdir(),"rpp-file-flags-")),path=join(root,"ITISWELL_65_G.rpp"),withAudio=fixture.replace("  <TRACK {T}",`  <TRACK {AUDIO}
+    NAME Music
+    <ITEM
+      POSITION 0
+      LENGTH 20
+      <SOURCE WAVE
+        FILE "song mix.wav" 1
+      >
+    >
+  >
+  <TRACK {T}`);await writeFile(path,withAudio);const preview=await importReaperProject(path,songId("song"));assert.equal(preview.arrangement.selectedKey,"G");assert.equal(preview.arrangement.mediaItems[0]?.sourcePath,join(root,"song mix.wav"));});
+
+test("imports region flag variants and infers ending regions from orphan advance cues",async()=>{const root=await mkdtemp(join(tmpdir(),"rpp-ending-cues-")),path=join(root,"Song_C_72.rpp"),ending=`<REAPER_PROJECT 0.1 "7.0/x64" 1
+ TEMPO 72 4 4 0
+ MARKER 1 0 Intro 0
+ MARKER 1 3.333333 Intro 1
+ MARKER 1 10 "" 1
+ MARKER 2 6.666667 Verse 0
+ MARKER 2 10 Verse 9
+ MARKER 2 20 "" 9
+ MARKER 3 16.666667 Tag 0
+ MARKER 4 26.666667 End 0
+ <TRACK {AUDIO}
+  NAME Music
+  <ITEM
+   POSITION 0
+   LENGTH 40
+   <SOURCE WAVE
+    FILE "music.wav"
+   >
+  >
+ >
+>`;await writeFile(path,ending);const preview=await importReaperProject(path,songId("song"));assert.deepEqual(preview.arrangement.regions.map(region=>region.name),["Intro","Verse","Tag","End"]);assert.ok(Math.abs(preview.arrangement.regions.at(-1)!.endSeconds-40)<.001);assert.deepEqual(preview.arrangement.cueMarkers.map(cue=>cue.phrase),["Intro","Verse","Tag","End"]);});

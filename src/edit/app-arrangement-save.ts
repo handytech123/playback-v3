@@ -51,6 +51,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     selectedKey: input.draft.selectedKey,
     selectedBpm: input.draft.selectedBpm,
     timeSignature: input.draft.timeSignature,
+    clickRate: input.draft.clickRate ?? 1,
     durationSeconds: input.draft.durationSeconds,
     regions: input.draft.sections.map(
       ({ id: regionId, name, startSeconds, endSeconds }) => ({
@@ -62,7 +63,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     ),
     cueMarkers: input.draft.cues
       .filter((cue) => cue.enabled)
-      .map(({ phrase, atSeconds, targetRegionId }) => ({ phrase, atSeconds, targetRegionId })),
+      .map(({ phrase, atSeconds, targetRegionId }) => ({ phrase: phrase.replace(/\s+\d+$/, "").trim(), atSeconds, targetRegionId })),
     markers: [],
     mediaItems: stems.map((stem) => ({
       trackName: stem.role,
@@ -90,7 +91,6 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     slidesTrackName: input.draft.midi.length ? "Slides" : null,
     warnings: [],
   };
-  const savedPath = await saveArrangementVersion(input.metadataRoot, arrangement);
   const padFile = `Pad_${padKey(input.draft.selectedKey)}.wav`;
   const confirmed = await confirmArrangement({
     arrangement,
@@ -103,6 +103,9 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     padPath: join(productionDefaults.padFolder, padFile),
     ...(input.ffmpegPath ? { ffmpegPath: input.ffmpegPath } : {}),
   });
+  // Publish discoverable arrangement metadata only after every performance asset
+  // and the confirmed manifest have been created successfully.
+  const savedPath = await saveArrangementVersion(input.metadataRoot, arrangement);
   return { id, savedPath, manifestPath: confirmed.manifestPath, arrangement };
 }
 
@@ -114,5 +117,6 @@ function padKey(key: string) {
     "G#": "Ab",
     "A#": "Bb",
   };
-  return aliases[key] ?? key;
+  const tonalCenter = key.replace(/m$/i, "");
+  return aliases[tonalCenter] ?? tonalCenter;
 }
