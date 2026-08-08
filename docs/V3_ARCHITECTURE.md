@@ -246,15 +246,15 @@ The app owns the click.
 
 The source click stem is not the performance click.
 
-Dynamic click uses app-owned click pattern files:
+Dynamic click uses only the V3 template registry:
 
-- `2-4.wav`
-- `3-4.wav`
-- `4-4.wav`
-- `6-8.wav`
-- `12-8.wav`
+- `2-4-standard`
+- `3-4-standard`
+- `4-4-quarter`, `4-4-eighth`, or `4-4-half-time`
+- `6-8-full` or `6-8-two-feel`
+- `12-8-full` or `12-8-four-feel`
 
-The click pattern provides sound. The grid provides timing.
+The selected template owns trigger and accent placement. The confirmed grid owns timing. The old meter-file and Normal/Double click paths are not supported.
 
 ## Dynamic Cue Contract
 

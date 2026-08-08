@@ -30,7 +30,7 @@ test("Confirm Set copies, verifies, and atomically publishes a ready package", a
   const result = await confirmSet({
     setId: "test-set", setName: "Test", cacheRoot: join(root, "cache"),
     songs: [{ preparedSong, sourceFolder, stems: [{ relativePath: "music.wav", role: "music-stem", durationSeconds: 1, sha256: hash }], liveAssets: {
-      click: { regularPath: join(sourceFolder, "music.wav"), accentPath: join(sourceFolder, "music.wav"), events: [{ atSeconds: 0, accent: true }] },
+      click: { regularPath: join(sourceFolder, "music.wav"), accentPath: join(sourceFolder, "music.wav"), events: [{ atSeconds: 0, accent: true }], templateId: "4-4-quarter" },
       cues: [
         { atSeconds: 0.25, label: "Repeat", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" },
         { atSeconds: 0.5, label: "Verse", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" },
@@ -79,7 +79,7 @@ test("Confirm Set accepts prepared stems stored in different source folders", as
   await writeCountCueFixtures(first,bytes);
   const hash=createHash("sha256").update(bytes).digest("hex");
   const preparedSong:PreparedSong={song:{id:songId("mixed"),title:"Mixed",artist:"A",vendor:"V",originalKey:"C",originalBpm:120,originalTimeSignature:{numerator:4,denominator:4}},selectedKey:"C",selectedBpm:120,timeSignature:{numerator:4,denominator:4},durationSeconds:.01,stems:[{role:"Music",sourcePath:firstPath,durationSeconds:.01},{role:"Percussion",sourcePath:secondPath,durationSeconds:.01}],regions:[{id:"r1",name:"Intro",startSeconds:0,endSeconds:.01}],cues:[{phrase:"Intro",atSeconds:0,targetRegionId:"r1"}],cacheFingerprint:hash};
-  const result=await confirmSet({setId:"mixed-source-set",setName:"Mixed",cacheRoot:join(root,"cache"),songs:[{preparedSong,sourceFolder:first,stems:[{relativePath:"music.wav",sourcePath:firstPath,role:"Music",durationSeconds:.01,sha256:hash},{relativePath:"percussion.wav",sourcePath:secondPath,role:"Percussion",durationSeconds:.01,sha256:hash}],liveAssets:{click:{regularPath:firstPath,accentPath:firstPath,events:[{atSeconds:0,accent:true}]},cues:[{atSeconds:0,label:"Intro",sourcePath:firstPath,targetRegionId:"r1"}],repeatCuePath:firstPath,pad:{key:"C",sourcePath:firstPath}}}]});
+  const result=await confirmSet({setId:"mixed-source-set",setName:"Mixed",cacheRoot:join(root,"cache"),songs:[{preparedSong,sourceFolder:first,stems:[{relativePath:"music.wav",sourcePath:firstPath,role:"Music",durationSeconds:.01,sha256:hash},{relativePath:"percussion.wav",sourcePath:secondPath,role:"Percussion",durationSeconds:.01,sha256:hash}],liveAssets:{click:{regularPath:firstPath,accentPath:firstPath,events:[{atSeconds:0,accent:true}],templateId:"4-4-quarter"},cues:[{atSeconds:0,label:"Intro",sourcePath:firstPath,targetRegionId:"r1"}],repeatCuePath:firstPath,pad:{key:"C",sourcePath:firstPath}}}]});
   assert.equal(result.readiness.ready,true);
   assert.equal(result.manifest.songs[0]!.stems.length,2);
 });
@@ -101,7 +101,7 @@ test("Confirm Set converts an M4A stem to PCM WAV before publishing", { skip: !e
   const result = await confirmSet({
     setId: "m4a-set", setName: "M4A", cacheRoot: join(root, "cache"), ffmpegPath: bundledFfmpeg,
     songs: [{ preparedSong, sourceFolder, stems: [{ relativePath: "music.m4a", role: "music-stem", durationSeconds: .01, sha256: m4aHash }], liveAssets: {
-      click: { regularPath: wavPath, accentPath: wavPath, events: [{ atSeconds: 0, accent: true }] }, cues: [{ atSeconds: 0, label: "Start", sourcePath: wavPath, targetRegionId: "r1" }], repeatCuePath: wavPath, pad: { key: "C", sourcePath: wavPath },
+      click: { regularPath: wavPath, accentPath: wavPath, events: [{ atSeconds: 0, accent: true }], templateId: "4-4-quarter" }, cues: [{ atSeconds: 0, label: "Start", sourcePath: wavPath, targetRegionId: "r1" }], repeatCuePath: wavPath, pad: { key: "C", sourcePath: wavPath },
     } }],
   });
   const preparedPath = result.manifest.songs[0]!.stems[0]!.sourcePath, preparedBytes = await readFile(preparedPath);

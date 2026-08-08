@@ -9,7 +9,7 @@ function song(numerator: 4 | 6, bpm: number, cueAt: number, regionAt: number): P
     song: { id: songId("test"), title: "Test", artist: "", vendor: "", originalKey: "C", originalBpm: bpm, originalTimeSignature: { numerator, denominator: numerator === 6 ? 8 : 4 } },
     selectedKey: "C", selectedBpm: bpm, timeSignature: { numerator, denominator: numerator === 6 ? 8 : 4 }, durationSeconds: 60,
     stems: [], regions: [{ id: targetRegionId, name: "Intro", startSeconds: regionAt, endSeconds: 60 }], cues: [], cacheFingerprint: "test",
-    liveAssets: { click: { regularPath: "click.wav", accentPath: "accent.wav", events: [] }, cues: [{ atSeconds: cueAt, label: "Intro", audioPath: "intro.wav", targetRegionId }], repeatCuePath: "repeat.wav", pad: { key: "C", audioPath: "pad.wav" } },
+    liveAssets: { click: { regularPath: "click.wav", accentPath: "accent.wav", events: [], templateId: "4-4-quarter" }, cues: [{ atSeconds: cueAt, label: "Intro", audioPath: "intro.wav", targetRegionId }], repeatCuePath: "repeat.wav", pad: { key: "C", audioPath: "pad.wav" } },
   };
 }
 

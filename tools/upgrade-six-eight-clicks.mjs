@@ -12,9 +12,11 @@ for (const manifestPath of manifestPaths) {
   for (const song of manifest.songs ?? []) {
     const meter = song.timeSignature;
     if (!song.liveAssets?.click || meter?.denominator !== 8 || meter.numerator % 3 !== 0) continue;
-    song.liveAssets.click.events = buildDynamicClickEvents(song.selectedBpm, meter, song.durationSeconds);
+    const templateId = meter.numerator === 12 ? "12-8-four-feel" : "6-8-two-feel";
+    song.liveAssets.click.templateId = templateId;
+    song.liveAssets.click.events = buildDynamicClickEvents(song.selectedBpm, meter, song.durationSeconds, templateId);
     changed = true;
-    console.log(`${song.song.title}: ${song.liveAssets.click.events.length} clicks, ${meter.numerator} per measure, beat 1 accented`);
+    console.log(`${song.song.title}: ${song.liveAssets.click.events.length} clicks using ${templateId}`);
   }
   if (!changed) continue;
   const temporary = `${manifestPath}.${process.pid}.six-eight.tmp`;

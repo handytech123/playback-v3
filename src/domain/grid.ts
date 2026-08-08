@@ -1,4 +1,5 @@
 import type { ClickEvent, TimeSignature } from "./song.js";
+import { clickTemplate, requiredDefaultClickTemplate, type ClickTemplateId } from "./click-templates.js";
 
 export interface GridPosition {
   readonly measure: number;
@@ -14,15 +15,19 @@ export function secondsPerNotatedBeat(bpm: number, meter: TimeSignature): number
   return (60 / bpm) * (4 / meter.denominator);
 }
 
-/** Every written beat clicks; only beat 1 is accented, matching V2's six-click 6/8 pattern. */
-export function buildDynamicClickEvents(bpm: number, meter: TimeSignature, durationSeconds: number, rateMultiplier: 1 | 2 = 1): readonly ClickEvent[] {
-  if (rateMultiplier !== 1 && rateMultiplier !== 2) throw new Error("Click rate must be normal or double");
-  const step = secondsPerNotatedBeat(bpm, meter) / rateMultiplier;
+/** Builds click events exclusively from the V3 template registry. */
+export function buildDynamicClickEvents(bpm: number, meter: TimeSignature, durationSeconds: number, templateId: ClickTemplateId = requiredDefaultClickTemplate(meter)): readonly ClickEvent[] {
+  const profile = clickTemplate(templateId, meter);
+  const measureSeconds = secondsPerNotatedBeat(bpm, meter) * meter.numerator;
+  const step = measureSeconds / profile.positionsPerMeasure;
   const count = Math.floor((durationSeconds + Number.EPSILON) / step);
-  return Array.from({ length: count + 1 }, (_, index) => ({
-    atSeconds: index * step,
-    accent: index % (meter.numerator * rateMultiplier) === 0,
-  }));
+  const triggers = new Set(profile.triggerPositions), accents = new Set(profile.accentPositions);
+  const events: ClickEvent[] = [];
+  for (let index = 0; index <= count; index += 1) {
+    const position = index % profile.positionsPerMeasure + 1;
+    if (triggers.has(position)) events.push({ atSeconds: index * step, accent: accents.has(position) });
+  }
+  return events;
 }
 
 export function buildZeroBasedGrid(

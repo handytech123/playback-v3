@@ -8,6 +8,7 @@ import { writeCombinedWaveformSummary } from "../prep/wav-waveform.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 import type { SongTransitionPlan } from "../live/song-transition.js";
 import { writeCountedCue } from "../prep/cue-sequence.js";
+import type { ClickTemplateId } from "../domain/click-templates.js";
 
 export interface StemSource {
   readonly relativePath: string;
@@ -25,7 +26,7 @@ export interface SongPreparationInput {
 }
 
 export interface LiveAssetSources {
-  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly { atSeconds: number; accent: boolean }[]; readonly rateMultiplier?: 1 | 2 };
+  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly { atSeconds: number; accent: boolean }[]; readonly templateId: ClickTemplateId };
   readonly cues: readonly { atSeconds: number; label: string; sourcePath: string; targetRegionId: string }[];
   readonly countIn?: readonly { atSeconds: number; label: string; sourcePath: string }[];
   readonly repeatCuePath: string;
@@ -197,7 +198,7 @@ async function prepareLiveAssets(sources: LiveAssetSources, song: PreparedSong, 
     cues.push({ atSeconds: cue.atSeconds, label: cue.label, audioPath, targetRegionId: cue.targetRegionId });
   }
   const padPath = join(assetDirectory, `pad-${safeFilename(sources.pad.key)}.wav`); await prepareAudioSource(sources.pad.sourcePath, padPath, ffmpegPath);
-  return { click: { regularPath, accentPath, events: sources.click.events, rateMultiplier: sources.click.rateMultiplier ?? 1 }, cues, cueCountVersion: 2 as const, repeatCuePath, pad: { key: sources.pad.key, audioPath: padPath } };
+  return { click: { regularPath, accentPath, events: sources.click.events, templateId: sources.click.templateId }, cues, cueCountVersion: 2 as const, repeatCuePath, pad: { key: sources.pad.key, audioPath: padPath } };
 }
 
 function safeFilename(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }

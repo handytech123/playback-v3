@@ -7,6 +7,7 @@ import type {
   TimeSignature,
 } from "../domain/song.js";
 import { preparedControl } from "../domain/song.js";
+import { CLICK_TEMPLATES, requiredDefaultClickTemplate, type ClickTemplateId } from "../domain/click-templates.js";
 
 export interface ArrangementSection extends Region {
   readonly sourceRegionId: string;
@@ -37,7 +38,7 @@ export interface AppArrangementDraft {
   readonly selectedKey: string;
   readonly selectedBpm: number;
   readonly timeSignature: TimeSignature;
-  readonly clickRate: 1 | 2;
+  readonly clickTemplateId: ClickTemplateId;
   readonly durationSeconds: number;
   readonly sections: readonly ArrangementSection[];
   readonly cues: readonly ArrangementCue[];
@@ -55,7 +56,7 @@ export type ArrangementCommand =
   | { readonly type: "trim-start"; readonly atSeconds: number }
   | { readonly type: "trim-end"; readonly atSeconds: number }
   | { readonly type: "set-key-tempo"; readonly key: string; readonly bpm: number }
-  | { readonly type: "set-click-rate"; readonly rate: 1 | 2 }
+  | { readonly type: "set-click-template"; readonly templateId: ClickTemplateId }
   | { readonly type: "set-name"; readonly name: string }
   | { readonly type: "set-section-boundary"; readonly sectionId: string; readonly edge: "start" | "end"; readonly atSeconds: number }
   | { readonly type: "set-cue-enabled"; readonly cueId: string; readonly enabled: boolean }
@@ -110,7 +111,7 @@ export function createArrangementDraft(
     selectedKey: song.selectedKey,
     selectedBpm: song.selectedBpm,
     timeSignature: song.timeSignature,
-    clickRate: song.liveAssets?.click.rateMultiplier ?? 1,
+    clickTemplateId: song.liveAssets?.click.templateId ?? requiredDefaultClickTemplate(song.timeSignature),
     durationSeconds: song.durationSeconds,
     sections,
     cues,
@@ -129,7 +130,7 @@ export function applyArrangementCommand(
   let key = draft.selectedKey;
   let bpm = draft.selectedBpm;
   let name = draft.name;
-  let clickRate = draft.clickRate ?? 1;
+  let clickTemplateId = draft.clickTemplateId;
   const oldScale = draft.baseBpm / draft.selectedBpm;
 
   if (command.type === "rename-section") {
@@ -183,9 +184,12 @@ export function applyArrangementCommand(
   } else if (command.type === "set-name") {
     assertName(command.name);
     name = command.name.trim();
-  } else if (command.type === "set-click-rate") {
-    if (command.rate !== 1 && command.rate !== 2) throw new Error("Click rate must be Normal or Double");
-    clickRate = command.rate;
+  } else if (command.type === "set-click-template") {
+    const template = CLICK_TEMPLATES[command.templateId];
+    if (!template || template.meter.numerator !== draft.timeSignature.numerator || template.meter.denominator !== draft.timeSignature.denominator) {
+      throw new Error(`Click template does not match ${draft.timeSignature.numerator}/${draft.timeSignature.denominator}`);
+    }
+    clickTemplateId = command.templateId;
   } else if (command.type === "set-section-boundary") {
     sections = setSectionBoundary(sections, command.sectionId, command.edge, command.atSeconds, oldScale);
   } else if (command.type === "set-cue-enabled") {
@@ -230,7 +234,7 @@ export function applyArrangementCommand(
     name,
     selectedKey: key,
     selectedBpm: bpm,
-    clickRate,
+    clickTemplateId,
     durationSeconds: reflowed.at(-1)!.endSeconds,
     sections: reflowed,
     cues: retimedCues,
@@ -248,7 +252,8 @@ export function validateArrangementDraft(draft: AppArrangementDraft): readonly s
   if (!draft.name.trim()) issues.push("Arrangement name is missing");
   if (!draft.selectedKey.trim()) issues.push("Arrangement key is missing");
   if (!Number.isFinite(draft.selectedBpm) || draft.selectedBpm <= 0) issues.push("Arrangement BPM is invalid");
-  if ((draft.clickRate ?? 1) !== 1 && draft.clickRate !== 2) issues.push("Arrangement click rate is invalid");
+  const clickTemplate = CLICK_TEMPLATES[draft.clickTemplateId];
+  if (!clickTemplate || clickTemplate.meter.numerator !== draft.timeSignature.numerator || clickTemplate.meter.denominator !== draft.timeSignature.denominator) issues.push("Arrangement click template is invalid");
   if (!draft.sections.length) issues.push("Arrangement has no sections");
   const ids = new Set<string>();
   for (const [index, section] of draft.sections.entries()) {

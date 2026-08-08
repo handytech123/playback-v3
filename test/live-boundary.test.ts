@@ -14,7 +14,7 @@ function fixture(stems = 1): ConfirmedSetManifest {
     durationSeconds: 120,
     stems: Array.from({ length: stems }, (_, index) => ({ role: `music-${index}`, sourcePath: `cache/stem-${index}.wav`, durationSeconds: 120 })),
     regions: [], cues: [], cacheFingerprint: "sha256:test", waveformPath: "cache/waveform.json",
-    liveAssets: { click: { regularPath: "cache/click.wav", accentPath: "cache/accent.wav", events: [{ atSeconds: 0, accent: true }] }, cues: [{ atSeconds: 1, label: "Verse", audioPath: "cache/verse.wav", targetRegionId: "r1" }], repeatCuePath:"cache/repeat.wav", pad: { key: "D", audioPath: "cache/pad.wav" } },
+    liveAssets: { click: { regularPath: "cache/click.wav", accentPath: "cache/accent.wav", events: [{ atSeconds: 0, accent: true }], templateId: "4-4-quarter" }, cues: [{ atSeconds: 1, label: "Verse", audioPath: "cache/verse.wav", targetRegionId: "r1" }], repeatCuePath:"cache/repeat.wav", pad: { key: "D", audioPath: "cache/pad.wav" } },
   };
   return { schemaVersion: 1, id: "set-1", name: "Sunday", confirmedAt: new Date(0).toISOString(), songs: [song] };
 }

@@ -2,6 +2,7 @@ import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promi
 import { basename, extname, join } from "node:path";
 import { DEFAULT_SHOW_STATE, type ConfirmedSetManifest } from "../confirmed-set/manifest.js";
 import { buildDynamicClickEvents, secondsPerNotatedBeat } from "../domain/grid.js";
+import { requiredDefaultClickTemplate } from "../domain/click-templates.js";
 import { songId, type PreparedSong, type Region, type TimeSignature } from "../domain/song.js";
 import { loadOrBuildEditorWaveforms } from "../edit/editor-workspace.js";
 import { isSupportedLibraryAudio } from "../prep/audio-source.js";
@@ -38,6 +39,7 @@ export async function prepareCandidateReview(input: {
   if (!selectedKey) throw new Error("A key estimate is required before this song can open in Editor review");
 
   const meter = parseTimeSignature(input.master.timeSignature);
+  const clickTemplateId = requiredDefaultClickTemplate(meter);
   const reviewRoot = join(input.cacheRoot, safeId(input.catalogId));
   const waveformPath = join(reviewRoot, "waveform.json");
   const bundlePath = join(reviewRoot, "editor-waveforms.json");
@@ -75,7 +77,8 @@ export async function prepareCandidateReview(input: {
       click: {
         regularPath: join(input.clickFolder, "CLICK.wav"),
         accentPath: join(input.clickFolder, "CLICK ACCENT.wav"),
-        events: buildDynamicClickEvents(input.master.bpm, meter, duration),
+        events: buildDynamicClickEvents(input.master.bpm, meter, duration, clickTemplateId),
+        templateId: clickTemplateId,
       },
       cues: cuePlan,
       cueCountVersion: 2,

@@ -51,7 +51,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     selectedKey: input.draft.selectedKey,
     selectedBpm: input.draft.selectedBpm,
     timeSignature: input.draft.timeSignature,
-    clickRate: input.draft.clickRate ?? 1,
+    clickTemplateId: input.draft.clickTemplateId,
     durationSeconds: input.draft.durationSeconds,
     regions: input.draft.sections.map(
       ({ id: regionId, name, startSeconds, endSeconds }) => ({

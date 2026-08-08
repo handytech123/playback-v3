@@ -1,3 +1,5 @@
+import type { ClickTemplateId } from "./click-templates.js";
+
 export type SongId = string & { readonly __songId: unique symbol };
 
 export interface TimeSignature {
@@ -68,7 +70,7 @@ export interface ClickEvent { readonly atSeconds: number; readonly accent: boole
 export interface CueEvent { readonly atSeconds: number; readonly label: string; readonly audioPath: string; readonly targetRegionId: string; }
 export interface CountInEvent { readonly atSeconds: number; readonly label: string; readonly audioPath: string; }
 export interface LiveAssetPlan {
-  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly ClickEvent[]; readonly rateMultiplier?: 1 | 2 };
+  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly ClickEvent[]; readonly templateId?: ClickTemplateId };
   readonly cues: readonly CueEvent[];
   readonly countIn?: readonly CountInEvent[];
   readonly cueCountVersion?: 1 | 2;

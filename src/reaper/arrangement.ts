@@ -1,4 +1,5 @@
 import type { Region, SongId, TimeSignature } from "../domain/song.js";
+import type { ClickTemplateId } from "../domain/click-templates.js";
 
 export interface ReaperMarker { readonly index:number;readonly name:string;readonly atSeconds:number; }
 export interface ArrangementCue { readonly phrase:string;readonly atSeconds:number;readonly targetRegionId:string; }
@@ -8,7 +9,7 @@ export interface ArrangementVersion {
   readonly schemaVersion:1;readonly id:string;readonly songId:SongId;readonly name:string;readonly sourceType:"reaper-import"|"app-edit";
   readonly sourcePath:string;readonly sourceSha256:string;readonly importedAt:string;readonly selectedKey:string|null;readonly selectedBpm:number;
   readonly timeSignature:TimeSignature;readonly durationSeconds:number;readonly regions:readonly Region[];readonly cueMarkers:readonly ArrangementCue[];
-  readonly clickRate?: 1 | 2;
+  readonly clickTemplateId?: ClickTemplateId;
   readonly markers:readonly ReaperMarker[];readonly mediaItems:readonly ArrangementMediaItem[];readonly proPresenterMidi:readonly ProPresenterMidiEvent[];
   readonly slidesTrackName:string|null;readonly warnings:readonly string[];
 }

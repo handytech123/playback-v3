@@ -44,7 +44,9 @@ for (const manifestPath of paths) {
     }
     song.cues = metadataCues;
     song.liveAssets.cues = liveCues;
-    song.liveAssets.click.events = buildDynamicClickEvents(song.selectedBpm, meter, song.durationSeconds);
+    const templateId = meter.numerator === 12 ? "12-8-four-feel" : "6-8-two-feel";
+    song.liveAssets.click.templateId = templateId;
+    song.liveAssets.click.events = buildDynamicClickEvents(song.selectedBpm, meter, song.durationSeconds, templateId);
     song.liveAssets.cueCountVersion = 2;
     changed = true;
     console.log(`${song.song.title}: ${numbered.length} regions, ${liveCues.length} full-measure cues`);

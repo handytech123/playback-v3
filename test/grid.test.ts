@@ -25,21 +25,31 @@ test("6/8 exposes all six eighth positions and preserves its two musical pulses"
     { measure: 1, beat: 6, isPulse: false },
     { measure: 2, beat: 1, isPulse: true },
   ]);
-  assert.deepEqual(buildDynamicClickEvents(60, { numerator: 6, denominator: 8 }, 6).slice(0, 7), [
+  assert.deepEqual(buildDynamicClickEvents(60, { numerator: 6, denominator: 8 }, 6, "6-8-full").slice(0, 7), [
     { atSeconds: 0, accent: true },
     { atSeconds: 1, accent: false },
     { atSeconds: 2, accent: false },
-    { atSeconds: 3, accent: false },
+    { atSeconds: 3, accent: true },
     { atSeconds: 4, accent: false },
     { atSeconds: 5, accent: false },
     { atSeconds: 6, accent: true },
   ]);
 });
 
-test("double click rate inserts subdivisions without moving the measure accent",()=>{
-  const events=buildDynamicClickEvents(60,{numerator:4,denominator:4},4,2);
+test("4/4 eighth template inserts subdivisions without moving the measure accent",()=>{
+  const events=buildDynamicClickEvents(60,{numerator:4,denominator:4},4,"4-4-eighth");
   assert.deepEqual(events.slice(0,9),[
     {atSeconds:0,accent:true},{atSeconds:.5,accent:false},{atSeconds:1,accent:false},{atSeconds:1.5,accent:false},
     {atSeconds:2,accent:false},{atSeconds:2.5,accent:false},{atSeconds:3,accent:false},{atSeconds:3.5,accent:false},{atSeconds:4,accent:true},
   ]);
+});
+
+test("V3 feel templates own their trigger and accent patterns",()=>{
+  assert.deepEqual(buildDynamicClickEvents(60,{numerator:4,denominator:4},4,"4-4-half-time").map(event=>[event.atSeconds,event.accent]),[[0,true],[1,false],[2,true],[3,false],[4,true]]);
+  assert.deepEqual(buildDynamicClickEvents(60,{numerator:6,denominator:8},6,"6-8-two-feel").map(event=>[event.atSeconds,event.accent]),[[0,true],[3,true],[6,true]]);
+  assert.deepEqual(buildDynamicClickEvents(60,{numerator:12,denominator:8},12,"12-8-four-feel").map(event=>[event.atSeconds,event.accent]),[[0,true],[3,true],[6,true],[9,true],[12,true]]);
+});
+
+test("a click template cannot be applied to the wrong meter",()=>{
+  assert.throws(()=>buildDynamicClickEvents(60,{numerator:6,denominator:8},6,"4-4-quarter"),/does not match 6\/8/);
 });

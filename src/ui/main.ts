@@ -7,6 +7,7 @@ import type { SongTransitionType } from "../live/song-transition.js";
 import { classifyStemOutput, PLAYBACK_OUTPUTS } from "../audio/output-layout.js";
 import QRCode from "qrcode";
 import { createOscConnectionUri } from "../control/osc-profile.js";
+import { compatibleClickTemplates } from "../domain/click-templates.js";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 root.innerHTML = `
@@ -45,7 +46,7 @@ root.innerHTML = `
       <div><span class="eyebrow">ARRANGEMENT NAME</span><strong id="editorSelectedArrangementName">Loading…</strong><small id="editorVersion" hidden></small><span id="editorSource" hidden></span></div>
       <label class="editor-top-field">KEY<select id="arrangementKey"><option>C</option><option>Db</option><option>D</option><option>Eb</option><option>E</option><option>F</option><option>Gb</option><option>G</option><option>Ab</option><option>A</option><option>Bb</option><option>B</option><option>Cm</option><option>Dbm</option><option>Dm</option><option>Ebm</option><option>Em</option><option>Fm</option><option>Gbm</option><option>Gm</option><option>Abm</option><option>Am</option><option>Bbm</option><option>Bm</option></select></label>
       <label class="editor-top-field">BPM<input id="arrangementBpm" type="number" min="1" step=".01"></label>
-      <label class="editor-top-field">CLICK RATE<select id="arrangementClickRate"><option value="1">NORMAL</option><option value="2">DOUBLE</option></select></label>
+      <label class="editor-top-field">CLICK TEMPLATE<select id="arrangementClickTemplate"></select></label>
       <span class="editor-top-fact"><small>ORIGINAL</small><strong id="originalFacts"></strong></span>
       <span class="editor-top-fact"><small>TIME / DURATION</small><strong id="arrangementDuration"></strong></span>
       <span id="draftState" class="draft-state">LOADING</span>
@@ -579,7 +580,7 @@ function setupEditorControls() {
   for (const button of document.querySelectorAll<HTMLButtonElement>("#editorSnap [data-snap]")) button.onclick = () => setEditorSnapMode(button.dataset.snap as EditorSnapMode);
   const updateKeyTempo = () => void arrange({ type: "set-key-tempo", key: ($("#arrangementKey") as HTMLSelectElement).value, bpm: Number(($("#arrangementBpm") as HTMLInputElement).value) });
   $("#arrangementKey").onchange = updateKeyTempo; $("#arrangementBpm").onchange = updateKeyTempo;
-  $("#arrangementClickRate").onchange = event => void arrange({ type: "set-click-rate", rate: Number((event.currentTarget as HTMLSelectElement).value) as 1 | 2 });
+  $("#arrangementClickTemplate").onchange = event => void arrange({ type: "set-click-template", templateId: (event.currentTarget as HTMLSelectElement).value });
   $("#sectionName").onchange = (event) => void arrange({ type: "rename-section", sectionId: selectedRegionId, name: (event.currentTarget as HTMLInputElement).value });
   $("#sectionStart").onchange = () => commitRegionBoundary("start");
   $("#sectionEnd").onchange = () => commitRegionBoundary("end");
@@ -769,7 +770,9 @@ function renderEditor() {
   $("#editorSelectedArrangementName").textContent = draft.name;
   const keySelect=$("#arrangementKey") as HTMLSelectElement;if(![...keySelect.options].some(option=>option.value===draft.selectedKey))keySelect.add(new Option(draft.selectedKey,draft.selectedKey));keySelect.value=draft.selectedKey;
   ($("#arrangementBpm") as HTMLInputElement).value = String(draft.selectedBpm);
-  ($("#arrangementClickRate") as HTMLSelectElement).value = String(draft.clickRate ?? 1);
+  const clickSelect=$("#arrangementClickTemplate") as HTMLSelectElement;
+  clickSelect.replaceChildren(...compatibleClickTemplates(draft.timeSignature).map(template=>new Option(template.label.toUpperCase(),template.id)));
+  clickSelect.value=draft.clickTemplateId;
   $("#originalFacts").textContent = `${workspace.originalFacts.originalKey} · ${workspace.originalFacts.originalBpm} BPM · ${workspace.originalFacts.originalTimeSignature.numerator}/${workspace.originalFacts.originalTimeSignature.denominator}`;
   $("#arrangementDuration").textContent = `${draft.timeSignature.numerator}/${draft.timeSignature.denominator} · ${formatTime(draft.durationSeconds)}`;
   $("#draftState").className = `draft-state ${workspace.dirty ? "dirty" : "saved"}`;
