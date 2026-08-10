@@ -66,9 +66,14 @@
         "to": "native/PlaybackEngineProbe.exe"
       },
       {
+        "from": "vendor/native-runtime",
+        "to": "native",
+        "filter": ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"]
+      },
+      {
         "from": "vendor/runtime",
         "to": "runtime",
-        "filter": ["ffmpeg.exe", "rubberband.exe", "*-LICENSE.txt", "FFMPEG-README.txt"]
+        "filter": ["ffmpeg.exe", "rubberband.exe", "sndfile.dll", "*-LICENSE.txt", "FFMPEG-README.txt"]
       }
     ],
     "win": {

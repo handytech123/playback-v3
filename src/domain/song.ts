@@ -7,6 +7,13 @@ export interface TimeSignature {
   readonly denominator: number;
 }
 
+/** Canonical location for every musical event in Playback. */
+export interface MusicalPosition {
+  readonly measure: number;
+  readonly beat: number;
+  readonly tick: number;
+}
+
 export interface OriginalSongFacts {
   readonly id: SongId;
   readonly title: string;
@@ -26,12 +33,18 @@ export interface AudioStem {
 export interface Region {
   readonly id: string;
   readonly name: string;
+  readonly startPosition?: MusicalPosition;
+  readonly endPosition?: MusicalPosition;
+  /** Derived audio-engine projection. Never use as the musical source of truth. */
   readonly startSeconds: number;
+  /** Derived audio-engine projection. Never use as the musical source of truth. */
   readonly endSeconds: number;
 }
 
 export interface Cue {
   readonly phrase: string;
+  readonly position?: MusicalPosition;
+  /** Derived audio-engine projection. Never use as the musical source of truth. */
   readonly atSeconds: number;
   readonly targetRegionId: string;
 }
@@ -52,7 +65,7 @@ export interface PreparedSong {
   readonly arrangement?: PreparedArrangementMetadata;
 }
 
-export interface PreparedMidiEvent { readonly atSeconds: number; readonly status: number; readonly data1: number; readonly data2: number; }
+export interface PreparedMidiEvent { readonly position?: MusicalPosition; readonly atSeconds: number; readonly status: number; readonly data1: number; readonly data2: number; }
 export interface PreparedControlMetadata {
   readonly sourceType: "reaper-import" | "app-edit";
   readonly sourceSha256: string;
@@ -66,8 +79,15 @@ export interface PreparedArrangementMetadata extends PreparedControlMetadata {
 
 export function preparedControl(song: PreparedSong | undefined): PreparedControlMetadata | null { return song?.control ?? song?.arrangement ?? null; }
 
-export interface ClickEvent { readonly atSeconds: number; readonly accent: boolean; }
-export interface CueEvent { readonly atSeconds: number; readonly label: string; readonly audioPath: string; readonly targetRegionId: string; }
+export interface ClickEvent { readonly atSeconds: number; readonly accent: boolean; readonly maxDurationSeconds?: number; }
+export interface CueEvent {
+  readonly position?: MusicalPosition;
+  /** Derived audio-engine projection. Never use as the musical source of truth. */
+  readonly atSeconds: number;
+  readonly label: string;
+  readonly audioPath: string;
+  readonly targetRegionId: string;
+}
 export interface CountInEvent { readonly atSeconds: number; readonly label: string; readonly audioPath: string; }
 export interface LiveAssetPlan {
   readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly ClickEvent[]; readonly templateId?: ClickTemplateId };

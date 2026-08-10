@@ -1,6 +1,6 @@
 import "./style.css";
 import "./mode.css";
-import { buildZeroBasedGrid } from "../domain/grid.js";
+import { buildZeroBasedGrid, positionToGridBeats, secondsToMusicalPosition } from "../domain/grid.js";
 import { keyboardAction } from "../live/performance-session.js";
 import { snapEditorPosition, type EditorSnapMode } from "../edit/editor-snap.js";
 import type { SongTransitionType } from "../live/song-transition.js";
@@ -88,7 +88,7 @@ root.innerHTML = `
 <dialog id="performanceReadiness"><header><div><span class="eyebrow">PRODUCTION PERFORMANCE READINESS</span><h2 id="performanceReadinessTitle">Checking…</h2></div><button id="closePerformanceReadiness">CLOSE</button></header><div id="performanceReadinessChecks"></div></dialog>
 <dialog id="songLibraryPicker" class="song-library-picker"><header><div><span class="eyebrow">ORIGINAL SONGS</span><h2>Master Song Library</h2></div><button id="closeSongLibrary">CLOSE</button></header><div class="song-library-filters"><label>SEARCH BY NAME<input id="songLibrarySearch" type="search" placeholder="Song title or artist…"></label><label>SPEED<select id="songLibrarySpeed"><option value="all">All tempos</option><option value="slow">Slow · 80 BPM or less</option><option value="medium">Medium · 81–110 BPM</option><option value="fast">Fast · 111 BPM or more</option></select></label></div><div id="songLibraryResults" class="song-library-results"></div></dialog>
 <dialog id="remoteSettings" class="settings-window"><header><div><span class="eyebrow">PLAYBACK V3</span><h2>Settings</h2><p id="settingsStatus">Configure the production system without crowding the performance surface.</p></div><button id="closeRemoteSettings">CLOSE</button></header><nav class="settings-tabs" aria-label="Settings sections"><button class="active" data-settings-tab="audio">AUDIO</button><button data-settings-tab="import">LIBRARY / ANALYSIS</button><button data-settings-tab="control">HTTP REMOTE / OSC</button><button data-settings-tab="transitions">TRANSITIONS</button><button data-settings-tab="midi">MIDI</button><button data-settings-tab="system">SYSTEM CHECK</button></nav><div class="settings-pages">
-  <section class="settings-page active" data-settings-page="audio"><div class="settings-section-heading"><span>AUDIO ENGINE</span><h3>Device, routing, and output health</h3></div><div class="settings-grid"><label>Audio Device<select id="audioSelect" title="Audio output"></select></label><label>Active Outputs<select id="audioOutputCount" title="Number of active output channels"></select></label><div class="settings-readout"><span>Routing</span><strong id="routeStatus"></strong></div><div class="settings-readout"><span>IEM Outputs</span><strong id="settingsIemStatus">—</strong></div><button id="refreshAudioSettings">REFRESH DEVICE STATUS</button><button id="runAudioCheck">RUN AUDIO ERROR CHECK</button><div class="settings-section-heading settings-wide"><span>DANTE OUTPUT MATRIX</span><h3 id="outputMatrixHeading">Assign stems and live buses to available outputs</h3></div><div id="outputMatrix" class="settings-grid settings-wide"></div><div id="audioCheckReport" class="settings-report settings-wide">Select Run Audio Error Check for a live readiness report.</div></div></section>
+  <section class="settings-page active" data-settings-page="audio"><div class="settings-section-heading"><span>AUDIO ENGINE</span><h3>Device, routing, and output health</h3></div><div class="settings-grid"><label>Audio Device<select id="audioSelect" title="Audio output"></select></label><label>Active Outputs<select id="audioOutputCount" title="Number of active output channels"></select></label><div class="settings-readout"><span>Routing</span><strong id="routeStatus"></strong></div><div class="settings-readout"><span>IEM Outputs</span><strong id="settingsIemStatus">—</strong></div><button id="refreshAudioSettings">REFRESH DEVICE STATUS</button><button id="runAudioCheck">RUN AUDIO ERROR CHECK</button><div class="settings-section-heading settings-wide"><span>CLICK SOUNDS</span><h3>Choose the two WAV sounds used by every dynamic click pattern</h3></div><div class="click-sound-row settings-wide"><label><span>NORMAL CLICK</span><input id="normalClickPath" readonly></label><button id="chooseNormalClick">CHOOSE WAV</button><button id="previewNormalClick">PREVIEW</button></div><div class="click-sound-row settings-wide"><label><span>ACCENT CLICK</span><input id="accentClickPath" readonly></label><button id="chooseAccentClick">CHOOSE WAV</button><button id="previewAccentClick">PREVIEW</button></div><div class="click-sound-actions settings-wide"><button id="resetClickSounds">RESET TO PLAYBACK DEFAULTS</button><p id="clickSoundStatus">These sounds are saved on this computer and locked into the next Confirmed Set.</p></div><div class="settings-section-heading settings-wide"><span>DANTE OUTPUT MATRIX</span><h3 id="outputMatrixHeading">Assign stems and live buses to available outputs</h3></div><div id="outputMatrix" class="settings-grid settings-wide"></div><div id="audioCheckReport" class="settings-report settings-wide">Select Run Audio Error Check for a live readiness report.</div></div></section>
   <section class="settings-page" data-settings-page="midi"><div class="settings-section-heading"><span>MIDI DEVICES</span><h3>Slides and console MIDI</h3></div><div class="settings-grid"><label class="settings-wide">ProPresenter MIDI Output<select id="midiSelect" title="ProPresenter MIDI output"></select></label><div class="settings-readout"><span>Output Status</span><strong id="midiStatus"></strong></div><div class="settings-readout"><span>Loaded Slide Events</span><strong id="settingsMidiEvents">—</strong></div><p class="settings-help settings-wide">Reaper MIDI is imported only from a track named Slides. The selected output is saved and the native engine is re-armed when it changes.</p></div><section class="midi-input-settings"><h3>Allen &amp; Heath GLD-112 · Dedicated MIDI Output</h3><div><label>Output<select id="gldMidiOutput"></select></label><label>MIDI Channel<input id="gldChannel" type="number" min="1" max="16" value="2"></label><button id="testGld">TEST DEVICE · NO DATA</button></div><div class="gld-preview"><button id="previewGld">PREVIEW INPUT 1 MUTE</button><code id="gldHex">Writes locked</code></div><p id="gldStatus">The device-open test sends no MIDI data. Console writes remain locked pending physical acceptance.</p></section></section>
   <section class="settings-page" data-settings-page="import"><div class="settings-section-heading"><span>LIBRARY / ANALYSIS</span><h3>Synchronization and analyzer activity</h3></div><div class="library-health-grid"><div class="library-health"><span>LIBRARY SYNC</span><strong id="librarySyncState">IDLE</strong><small id="librarySyncDetail">Not running</small></div><div class="library-health"><span>ANALYZER</span><strong id="libraryAnalyzerState">IDLE</strong><small id="libraryAnalyzerDetail">Waiting for a scan</small></div><div class="library-health"><span>READY SONGS</span><strong id="libraryReadyCount">—</strong><small>Analyzer files complete</small></div><div class="library-health"><span>NEEDS ANALYSIS</span><strong id="libraryNeedsCount">—</strong><small>Missing analyzer output</small></div><div class="library-health"><span>MISSING FOLDERS</span><strong id="libraryMissingCount">—</strong><small>Master path unavailable</small></div><div class="library-health"><span>LAST SCAN</span><strong id="libraryLastScan">NEVER</strong><small id="libraryLastDuration">No completed scan</small></div></div><div class="library-paths"><label>Library Root<input id="libraryRootPath" readonly></label><label>Master Workbook<input id="libraryWorkbookPath" readonly></label></div><div class="settings-action-list"><button id="settingsScanLibrary"><strong>SYNC + CHECK ANALYZER</strong><small>Read the master workbook, scan every song folder, and verify analyzer metadata.</small></button><button id="settingsRefreshLibrary"><strong>REFRESH PREPARED LIBRARY</strong><small>Reload prepared Original Songs and arrangements available to the set builder.</small></button><button id="importReaper"><strong>IMPORT REAPER ARRANGEMENT</strong><small>Preview regions, tempo/key changes, and Slides MIDI before writing.</small></button></div><div id="settingsSyncStatus" class="settings-report">No library task is running.</div><div id="libraryIssueList" class="library-issue-list"><p>Run Sync + Check Analyzer to see song readiness.</p></div></section>
   <section class="settings-page" data-settings-page="control"><div class="settings-section-heading"><span>HTTP PERFORMANCE REMOTE</span><h3>Control Performance Mode from a phone, tablet, or browser</h3></div><div class="remote-settings"><p id="remoteStatus"></p><section id="httpQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>HTTP PERFORMANCE REMOTE</span><h3>Scan To Open Remote</h3><p id="httpQrStatus">Enable LAN to create a connection for other devices on this network.</p><label>Private Remote Link<input id="remoteUrl" type="password" readonly></label><div class="remote-buttons"><button id="openHttpRemote">OPEN REMOTE HERE</button><button id="copyRemoteUrl">COPY PRIVATE LINK</button><button id="toggleLanRemote">ENABLE LAN</button></div></div><div class="osc-qr-code"><canvas id="httpQrCanvas" width="210" height="210"></canvas><small>PRIVATE · DO NOT SHARE PUBLICLY</small></div></section><dl><div><dt>HTTP REMOTE</dt><dd id="remoteHttp">—</dd></div><div><dt>OSC CONTROL</dt><dd id="remoteOsc">—</dd></div></dl><section id="oscQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>OSC REMOTE CONNECTION</span><h3>Scan To Connect OSC</h3><p id="oscQrStatus">Enable LAN and OSC to create a stage-ready connection code.</p><label>Network Address<select id="oscQrAddress"></select></label><label>Private OSC Profile<input id="oscQrPayload" type="password" readonly></label><div class="remote-buttons"><button id="copyOscProfile">COPY OSC PROFILE</button><button id="toggleOsc">OSC ON</button></div></div><div class="osc-qr-code"><canvas id="oscQrCanvas" width="210" height="210"></canvas><small>PRIVATE · DO NOT SHARE PUBLICLY</small></div></section><section class="midi-input-settings"><h3>Foot Controller / MIDI Input</h3><div><label>Input<select id="midiInputDevice"></select></label><label>Profile<select id="footControllerProfile"><option value="disabled">Disabled</option><option value="basic-notes">Basic Notes · CH 1 · 20–26</option></select></label><button id="applyMidiInput">APPLY + ARM</button></div><p id="midiInputStatus">MIDI input is disabled.</p></section><p class="remote-warning">The HTTP remote mirrors the Performance page without its mixer. LAN links and OSC profiles contain a private control token; keep them inside the production network.</p></div></section>
@@ -119,6 +119,7 @@ let selectionStart: number | null = null;
 let selectionEnd: number | null = null;
 let expandedStems = false;
 let dragRegionId: string | null = null;
+let dragSetItemId: string | null = null;
 let editorLoading: Promise<void> | null = null;
 let loopAuditionRegionId: string | null = null;
 let stemRowHeight = Math.max(58, Math.min(240, Number(localStorage.getItem("playback.editor.stemHeight.v2")) || 129));
@@ -145,6 +146,7 @@ document.body.classList.add("performance-mode");
 setupWindowsMenu();
 setupNavigation();
 setupDeviceSelectors();
+setupClickSoundSettings();
 setupRemoteControl();
 setupReaperImport();
 setupPerformance();
@@ -274,10 +276,16 @@ function renderEditorSetBuilder() {
       const card = document.createElement("article");
       const loaded=workspace?.originalFacts?.id===item.songId&&workspace?.source?.name===item.arrangement;
       card.className = `set-song-card editor-draft-card ${loaded ? "active" : ""} ${item.itemId === selectedSetItemId ? "selected" : ""}`;
-      card.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.key)} · ${item.bpm} BPM</small>${loadingSetItemId===item.itemId?`<i class="set-card-load-pie" style="--load-angle:${loadingProgress*3.6}deg"><b>${loadingProgress}%</b></i>`:""}<div class="set-card-actions"><button data-action="up" title="Move earlier">←</button><button data-action="down" title="Move later">→</button><button data-action="remove" title="Remove from set">×</button></div>`;
-      card.title = loaded ? `${item.title} is loaded for editing` : `Load ${item.title} for editing`;
+      card.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.key)} · ${item.bpm} BPM</small>${loadingSetItemId===item.itemId?`<i class="set-card-load-pie" style="--load-angle:${loadingProgress*3.6}deg"><b>${loadingProgress}%</b></i>`:""}<button class="set-card-remove" title="Remove ${escapeHtml(item.title)} from set" aria-label="Remove ${escapeHtml(item.title)} from set">×</button>`;
+      card.title = loaded ? `${item.title} is loaded for editing · drag to reorder` : `Load ${item.title} for editing · drag to reorder`;
+      card.draggable=true;
       card.onclick = async () => { selectedSetItemId = item.itemId; renderEditorSetBuilder();await loadEditorItem(item.itemId); };
-      for (const button of card.querySelectorAll<HTMLButtonElement>(".set-card-actions button")) button.onclick = (event) => { event.stopPropagation(); const action = button.dataset.action; void prepCommand(action === "remove" ? { action: "remove", itemId: item.itemId } : { action: "move", itemId: item.itemId, direction: action === "up" ? -1 : 1 }); };
+      card.querySelector<HTMLButtonElement>(".set-card-remove")!.onclick=(event)=>{event.stopPropagation();void prepCommand({action:"remove",itemId:item.itemId});};
+      card.ondragstart=(event)=>{dragSetItemId=item.itemId;event.dataTransfer!.effectAllowed="move";event.dataTransfer!.setData("text/plain",item.itemId);requestAnimationFrame(()=>card.classList.add("dragging"));};
+      card.ondragover=(event)=>{if(!dragSetItemId||dragSetItemId===item.itemId)return;event.preventDefault();event.dataTransfer!.dropEffect="move";strip.querySelectorAll(".drop-before,.drop-after").forEach(element=>element.classList.remove("drop-before","drop-after"));card.classList.add(event.clientX<card.getBoundingClientRect().left+card.offsetWidth/2?"drop-before":"drop-after");};
+      card.ondragleave=(event)=>{if(!card.contains(event.relatedTarget as Node|null))card.classList.remove("drop-before","drop-after");};
+      card.ondrop=(event)=>{event.preventDefault();event.stopPropagation();if(!dragSetItemId||dragSetItemId===item.itemId)return;const after=event.clientX>=card.getBoundingClientRect().left+card.offsetWidth/2,remaining=items.filter(candidate=>candidate.itemId!==dragSetItemId),targetIndex=remaining.findIndex(candidate=>candidate.itemId===item.itemId),beforeItemId=remaining[targetIndex+(after?1:0)]?.itemId??null,dragged=dragSetItemId;dragSetItemId=null;void prepCommand({action:"reorder",itemId:dragged,beforeItemId});};
+      card.ondragend=()=>{dragSetItemId=null;strip.querySelectorAll(".dragging,.drop-before,.drop-after").forEach(element=>element.classList.remove("dragging","drop-before","drop-after"));};
       strip.append(card);
     } else {
       const add = document.createElement("button"); add.className = "set-song-card empty add-song-card";
@@ -404,6 +412,20 @@ function setupDeviceSelectors() {
   function setRouteStatus(ready: boolean, channels: number) { route.className = `route-status ${ready ? "ready" : "fallback"}`; route.textContent = ready ? `${channels} OUT READY` : `${channels} OUT FALLBACK`; }
   function setMidiStatus(enabled: boolean) { $("#midiStatus").className = `midi-status ${enabled ? "ready" : "disabled"}`; $("#midiStatus").textContent = enabled ? "MIDI READY" : "MIDI OFF"; }
 }
+function setupClickSoundSettings() {
+  let preview: HTMLAudioElement | null = null;
+  const render=(settings:any)=>{($<HTMLInputElement>("#normalClickPath")).value=settings.normalPath;($<HTMLInputElement>("#accentClickPath")).value=settings.accentPath;};
+  const refresh=async()=>{try{render(await window.playback.clickSounds.get());}catch(error){showError(error);$("#clickSoundStatus").textContent="Click sound settings could not be loaded.";}};
+  const choose=async(kind:"normal"|"accent")=>{const button=$<HTMLButtonElement>(kind==="normal"?"#chooseNormalClick":"#chooseAccentClick");button.disabled=true;try{render(await window.playback.clickSounds.choose(kind));$("#clickSoundStatus").textContent=`${kind==="normal"?"Normal":"Accent"} click saved. Confirm Set again to apply it to Performance Mode.`;$("#settingsStatus").textContent="Dynamic click sounds updated.";}catch(error){showError(error);$("#clickSoundStatus").textContent="That file could not be used. Choose a valid WAV file.";}finally{button.disabled=false;}};
+  const play=async(kind:"normal"|"accent")=>{try{preview?.pause();preview=new Audio(await window.playback.clickSounds.preview(kind));await preview.play();$("#clickSoundStatus").textContent=`Previewing ${kind} click.`;}catch(error){showError(error);$("#clickSoundStatus").textContent="The selected click sound could not be previewed.";}};
+  $("#chooseNormalClick").onclick=()=>void choose("normal");
+  $("#chooseAccentClick").onclick=()=>void choose("accent");
+  $("#previewNormalClick").onclick=()=>void play("normal");
+  $("#previewAccentClick").onclick=()=>void play("accent");
+  $("#resetClickSounds").onclick=async()=>{const button=$<HTMLButtonElement>("#resetClickSounds");button.disabled=true;try{render(await window.playback.clickSounds.reset());$("#clickSoundStatus").textContent="Playback default click sounds restored. Confirm Set again to apply them.";}catch(error){showError(error);$("#clickSoundStatus").textContent="Default click sounds are unavailable on this computer.";}finally{button.disabled=false;}};
+  void refresh();
+}
+
 function setupRemoteControl() {
   const dialog = $("#remoteSettings") as HTMLDialogElement;
   let control: any = null;
@@ -590,9 +612,9 @@ function setupEditorControls() {
   $("#moveEarlier").onclick = () => moveSelected(-1); $("#moveLater").onclick = () => moveSelected(1);
   $("#duplicateRegion").onclick = () => void arrange({ type: "duplicate-section", sectionId: selectedRegionId });
   $("#deleteRegion").onclick = () => void arrange({ type: "delete-section", sectionId: selectedRegionId });
-  $("#splitRegion").onclick = () => void arrange({ type: "split-section", atSeconds: currentPosition });
-  $("#trimStart").onclick = () => void arrange({ type: "trim-start", atSeconds: currentPosition });
-  $("#trimEnd").onclick = () => void arrange({ type: "trim-end", atSeconds: currentPosition });
+  $("#splitRegion").onclick = () => void arrange({ type: "split-section", atPosition: editorPosition(currentPosition) });
+  $("#trimStart").onclick = () => void arrange({ type: "trim-start", atPosition: editorPosition(currentPosition) });
+  $("#trimEnd").onclick = () => void arrange({ type: "trim-end", atPosition: editorPosition(currentPosition) });
   $("#newRegion").onclick = () => createRegionFromSelection();
   $("#auditionRegion").onclick = () => auditionSelectedSource();
   $("#loopAudition").onclick = () => toggleLoopAudition();
@@ -663,12 +685,13 @@ async function setMode(edit: boolean) {
   $("#title").textContent = `${song.song.title} — ${song.song.artist}`;
   $("#facts").textContent = `${song.selectedKey} • ${song.selectedBpm} BPM • ${song.timeSignature.numerator}/${song.timeSignature.denominator} • ${song.stems.length} stems`;
   $("#modeLabel").textContent = edit ? "EDIT · SONG MAP + ARRANGEMENT WORKSPACE" : "PERFORMANCE MODE · CONFIRMED SET";
-  if (edit && !workspace) {
+  if (edit && !prepState) prepState = await window.playback.prep.get();
+  const hasEditorSong=Boolean(prepState?.setlist?.items?.length);
+  if (edit && !workspace && hasEditorSong) {
     $("#editorStatus").textContent = "Preparing stacked stem waveforms…";
     editorLoading ??= refreshWorkspace();
     await editorLoading;
   }
-  if (edit && !prepState) prepState = await window.playback.prep.get();
   if (edit && workspace) {
     try {
       const pending = JSON.parse(localStorage.getItem("playback.editor.createNew") ?? "null");
@@ -788,7 +811,7 @@ function renderRegionList() {
     const row = document.createElement("div");
     row.className = `region-list-item ${regionClass(section.name)} ${section.id === selectedRegionId ? "selected" : ""}`;
     row.draggable = true; row.dataset.regionId = section.id;
-    row.innerHTML = `<button class="region-list-main" title="Select ${escapeHtml(section.name)}"><i class="region-drag-handle">⋮⋮</i><span class="region-order">${index + 1}</span><span class="region-list-copy"><strong>${escapeHtml(section.name)}</strong><small>${formatGridLocation(section.startSeconds, editorGrid())}–${formatGridLocation(section.endSeconds, editorGrid())}</small></span></button><div class="region-list-actions"><button data-action="rename" title="Rename region">RENAME</button><button data-action="duplicate" title="Duplicate region">DUPLICATE</button><button data-action="remove" title="Remove region and close its gap">REMOVE</button></div>`;
+    row.innerHTML = `<button class="region-list-main" title="Select ${escapeHtml(section.name)}"><i class="region-drag-handle">⋮⋮</i><span class="region-order">${index + 1}</span><span class="region-list-copy"><strong>${escapeHtml(section.name)}</strong><small>${formatMusicalLocation(section.startPosition,section.startSeconds)}–${formatMusicalLocation(section.endPosition,section.endSeconds)}</small></span></button><div class="region-list-actions"><button data-action="rename" title="Rename region">RENAME</button><button data-action="duplicate" title="Duplicate region">DUPLICATE</button><button data-action="remove" title="Remove region and close its gap">REMOVE</button></div>`;
     row.querySelector<HTMLButtonElement>(".region-list-main")!.onclick = () => selectRegion(section.id);
     row.querySelector<HTMLButtonElement>("[data-action='rename']")!.onclick = (event) => { event.stopPropagation(); const name = prompt("Rename region", section.name)?.trim(); if (name && name !== section.name) void arrange({ type: "rename-section", sectionId: section.id, name }); };
     row.querySelector<HTMLButtonElement>("[data-action='duplicate']")!.onclick = (event) => { event.stopPropagation(); void arrange({ type: "duplicate-section", sectionId: section.id }); };
@@ -805,8 +828,8 @@ function renderRegionList() {
 function renderSelectedInspector() {
   const section = selectedSection(); if (!section) return;
   ($("#sectionName") as HTMLInputElement).value = section.name;
-  ($("#sectionStart") as HTMLInputElement).value = formatGridLocation(section.startSeconds, editorGrid());
-  ($("#sectionEnd") as HTMLInputElement).value = formatGridLocation(section.endSeconds, editorGrid());
+  ($("#sectionStart") as HTMLInputElement).value = formatMusicalLocation(section.startPosition,section.startSeconds);
+  ($("#sectionEnd") as HTMLInputElement).value = formatMusicalLocation(section.endPosition,section.endSeconds);
   $("#sectionSource").textContent = `Source ${section.sourceRegionId} · ${formatTime(section.sourceStartSeconds)}–${formatTime(section.sourceEndSeconds)}`;
   $("#loopAudition").classList.toggle("active", loopAuditionRegionId === section.id);
   const cue = selectedCue();
@@ -815,16 +838,16 @@ function renderSelectedInspector() {
   target.replaceChildren(...workspace.draft.sections.map((item: any) => new Option(item.name, item.id)));
   target.value = cue?.targetRegionId ?? section.id;
   const cuePosition = $("#cuePosition") as HTMLInputElement;
-  cuePosition.value = cue ? formatGridLocation(cue.atSeconds, editorGrid()) : "";
+  cuePosition.value = cue ? formatMusicalLocation(cue.position,cue.atSeconds) : "";
   cuePosition.disabled = !cue;
-  $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatGridLocation(cue.atSeconds, editorGrid())} → ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
+  $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatMusicalLocation(cue.position,cue.atSeconds)} → ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
   const midi = $("#midiEvents"); midi.replaceChildren();
   const events = workspace.draft.midi.filter((event: any) => event.atSeconds >= section.startSeconds && event.atSeconds < section.endSeconds);
   if (!events.length) midi.textContent = "No Slides MIDI in this region.";
   for (const event of events) {
     const label = document.createElement("label"); label.className = "midi-event";
     const kind = midiKind(event.status, event.data2);
-    label.innerHTML = `<input type="checkbox" ${event.enabled ? "checked" : ""}><span><strong>${kind}</strong><small>${formatGridLocation(event.atSeconds, editorGrid())} · CH ${(event.status & 15) + 1} · ${event.data1}/${event.data2}</small></span>`;
+    label.innerHTML = `<input type="checkbox" ${event.enabled ? "checked" : ""}><span><strong>${kind}</strong><small>${formatMusicalLocation(event.position,event.atSeconds)} · CH ${(event.status & 15) + 1} · ${event.data1}/${event.data2}</small></span>`;
     (label.querySelector("input") as HTMLInputElement).onchange = (change) => void arrange({ type: "set-midi-enabled", eventId: event.id, enabled: (change.currentTarget as HTMLInputElement).checked });
     midi.append(label);
   }
@@ -906,7 +929,7 @@ function renderMarkers() {
     const position=(event:PointerEvent)=>{const rect=$("#editorTimeline").getBoundingClientRect(),raw=((event.clientX-rect.left)/rect.width)*workspace.draft.durationSeconds;return Math.max(0,Math.min(target?.startSeconds??workspace.draft.durationSeconds,snapToGrid(raw)));};
     marker.onpointerdown=(event)=>{event.preventDefault();event.stopPropagation();dragged=false;dragAt=cue.atSeconds;marker.setPointerCapture(event.pointerId);marker.classList.add("dragging");selectedRegionId=cue.targetRegionId;renderRegionList();renderSelectedInspector();};
     marker.onpointermove=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;const next=position(event);dragged=dragged||Math.abs(next-cue.atSeconds)>.0001;dragAt=next;marker.style.left=`${(next/workspace.draft.durationSeconds)*100}%`;marker.title=`${cue.phrase} · ${formatGridLocation(next,editorGrid())}`;};
-    marker.onpointerup=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;marker.releasePointerCapture(event.pointerId);marker.classList.remove("dragging");if(dragged)void arrange({type:"set-cue-time",cueId:cue.id,atSeconds:dragAt});};
+    marker.onpointerup=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;marker.releasePointerCapture(event.pointerId);marker.classList.remove("dragging");if(dragged)void arrange({type:"set-cue-time",cueId:cue.id,atPosition:editorPosition(dragAt)});};
     marker.onpointercancel=()=>{marker.classList.remove("dragging");marker.style.left=`${(cue.atSeconds/workspace.draft.durationSeconds)*100}%`;};
     marker.onclick=(event)=>{event.stopPropagation();if(!dragged)selectRegion(cue.targetRegionId);};cueLane.append(marker);
   }
@@ -1041,7 +1064,8 @@ function renderPerformanceReadiness(report: any) {
   for (const item of report.checks) { const row = document.createElement("section"); row.className = `performance-readiness-check ${item.level}`; row.innerHTML = `<i></i><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></span>`; checks.append(row); }
   const faulted = Boolean(liveState.fault);
   if (faulted) { badge.classList.add("blocked"); badge.textContent = "PERFORMANCE LOCKED - ENGINE FAULT"; }
-  const locked = (!report.ready || faulted) && !editMode;
+  const noLoadedSong=editMode?!workspace:String(song?.song?.id)==="__playback_empty__";
+  const locked = noLoadedSong || ((!report.ready || faulted) && !editMode);
   for (const control of document.querySelectorAll<HTMLInputElement | HTMLButtonElement>("#liveControls button, #liveControls input, #performanceMixer button, #performanceMixer input, #play, #pause, #pad")) if (control.id !== "clearFault"&&control.id!=="mixerCollapse") control.disabled = locked;
   $("#performanceWorkspace").classList.toggle("performance-locked", locked);
 }
@@ -1056,31 +1080,32 @@ function selectRelative(offset: number) { const index = workspace.draft.sections
 function selectedSection() { return workspace?.draft.sections.find((section: any) => section.id === selectedRegionId); }
 function selectedCue() { return workspace?.draft.cues.find((cue: any) => cue.targetRegionId === selectedRegionId); }
 function sectionById(id: string) { return workspace?.draft.sections.find((section: any) => section.id === id); }
-function gridEntrySeconds(value: string) {
+function gridEntryPosition(value: string) {
   const match = value.trim().match(/^(\d+)[.:](\d+)$/);
   if (!match) throw new Error("Enter a musical position as Measure.Beat, for example 12.1");
   const measure = Number(match[1]), beat = Number(match[2]), meter = workspace.draft.timeSignature;
   if (measure < 1 || beat < 1 || beat > meter.numerator) throw new Error(`Beat must be between 1 and ${meter.numerator}`);
-  const seconds = (((measure - 1) * meter.numerator) + beat - 1) * (60 / workspace.draft.selectedBpm) * (meter.denominator === 8 && meter.numerator % 3 === 0 && meter.numerator > 3 ? 1 : 4 / meter.denominator);
-  if (seconds < 0 || seconds > workspace.draft.durationSeconds + .0001) throw new Error("That musical position is outside this arrangement");
-  return Math.min(seconds, workspace.draft.durationSeconds);
+  const position = { measure, beat, tick: 0 }, finalPosition=workspace.draft.sections.at(-1)?.endPosition;
+  if (!finalPosition || positionToGridBeats(position,meter)>positionToGridBeats(finalPosition,meter)) throw new Error("That musical position is outside this arrangement");
+  return position;
 }
 function commitRegionBoundary(edge: "start" | "end") {
   const input = $(`#section${edge === "start" ? "Start" : "End"}`) as HTMLInputElement;
-  try { void arrange({ type: "set-section-boundary", sectionId: selectedRegionId, edge, atSeconds: gridEntrySeconds(input.value) }); }
+  try { void arrange({ type: "set-section-boundary", sectionId: selectedRegionId, edge, atPosition: gridEntryPosition(input.value) }); }
   catch (error) { showError(error); renderSelectedInspector(); }
 }
 function commitCuePosition() {
   const cue = selectedCue(); if (!cue) return;
-  try { void arrange({ type: "set-cue-time", cueId: cue.id, atSeconds: gridEntrySeconds(($("#cuePosition") as HTMLInputElement).value) }); }
+  try { void arrange({ type: "set-cue-time", cueId: cue.id, atPosition: gridEntryPosition(($("#cuePosition") as HTMLInputElement).value) }); }
   catch (error) { showError(error); renderSelectedInspector(); }
 }
-function createRegionFromSelection() { if (selectionStart === null || selectionEnd === null || selectionEnd <= selectionStart) { setEditorStatus("Drag a selection inside one source section first."); return; } const name = prompt("New region name", "New Section"); if (name) void arrange({ type: "create-region-from-selection", startSeconds: selectionStart, endSeconds: selectionEnd, name }); }
+function createRegionFromSelection() { if (selectionStart === null || selectionEnd === null || selectionEnd <= selectionStart) { setEditorStatus("Drag a selection inside one source section first."); return; } const name = prompt("New region name", "New Section"); if (name) void arrange({ type: "create-region-from-selection", startPosition: editorPosition(selectionStart), endPosition: editorPosition(selectionEnd), name }); }
 function auditionSelectedSource() { const section = selectedSection(); if (!section) return; loopAuditionRegionId = null; $("#loopAudition").classList.remove("active"); window.playback.command("seek", section.sourceStartSeconds); window.playback.command("play"); setEditorStatus(`Auditioning source audio for ${section.name}. Render the arrangement to hear reordered boundaries exactly.`); }
 function toggleLoopAudition() { const section = selectedSection(); if (!section) return; loopAuditionRegionId = loopAuditionRegionId === section.id ? null : section.id; $("#loopAudition").classList.toggle("active", loopAuditionRegionId !== null); if (loopAuditionRegionId) { window.playback.command("seek", section.sourceStartSeconds); window.playback.command("play"); setEditorStatus(`Looping the source slice for ${section.name}.`); } else setEditorStatus("Source audition loop released."); }
 function auditionSelectedBoundary() { const section = selectedSection(); if (!section) return; const index = workspace.draft.sections.findIndex((item: any) => item.id === section.id), next = workspace.draft.sections[index + 1]; if (!next) { setEditorStatus("The selected region is the end of the arrangement."); return; } if (Math.abs(section.sourceEndSeconds - next.sourceStartSeconds) > .01) { setEditorStatus("This boundary is reordered. Render the arrangement to audition that exact transition."); return; } loopAuditionRegionId = null; window.playback.command("seek", Math.max(section.sourceStartSeconds, section.sourceEndSeconds - 2)); window.playback.command("play"); setEditorStatus(`Auditioning the ${section.name} → ${next.name} boundary.`); }
 function editorGrid() { return buildZeroBasedGrid(workspace.draft.selectedBpm, workspace.draft.timeSignature, workspace.draft.durationSeconds); }
 function snapToGrid(at: number) { return snapEditorPosition(editorGrid(), at, editorSnapMode); }
+function editorPosition(at: number) { return secondsToMusicalPosition(snapToGrid(at), workspace.draft.selectedBpm, workspace.draft.timeSignature); }
 function setEditorSnapMode(mode: EditorSnapMode) {
   editorSnapMode = mode;
   localStorage.setItem("playback.editor.snap", mode);
@@ -1125,6 +1150,7 @@ function drawWaveform(canvas: HTMLCanvasElement,buckets:readonly any[],color:str
 }
 function formatTime(seconds: number) { const minutes = Math.floor(seconds / 60); return `${minutes}:${(seconds - minutes * 60).toFixed(3).padStart(6, "0")}`; }
 function formatGridLocation(seconds: number, grid: readonly any[]) { if (!grid.length) return "1.1"; const closest = grid.reduce((best: any, item: any) => Math.abs(item.timeSeconds - seconds) < Math.abs(best.timeSeconds - seconds) ? item : best); return `${closest.measure}.${closest.beat}`; }
+function formatMusicalLocation(position:any,fallbackSeconds:number){return position?`${position.measure}.${position.beat}${position.tick?`+${position.tick}`:""}`:formatGridLocation(fallbackSeconds,editorGrid());}
 function stemColor(index: number) { return ["#63d8ff", "#74efb8", "#ffc76b", "#b69cff", "#ff78b3", "#84a9ff", "#ff9b71", "#64e0d2"][index % 8]!; }
 function setEditorStatus(message: string) { $("#editorStatus").textContent = message; }
 function showError(error: unknown) { const message = error instanceof Error ? error.message : String(error); if (editMode) setEditorStatus(message); else { const fault = $("#liveFault"); fault.hidden = false; fault.querySelector("span")!.textContent = message; } }

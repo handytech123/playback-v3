@@ -55,9 +55,11 @@ private:
 
 class ScheduledAudioSource final : public juce::AudioSource {
 public:
-    struct Event { Event(std::string eventId,juce::int64 sample,std::shared_ptr<juce::AudioBuffer<float>> value):id(std::move(eventId)),startSample(sample),audio(std::move(value)){}std::string id;std::atomic<juce::int64> startSample;std::shared_ptr<juce::AudioBuffer<float>> audio; };
-    void addEvent(double seconds, std::shared_ptr<juce::AudioBuffer<float>> audio, double sampleRate,const std::string& id={}) {
-        events.push_back(std::make_shared<Event>(id,static_cast<juce::int64>(std::llround(seconds*sampleRate)),std::move(audio)));
+    struct Event { Event(std::string eventId,juce::int64 sample,std::shared_ptr<juce::AudioBuffer<float>> value,int maximum,int fade):id(std::move(eventId)),startSample(sample),audio(std::move(value)),maxSamples(maximum),fadeSamples(fade){}std::string id;std::atomic<juce::int64> startSample;std::shared_ptr<juce::AudioBuffer<float>> audio;int maxSamples,fadeSamples; };
+    void addEvent(double seconds, std::shared_ptr<juce::AudioBuffer<float>> audio, double sampleRate,const std::string& id={},double maxDurationSeconds=0) {
+        const auto maximum=maxDurationSeconds>0?static_cast<int>(std::llround(maxDurationSeconds*sampleRate)):0;
+        const auto fade=maximum>0?juce::jmin(maximum,static_cast<int>(std::llround(0.01*sampleRate))):0;
+        events.push_back(std::make_shared<Event>(id,static_cast<juce::int64>(std::llround(seconds*sampleRate)),std::move(audio),maximum,fade));
     }
     bool moveEvent(const std::string& id,double seconds,double sampleRate){for(const auto& event:events)if(event->id==id){event->startSample.store(static_cast<juce::int64>(std::llround(seconds*sampleRate)),std::memory_order_release);return true;}return false;}
     int eventCount() const { return static_cast<int>(events.size()); }
@@ -69,13 +71,18 @@ public:
         info.clearActiveBufferRegion();
         const auto blockStart=position.load(std::memory_order_acquire), blockEnd=blockStart+info.numSamples;
         for (const auto& event:events) {
-            const auto eventStart=event->startSample.load(std::memory_order_acquire),eventEnd=eventStart+event->audio->getNumSamples();
+            const auto eventStart=event->startSample.load(std::memory_order_acquire);
+            const auto eventLength=event->maxSamples>0?juce::jmin(event->maxSamples,event->audio->getNumSamples()):event->audio->getNumSamples();
+            const auto eventEnd=eventStart+eventLength;
             if (eventEnd<=blockStart || eventStart>=blockEnd) continue;
             const auto sourceOffset=static_cast<int>(juce::jmax<juce::int64>(0,blockStart-eventStart));
             const auto destinationOffset=static_cast<int>(juce::jmax<juce::int64>(0,eventStart-blockStart));
-            const auto samples=juce::jmin(event->audio->getNumSamples()-sourceOffset,info.numSamples-destinationOffset);
-            for (int channel=0; channel<info.buffer->getNumChannels(); ++channel)
-                info.buffer->addFrom(channel,info.startSample+destinationOffset,*event->audio,juce::jmin(channel,event->audio->getNumChannels()-1),sourceOffset,samples);
+            const auto samples=juce::jmin(eventLength-sourceOffset,info.numSamples-destinationOffset);
+            for (int channel=0; channel<info.buffer->getNumChannels(); ++channel) {
+                const auto sourceChannel=juce::jmin(channel,event->audio->getNumChannels()-1);
+                if(event->maxSamples<=0)info.buffer->addFrom(channel,info.startSample+destinationOffset,*event->audio,sourceChannel,sourceOffset,samples);
+                else for(int index=0;index<samples;++index){const auto sourceIndex=sourceOffset+index;const auto gain=event->fadeSamples>0&&sourceIndex>=eventLength-event->fadeSamples?static_cast<float>(eventLength-sourceIndex)/event->fadeSamples:1.0f;info.buffer->addSample(channel,info.startSample+destinationOffset+index,event->audio->getSample(sourceChannel,sourceIndex)*gain);}
+            }
         }
         position.store(blockEnd,std::memory_order_release);
     }
@@ -231,7 +238,7 @@ public:
         }
         // Start each prepared transport while disconnected from the device.
         // The shared player source is the single sample-aligned live gate.
-        for (auto& transport : transports) transport->start();
+        for (auto& transport : transports) { transport->start(); transport->setPosition(0); }
         lastStemMs=elapsedMs(start)-lastResetMs;
         musicEnabled=true;musicBusGain=1.0f;panicAttenuation=1.0f;applyStemMix(0);
         mixer.addInputSource(&midiScheduled,false);
@@ -244,7 +251,8 @@ public:
                 const auto accent=loadScheduledAsset(click.getDynamicObject()->getProperty("accentPath").toString());
                 const auto events=click.getDynamicObject()->getProperty("events");
                 if (events.isArray()) for (const auto& event:*events.getArray()) if (event.isObject()) {
-                    clickScheduled.addEvent(static_cast<double>(event.getDynamicObject()->getProperty("atSeconds")), static_cast<bool>(event.getDynamicObject()->getProperty("accent"))?accent:regular, outputSampleRate); ++clickEventCount;
+                    const auto* clickEvent=event.getDynamicObject();const auto duration=clickEvent->hasProperty("maxDurationSeconds")?static_cast<double>(clickEvent->getProperty("maxDurationSeconds")):0.0;
+                    clickScheduled.addEvent(static_cast<double>(clickEvent->getProperty("atSeconds")), static_cast<bool>(clickEvent->getProperty("accent"))?accent:regular, outputSampleRate,{},duration); ++clickEventCount;
                 }
             }
             const auto cues=assets->getProperty("cues");
@@ -283,7 +291,20 @@ public:
         return juce::Result::ok();
     }
     juce::Result selectSong(int songIndex){return arm(armedManifestFile,songIndex);}
-    double play() { const auto t=Clock::now(); gate.beginPlay(); playing=true; return elapsedMs(t); }
+    double play() {
+        const auto t=Clock::now();
+        // A prepared AudioTransportSource may have been started long before the
+        // output gate opens. Reassert the authoritative shared timeline here so
+        // no read-ahead, device restart, pause, or preloaded-song state can leave
+        // the audible stems behind the playhead.
+        const auto timelineSample=gate.getPositionSamples();
+        const auto timelineSeconds=outputSampleRate>0?static_cast<double>(timelineSample)/outputSampleRate:0.0;
+        for(auto& transport:transports)transport->setPosition(timelineSeconds);
+        clickScheduled.setPositionSamples(timelineSample);
+        cueScheduled.setPositionSamples(timelineSample);
+        midiScheduled.setPositionSamples(timelineSample);
+        gate.beginPlay();playing=true;return elapsedMs(t);
+    }
     double pause() { const auto t=Clock::now(); gate.setOpen(false); playing=false; return elapsedMs(t); }
     double stop() { const auto t=Clock::now(); gate.setOpen(false); playing=false;panicAttenuation=1.0f;applyStemMix(0);if(padGain)padGain->setGain(0.0f);recoveryCue.stop();repeatCueSource.stop();midiScheduled.stop();recoveryCue.setPositionSamples(0);repeatCueSource.setPositionSamples(0);gate.setPositionSamples(0); clickScheduled.setPositionSamples(0); cueScheduled.setPositionSamples(0); for (auto& x:transports) x->setPosition(0); if(padTransport)padTransport->setPosition(0); return elapsedMs(t); }
     double seek(double s) {

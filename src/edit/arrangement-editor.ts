@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   Cue,
+  MusicalPosition,
   PreparedMidiEvent,
   PreparedSong,
   Region,
@@ -8,6 +9,7 @@ import type {
 } from "../domain/song.js";
 import { preparedControl } from "../domain/song.js";
 import { CLICK_TEMPLATES, requiredDefaultClickTemplate, type ClickTemplateId } from "../domain/click-templates.js";
+import { positionToSeconds, secondsToMusicalPosition } from "../domain/grid.js";
 
 export interface ArrangementSection extends Region {
   readonly sourceRegionId: string;
@@ -51,17 +53,17 @@ export type ArrangementCommand =
   | { readonly type: "move-section"; readonly sectionId: string; readonly toIndex: number }
   | { readonly type: "duplicate-section"; readonly sectionId: string; readonly newSectionId?: string }
   | { readonly type: "delete-section"; readonly sectionId: string }
-  | { readonly type: "split-section"; readonly atSeconds: number; readonly newSectionId?: string }
-  | { readonly type: "create-region-from-selection"; readonly startSeconds: number; readonly endSeconds: number; readonly name: string }
-  | { readonly type: "trim-start"; readonly atSeconds: number }
-  | { readonly type: "trim-end"; readonly atSeconds: number }
+  | { readonly type: "split-section"; readonly atPosition: MusicalPosition; readonly newSectionId?: string }
+  | { readonly type: "create-region-from-selection"; readonly startPosition: MusicalPosition; readonly endPosition: MusicalPosition; readonly name: string }
+  | { readonly type: "trim-start"; readonly atPosition: MusicalPosition }
+  | { readonly type: "trim-end"; readonly atPosition: MusicalPosition }
   | { readonly type: "set-key-tempo"; readonly key: string; readonly bpm: number }
   | { readonly type: "set-click-template"; readonly templateId: ClickTemplateId }
   | { readonly type: "set-name"; readonly name: string }
-  | { readonly type: "set-section-boundary"; readonly sectionId: string; readonly edge: "start" | "end"; readonly atSeconds: number }
+  | { readonly type: "set-section-boundary"; readonly sectionId: string; readonly edge: "start" | "end"; readonly atPosition: MusicalPosition }
   | { readonly type: "set-cue-enabled"; readonly cueId: string; readonly enabled: boolean }
   | { readonly type: "set-cue-target"; readonly cueId: string; readonly targetRegionId: string }
-  | { readonly type: "set-cue-time"; readonly cueId: string; readonly atSeconds: number }
+  | { readonly type: "set-cue-time"; readonly cueId: string; readonly atPosition: MusicalPosition }
   | { readonly type: "set-midi-enabled"; readonly eventId: string; readonly enabled: boolean };
 
 export function createArrangementDraft(
@@ -76,6 +78,7 @@ export function createArrangementDraft(
   })));
   const sourceCues = song.liveAssets?.cues.map((cue) => ({
     phrase: cue.label,
+    ...(cue.position ? { position: cue.position } : {}),
     atSeconds: cue.atSeconds,
     targetRegionId: cue.targetRegionId,
   })) ?? song.cues;
@@ -102,7 +105,7 @@ export function createArrangementDraft(
       sourceAtSeconds: event.atSeconds,
     } satisfies ArrangementMidiEvent;
   });
-  return {
+  return withMusicalLocations({
     schemaVersion: 1,
     baseSongId: String(song.song.id),
     name,
@@ -117,7 +120,7 @@ export function createArrangementDraft(
     cues,
     midi,
     revision: 0,
-  };
+  });
 }
 
 export function applyArrangementCommand(
@@ -160,20 +163,20 @@ export function applyArrangementCommand(
     sections = sections.filter((section) => section.id !== command.sectionId);
     if (sections.length === before) throw new Error("Section not found");
   } else if (command.type === "split-section") {
-    sections = splitAt(sections, command.atSeconds, oldScale, command.newSectionId);
+    sections = splitAt(sections, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale, command.newSectionId);
   } else if (command.type === "create-region-from-selection") {
     assertName(command.name);
     sections = createFromSelection(
       sections,
-      command.startSeconds,
-      command.endSeconds,
+      positionToSeconds(command.startPosition, draft.selectedBpm, draft.timeSignature),
+      positionToSeconds(command.endPosition, draft.selectedBpm, draft.timeSignature),
       command.name.trim(),
       oldScale,
     );
   } else if (command.type === "trim-start") {
-    sections = trimStart(sections, command.atSeconds, oldScale);
+    sections = trimStart(sections, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale);
   } else if (command.type === "trim-end") {
-    sections = trimEnd(sections, command.atSeconds, oldScale);
+    sections = trimEnd(sections, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale);
   } else if (command.type === "set-key-tempo") {
     if (!command.key.trim()) throw new Error("Arrangement key is required");
     if (!Number.isFinite(command.bpm) || command.bpm <= 0) {
@@ -191,7 +194,7 @@ export function applyArrangementCommand(
     }
     clickTemplateId = command.templateId;
   } else if (command.type === "set-section-boundary") {
-    sections = setSectionBoundary(sections, command.sectionId, command.edge, command.atSeconds, oldScale);
+    sections = setSectionBoundary(sections, command.sectionId, command.edge, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale);
   } else if (command.type === "set-cue-enabled") {
     cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, enabled: command.enabled }));
   } else if (command.type === "set-cue-target") {
@@ -207,12 +210,11 @@ export function applyArrangementCommand(
       return cue;
     });
   } else if (command.type === "set-cue-time") {
-    if (!Number.isFinite(command.atSeconds)) throw new Error("Cue position is invalid");
     const selected = cues.find((cue) => cue.id === command.cueId);
     if (!selected) throw new Error("Cue not found");
     const target = sections.find((section) => section.id === selected.targetRegionId);
     if (!target) throw new Error("Cue destination section was not found");
-    const atSeconds = Math.max(0, Math.min(target.startSeconds, command.atSeconds));
+    const atSeconds = Math.max(0, Math.min(target.startSeconds, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature)));
     cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, atSeconds, sourceLeadSeconds: Math.max(0, target.startSeconds - atSeconds) / oldScale }));
   } else if (command.type === "set-midi-enabled") {
     let found = false;
@@ -229,7 +231,7 @@ export function applyArrangementCommand(
   const reflowed = reflow(sections, scale);
   const retimedCues = retimeCues(draft.sections, cues, reflowed, scale);
   const retimedMidi = retimeMidi(midi, reflowed, scale);
-  return {
+  return withMusicalLocations({
     ...draft,
     name,
     selectedKey: key,
@@ -240,6 +242,16 @@ export function applyArrangementCommand(
     cues: retimedCues,
     midi: retimedMidi,
     revision: draft.revision + 1,
+  });
+}
+
+function withMusicalLocations<T extends AppArrangementDraft>(draft: T): T {
+  const locate = (seconds:number) => secondsToMusicalPosition(seconds, draft.selectedBpm, draft.timeSignature);
+  return {
+    ...draft,
+    sections: draft.sections.map(section => ({ ...section, startPosition: locate(section.startSeconds), endPosition: locate(section.endSeconds) })),
+    cues: draft.cues.map(cue => ({ ...cue, position: locate(cue.atSeconds) })),
+    midi: draft.midi.map(event => ({ ...event, position: locate(event.atSeconds) })),
   };
 }
 

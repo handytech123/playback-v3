@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { productionDefaults } from "../dist/src/config/settings.js";
 import { prepareCandidateReview } from "../dist/src/library/review-manifest.js";
 import { importMasterCatalog } from "../dist/src/library/master-spreadsheet.js";
@@ -23,7 +23,8 @@ for (const catalogId of requested) {
     sharedMetadataRoot: productionDefaults.sharedMetadataRoot,
     libraryRoot: productionDefaults.libraryRoot,
     cacheRoot: resolve(".playback-cache", "library-review"),
-    clickFolder: productionDefaults.clickFolder,
+    clickRegularPath: join(productionDefaults.clickFolder, "CLICK.wav"),
+    clickAccentPath: join(productionDefaults.clickFolder, "CLICK ACCENT.wav"),
     cueFolder: productionDefaults.cueFolder,
     padFolder: productionDefaults.padFolder,
     ffmpegPath: resolve("vendor", "runtime", "ffmpeg.exe"),

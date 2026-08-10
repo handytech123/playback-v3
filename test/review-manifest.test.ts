@@ -1,9 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ANALYZER_SONG_MAP_VERSION, correctedReviewCueAt, normalizeReviewKey, reviewRegions } from "../src/library/review-manifest.js";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ANALYZER_SONG_MAP_VERSION, correctedReviewCueAt, normalizeReviewKey, reviewRegions, selectedSongClickTemplate } from "../src/library/review-manifest.js";
 
 test("analyzer song-map format has an explicit invalidation version",()=>{
-  assert.equal(ANALYZER_SONG_MAP_VERSION,5);
+  assert.equal(ANALYZER_SONG_MAP_VERSION,8);
+});
+
+test("song metadata selects the live click template",async()=>{
+  const folder=await mkdtemp(join(tmpdir(),"click-metadata-"));
+  await writeFile(join(folder,"song-metadata.json"),JSON.stringify({gridAnalysis:{clickPatternClassification:{status:"matched",selected:{id:"4-4-eighth"}}}}));
+  assert.equal(await selectedSongClickTemplate(folder,{numerator:4,denominator:4}),"4-4-eighth");
+});
+
+test("missing click metadata uses the meter default but invalid selections are rejected",async()=>{
+  const missing=await mkdtemp(join(tmpdir(),"click-default-"));
+  assert.equal(await selectedSongClickTemplate(missing,{numerator:6,denominator:8}),"6-8-two-feel");
+  const invalid=await mkdtemp(join(tmpdir(),"click-invalid-"));
+  await writeFile(join(invalid,"song-metadata.json"),JSON.stringify({gridAnalysis:{clickPatternClassification:{status:"matched",selected:{id:"4-4-eighth"}}}}));
+  await assert.rejects(()=>selectedSongClickTemplate(invalid,{numerator:6,denominator:8}),/does not match 6\/8/);
 });
 
 test("review preparation preserves minor keys instead of truncating them to major",()=>{

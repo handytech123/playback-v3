@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import type { PreparedSong, Region, SongId } from "../domain/song.js";
+import { secondsToMusicalPosition } from "../domain/grid.js";
 import { normalizeRegions } from "../edit/song-map.js";
 import type { ArrangementCue, ArrangementImportPreview, ArrangementMediaItem, ArrangementVersion, ProPresenterMidiEvent, ReaperMarker } from "./arrangement.js";
 
@@ -16,24 +17,27 @@ export async function importReaperProject(path:string,songId:SongId,original?:Pr
   const tempoLine=value(project,"TEMPO");if(!tempoLine)throw new Error("RPP has no project tempo");
   const bpm=Number(tempoLine[0]),numerator=Number(tempoLine[1]),denominator=Number(tempoLine[2]);
   if(!Number.isFinite(bpm)||bpm<=0||!Number.isInteger(numerator)||!Number.isInteger(denominator))throw new Error("RPP project tempo is invalid");
+  const meter={numerator,denominator},locate=(seconds:number)=>secondsToMusicalPosition(seconds,bpm,meter);
   const warnings:string[]=[],tempoEnvelope=children(project,"TEMPOENVEX")[0],tempoPoints=tempoEnvelope?.lines.filter((line)=>line[0]==="PT")??[];if(tempoPoints.length)warnings.push("Tempo changes detected; constant project tempo used for this import preview");
   const markerLines=project.lines.filter((line)=>line[0]==="MARKER");
   const parsedMarkers=markerLines.map(parseMarker).filter((item):item is ParsedMarker=>item!==null);
   const regionStarts=parsedMarkers.filter((item)=>item.isRegion&&item.name.length>0),regionEnds=parsedMarkers.filter((item)=>item.isRegion&&!item.name);
   let rawRegions=regionStarts.map((start,ordinal)=>{const end=regionEnds.find((item)=>item.index===start.index&&item.atSeconds>start.atSeconds);if(!end)throw new Error(`Reaper region ${start.name} has no end`);return{id:`reaper-region-${String(ordinal+1).padStart(4,"0")}`,name:start.name,startSeconds:start.atSeconds,endSeconds:end.atSeconds};});
   let normalized=normalizeRegions(rawRegions);
-  let regions:Region[]=normalized.map((region)=>({id:region.id,name:region.name,startSeconds:region.startSeconds,endSeconds:region.endSeconds}));
+  let regions:Region[]=normalized.map((region)=>({id:region.id,name:region.name,startPosition:locate(region.startSeconds),endPosition:locate(region.endSeconds),startSeconds:region.startSeconds,endSeconds:region.endSeconds}));
   let regionByIndex=new Map(regionStarts.map((start,index)=>[start.index,regions[index]!]));
   const markers:ReaperMarker[]=parsedMarkers.filter((item)=>!item.isRegion).map((item)=>({index:item.index,name:item.name,atSeconds:item.atSeconds}));
-  let cueMarkers:ArrangementCue[]=markers.filter((marker)=>marker.name&&regionByIndex.has(marker.index)&&regionByIndex.get(marker.index)!.name!=="Other").map((marker)=>({phrase:regionByIndex.get(marker.index)!.name,atSeconds:marker.atSeconds,targetRegionId:regionByIndex.get(marker.index)!.id}));
-  if(!cueMarkers.length&&regions[0])cueMarkers=[{phrase:"Intro",atSeconds:0,targetRegionId:regions[0].id}];
+  let cueMarkers:ArrangementCue[]=markers.filter((marker)=>marker.name&&regionByIndex.has(marker.index)&&regionByIndex.get(marker.index)!.name!=="Other").map((marker)=>({phrase:regionByIndex.get(marker.index)!.name,position:locate(marker.atSeconds),atSeconds:marker.atSeconds,targetRegionId:regionByIndex.get(marker.index)!.id}));
+  if(!cueMarkers.length&&regions[0])cueMarkers=[{phrase:"Intro",position:locate(0),atSeconds:0,targetRegionId:regions[0].id}];
   const tracks=children(project,"TRACK"),slides=tracks.find((track)=>(value(track,"NAME")?.join(" ")??"").trim().toLowerCase()==="slides");
   const mediaItems:ArrangementMediaItem[]=[];for(const track of tracks){const trackName=(value(track,"NAME")?.join(" ")??"").trim();for(const item of children(track,"ITEM")){const source=item.children.find((child)=>child.tag==="SOURCE");if(source?.args[0]==="MIDI")continue;const rawSource=value(source??emptyNode(),"FILE")?.[0]??null,sourcePath=rawSource?(isAbsolute(rawSource)?rawSource:resolve(dirname(path),rawSource)):null;mediaItems.push({trackName,positionSeconds:num(value(item,"POSITION")?.[0],0),lengthSeconds:num(value(item,"LENGTH")?.[0],0),sourcePath,sourceOffsetSeconds:num(value(item,"SOFFS")?.[0],0),playRate:num(value(item,"PLAYRATE")?.[0],1)});}}
-  const proPresenterMidi=slides?decodeSlides(slides,bpm):[];if(!slides)warnings.push("No Slides track found; no ProPresenter MIDI imported");
+  const proPresenterMidi=(slides?decodeSlides(slides,bpm):[]).map(event=>({...event,position:locate(event.atSeconds)}));if(!slides)warnings.push("No Slides track found; no ProPresenter MIDI imported");
   const durationSeconds=Math.max(0,...regions.map((item)=>item.endSeconds),...mediaItems.map((item)=>item.positionSeconds+item.lengthSeconds));
   const measureSeconds=numerator*(60/bpm)*(4/denominator),lastMappedEnd=Math.max(0,...rawRegions.map(region=>region.endSeconds));
   const inferredStarts=markers.filter(marker=>marker.name&&!regionByIndex.has(marker.index)).map(marker=>({marker,startSeconds:marker.atSeconds+measureSeconds})).filter(item=>item.startSeconds>=lastMappedEnd-.05&&item.startSeconds<durationSeconds-.05).sort((a,b)=>a.startSeconds-b.startSeconds);
   if(inferredStarts.length){rawRegions=[...rawRegions,...inferredStarts.map((item,index)=>({id:`reaper-region-${String(rawRegions.length+index+1).padStart(4,"0")}`,name:item.marker.name,startSeconds:item.startSeconds,endSeconds:inferredStarts[index+1]?.startSeconds??durationSeconds}))];normalized=normalizeRegions(rawRegions);regions=normalized.map(region=>({id:region.id,name:region.name,startSeconds:region.startSeconds,endSeconds:region.endSeconds}));const indexed=[...regionStarts.map(start=>start.index),...inferredStarts.map(item=>item.marker.index)];regionByIndex=new Map(indexed.map((index,position)=>[index,regions[position]!]));cueMarkers=markers.filter(marker=>marker.name&&regionByIndex.has(marker.index)&&regionByIndex.get(marker.index)!.name!=="Other").map(marker=>({phrase:regionByIndex.get(marker.index)!.name,atSeconds:marker.atSeconds,targetRegionId:regionByIndex.get(marker.index)!.id}));}
+  regions=regions.map(region=>({...region,startPosition:locate(region.startSeconds),endPosition:locate(region.endSeconds)}));
+  cueMarkers=cueMarkers.map(cue=>({...cue,position:locate(cue.atSeconds)}));
   const identity=inferArrangementIdentity(path,bpm),hash=createHash("sha256").update(text).digest("hex");
   const arrangement:ArrangementVersion={schemaVersion:1,id:`reaper-${hash.slice(0,12)}`,songId,name:reaperTitle(identity.name),sourceType:"reaper-import",sourcePath:path,sourceSha256:hash,importedAt:new Date().toISOString(),selectedKey:identity.key??original?.selectedKey??null,selectedBpm:bpm,timeSignature:{numerator,denominator},durationSeconds,regions,cueMarkers,markers,mediaItems,proPresenterMidi,slidesTrackName:slides?"Slides":null,warnings};
   const differences=[];if(original){if(original.selectedKey!==arrangement.selectedKey)differences.push({field:"selectedKey",original:original.selectedKey,arrangement:arrangement.selectedKey});if(original.selectedBpm!==bpm)differences.push({field:"selectedBpm",original:original.selectedBpm,arrangement:bpm});if(JSON.stringify(original.timeSignature)!==JSON.stringify(arrangement.timeSignature))differences.push({field:"timeSignature",original:original.timeSignature,arrangement:arrangement.timeSignature});if(JSON.stringify(original.regions.map((x)=>x.name))!==JSON.stringify(regions.map((x)=>x.name)))differences.push({field:"regionStructure",original:original.regions.map((x)=>x.name),arrangement:regions.map((x)=>x.name)});}

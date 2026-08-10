@@ -25,7 +25,7 @@ let draft = createArrangementDraft(
   source,
   "Cornerstone Automated Edit Validation",
 );
-draft = applyArrangementCommand(draft, { type: "trim-end", atSeconds: 10 });
+draft = applyArrangementCommand(draft, { type: "trim-end", atPosition: { measure: 6, beat: 1, tick: 0 } });
 draft = applyArrangementCommand(draft, {
   type: "set-key-tempo",
   key: "D",

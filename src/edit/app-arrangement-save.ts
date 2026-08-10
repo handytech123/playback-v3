@@ -19,6 +19,8 @@ export interface SaveAppArrangementInput {
   readonly cacheRoot: string;
   readonly stemDisplayLabels?: readonly string[];
   readonly ffmpegPath?: string;
+  readonly clickRegularPath?: string;
+  readonly clickAccentPath?: string;
 }
 
 export async function saveAppArrangement(input: SaveAppArrangementInput) {
@@ -54,16 +56,18 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     clickTemplateId: input.draft.clickTemplateId,
     durationSeconds: input.draft.durationSeconds,
     regions: input.draft.sections.map(
-      ({ id: regionId, name, startSeconds, endSeconds }) => ({
+      ({ id: regionId, name, startPosition, endPosition, startSeconds, endSeconds }) => ({
         id: regionId,
         name,
+        ...(startPosition ? { startPosition } : {}),
+        ...(endPosition ? { endPosition } : {}),
         startSeconds,
         endSeconds,
       }),
     ),
     cueMarkers: input.draft.cues
       .filter((cue) => cue.enabled)
-      .map(({ phrase, atSeconds, targetRegionId }) => ({ phrase: phrase.replace(/\s+\d+$/, "").trim(), atSeconds, targetRegionId })),
+      .map(({ phrase, position, atSeconds, targetRegionId }) => ({ phrase: phrase.replace(/\s+\d+$/, "").trim(), ...(position ? { position } : {}), atSeconds, targetRegionId })),
     markers: [],
     mediaItems: stems.map((stem) => ({
       trackName: stem.role,
@@ -74,6 +78,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
       playRate: 1,
     })),
     proPresenterMidi: input.draft.midi.filter((event) => event.enabled).map((event) => ({
+      ...(event.position ? { position: event.position } : {}),
       atSeconds: event.atSeconds,
       status: event.status,
       channel: (event.status & 15) + 1,
@@ -98,8 +103,8 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     originalSong: input.source.song,
     outputDirectory: join(directory, "performance"),
     cueDirectory: productionDefaults.cueFolder,
-    clickRegularPath: join(productionDefaults.clickFolder, "CLICK.wav"),
-    clickAccentPath: join(productionDefaults.clickFolder, "CLICK ACCENT.wav"),
+    clickRegularPath: input.clickRegularPath ?? join(productionDefaults.clickFolder, "CLICK.wav"),
+    clickAccentPath: input.clickAccentPath ?? join(productionDefaults.clickFolder, "CLICK ACCENT.wav"),
     padPath: join(productionDefaults.padFolder, padFile),
     ...(input.ffmpegPath ? { ffmpegPath: input.ffmpegPath } : {}),
   });

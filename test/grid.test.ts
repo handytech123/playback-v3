@@ -53,3 +53,12 @@ test("V3 feel templates own their trigger and accent patterns",()=>{
 test("a click template cannot be applied to the wrong meter",()=>{
   assert.throws(()=>buildDynamicClickEvents(60,{numerator:6,denominator:8},6,"4-4-quarter"),/does not match 6\/8/);
 });
+
+test("4/4 Driving uses eighth-note placement with a short two-sound envelope",()=>{
+  const events=buildDynamicClickEvents(60,{numerator:4,denominator:4},1,"4-4-driving");
+  assert.deepEqual(events.slice(0,3),[
+    {atSeconds:0,accent:true,maxDurationSeconds:.06},
+    {atSeconds:.5,accent:false,maxDurationSeconds:.06},
+    {atSeconds:1,accent:false,maxDurationSeconds:.06},
+  ]);
+});

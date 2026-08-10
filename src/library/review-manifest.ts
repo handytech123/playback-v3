@@ -1,56 +1,59 @@
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, extname, join, relative, resolve } from "node:path";
 import { DEFAULT_SHOW_STATE, type ConfirmedSetManifest } from "../confirmed-set/manifest.js";
 import { buildDynamicClickEvents, secondsPerNotatedBeat } from "../domain/grid.js";
-import { requiredDefaultClickTemplate } from "../domain/click-templates.js";
-import { songId, type PreparedSong, type Region, type TimeSignature } from "../domain/song.js";
+import { CLICK_TEMPLATES, clickTemplate, requiredDefaultClickTemplate, type ClickTemplateId } from "../domain/click-templates.js";
+import { songId, type MusicalPosition, type PreparedSong, type Region, type TimeSignature } from "../domain/song.js";
 import { loadOrBuildEditorWaveforms } from "../edit/editor-workspace.js";
 import { isSupportedLibraryAudio } from "../prep/audio-source.js";
 import { normalizeRegions } from "../edit/song-map.js";
 import { writeCountedCue } from "../prep/cue-sequence.js";
 import { parseTimeSignature, type MasterSongRow } from "./normalize-song.js";
 import { loadSharedCandidateIndex } from "./shared-candidate-index.js";
+import { deriveRegionsFromAnalyzerCues, loadPlaybackAnalyzerPackage, type AnalyzerCountPattern } from "./analyzer-package.js";
 
-export const ANALYZER_SONG_MAP_VERSION = 5;
+export const ANALYZER_SONG_MAP_VERSION = 8;
 
 export async function prepareCandidateReview(input: {
   readonly catalogId: string;
   readonly sharedMetadataRoot: string;
   readonly libraryRoot: string;
   readonly cacheRoot: string;
-  readonly clickFolder: string;
+  readonly clickRegularPath: string;
+  readonly clickAccentPath: string;
   readonly cueFolder: string;
   readonly padFolder: string;
   readonly ffmpegPath: string;
   readonly master: MasterSongRow;
 }): Promise<{ manifestPath: string; manifest: ConfirmedSetManifest }> {
-  const index = await loadSharedCandidateIndex(input.sharedMetadataRoot);
-  const entry = index?.entries.find(item => item.catalogId === input.catalogId);
-  if (!entry || entry.status !== "review" || !entry.candidateFile) throw new Error("This Original Song does not have a synchronized analyzer candidate");
-
-  const candidate = JSON.parse(await readFile(join(input.sharedMetadataRoot, ...entry.candidateFile.split("/")), "utf8"));
-  const sourceFolder = join(input.libraryRoot, ...entry.folderRelativePath.split("/"));
-  const sourceFiles = (await readdir(sourceFolder, { withFileTypes: true })).filter(item => item.isFile() && isSupportedLibraryAudio(item.name) && !isReferenceAudio(item.name));
-  if (!sourceFiles.length) throw new Error("No playable music file is available for Editor review");
-
-  const duration = Number(candidate.audioEvidence?.durationSeconds);
-  if (!Number.isFinite(duration) || duration <= 0) throw new Error("Analyzer candidate duration is unavailable");
-  const selectedKey = normalizeReviewKey(input.master.key ?? candidate.keyEvidence?.estimate);
-  if (!selectedKey) throw new Error("A key estimate is required before this song can open in Editor review");
-
   const meter = parseTimeSignature(input.master.timeSignature);
-  const clickTemplateId = requiredDefaultClickTemplate(meter);
+  const packageSourceFolder = input.master.folderPath;
+  const analyzerPackage = await loadPlaybackAnalyzerPackage(packageSourceFolder);
+  const index = analyzerPackage ? null : await loadSharedCandidateIndex(input.sharedMetadataRoot);
+  const entry = index?.entries.find(item => item.catalogId === input.catalogId);
+  if (!analyzerPackage && (!entry || entry.status !== "review" || !entry.candidateFile)) throw new Error("This Original Song does not have analyzer review metadata");
+  const candidate = analyzerPackage ? null : JSON.parse(await readFile(join(input.sharedMetadataRoot, ...entry!.candidateFile!.split("/")), "utf8"));
+  const sourceFolder = analyzerPackage ? packageSourceFolder : join(input.libraryRoot, ...entry!.folderRelativePath.split("/"));
+  const duration = analyzerPackage ? Number(analyzerPackage.timeline.durationMs) / 1000 : Number(candidate.audioEvidence?.durationSeconds);
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error("Analyzer candidate duration is unavailable");
+  const selectedKey = normalizeReviewKey(input.master.key ?? analyzerPackage?.keyAnalysis?.approvedKey ?? analyzerPackage?.keyAnalysis?.detectedKey ?? analyzerPackage?.master.originalKey ?? candidate?.keyEvidence?.estimate);
+  if (!selectedKey) throw new Error("A key estimate is required before this song can open in Editor review");
+  const clickTemplateId = await selectedSongClickTemplate(sourceFolder, meter);
   const reviewRoot = join(input.cacheRoot, safeId(input.catalogId));
   const waveformPath = join(reviewRoot, "waveform.json");
   const bundlePath = join(reviewRoot, "editor-waveforms.json");
   const manifestPath = join(reviewRoot, "confirmed-set.json");
   await mkdir(reviewRoot, { recursive: true });
 
-  const drafts = candidate.regionDraft ?? [];
-  const stems = sourceFiles.map(file => ({ role: "music-stem", sourcePath: join(sourceFolder, file.name), durationSeconds: duration }));
-  const regions = reviewRegions(drafts, duration, input.master.bpm, meter);
+  const sourceStems = analyzerPackage
+    ? analyzerPackage.audioFiles.filter(file => file.playLive === true && !isReferenceAudio(file.path)).map(file => ({ role: file.playbackBus ?? file.role ?? "music-stem", sourcePath: safeAnalyzerAudioPath(sourceFolder, file.path), durationSeconds: duration }))
+    : (await readdir(sourceFolder, { withFileTypes: true })).filter(item => item.isFile() && isSupportedLibraryAudio(item.name) && !isReferenceAudio(item.name)).map(file => ({ role: "music-stem", sourcePath: join(sourceFolder, file.name), durationSeconds: duration }));
+  if (!sourceStems.length) throw new Error("No playable music file is available for Editor review");
+  const stems=sourceStems;
+  const derived = analyzerPackage ? deriveRegionsFromAnalyzerCues(analyzerPackage.cues, duration, input.master.bpm, meter) : null;
+  const regions = derived?.regions ?? reviewRegions(candidate?.regionDraft ?? [], duration, input.master.bpm, meter);
   const warningSeconds = secondsPerNotatedBeat(input.master.bpm, meter) * meter.numerator;
-  const cueMarkers = reviewCueMarkers(regions, warningSeconds);
+  const cueMarkers: readonly { position?: MusicalPosition; atSeconds:number; label:string; targetRegionId:string; countPattern?:AnalyzerCountPattern }[] = derived ? derived.cues.map(cue => ({ position: cue.position, atSeconds: cue.atSeconds, label: cue.phrase, targetRegionId: cue.targetRegionId, countPattern: cue.countPattern })) : reviewCueMarkers(regions, warningSeconds);
   const cuePlan = await reviewCuePlan(cueMarkers, input.cueFolder, join(reviewRoot,"live-assets","cues"), input.master.bpm, meter, input.ffmpegPath);
   const resolvedCueTargets = new Set(cuePlan.map(cue => cue.targetRegionId));
   const missingCueLabels = cueMarkers.filter(cue => !resolvedCueTargets.has(cue.targetRegionId)).map(cue => cue.label);
@@ -70,13 +73,13 @@ export async function prepareCandidateReview(input: {
     durationSeconds: duration,
     stems,
     regions,
-    cues: cueMarkers.map(cue => ({ phrase: cue.label, atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId })),
-    cacheFingerprint: (candidate.audioEvidence?.files ?? []).map((file: any) => String(file.sha256 ?? "")).filter(Boolean).sort().join(":"),
+    cues: cueMarkers.map(cue => ({ phrase: cue.label, ...("position" in cue ? { position: cue.position } : {}), atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId })),
+    cacheFingerprint: (analyzerPackage?.audioFiles ?? candidate?.audioEvidence?.files ?? []).map((file: any) => String(file.sha256 ?? "")).filter(Boolean).sort().join(":"),
     waveformPath,
     liveAssets: {
       click: {
-        regularPath: join(input.clickFolder, "CLICK.wav"),
-        accentPath: join(input.clickFolder, "CLICK ACCENT.wav"),
+        regularPath: input.clickRegularPath,
+        accentPath: input.clickAccentPath,
         events: buildDynamicClickEvents(input.master.bpm, meter, duration, clickTemplateId),
         templateId: clickTemplateId,
       },
@@ -102,8 +105,38 @@ export async function prepareCandidateReview(input: {
   return { manifestPath, manifest };
 }
 
+export async function selectedSongClickTemplate(sourceFolder: string, meter: TimeSignature): Promise<ClickTemplateId> {
+  const fallback = requiredDefaultClickTemplate(meter);
+  const analyzerPackage = await loadPlaybackAnalyzerPackage(sourceFolder);
+  const packageSelected = analyzerPackage?.click?.playbackPattern?.templateId;
+  if (packageSelected) {
+    if (!(packageSelected in CLICK_TEMPLATES)) throw new Error(`Analyzer package selected an unknown click template: ${packageSelected}`);
+    clickTemplate(packageSelected as ClickTemplateId, meter);
+    return packageSelected as ClickTemplateId;
+  }
+  let metadata: any;
+  try {
+    metadata = JSON.parse(await readFile(join(sourceFolder, "song-metadata.json"), "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+    throw new Error(`Song click metadata could not be read: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const classification = metadata?.gridAnalysis?.clickPatternClassification;
+  const selected = classification?.status === "matched" ? classification?.selected?.id : metadata?.dynamicClick?.templateId;
+  if (selected === undefined || selected === null || selected === "") return fallback;
+  if (typeof selected !== "string" || !(selected in CLICK_TEMPLATES)) throw new Error(`Song metadata selected an unknown click template: ${String(selected)}`);
+  clickTemplate(selected as ClickTemplateId, meter);
+  return selected as ClickTemplateId;
+}
+
 function isReferenceAudio(name: string) {
   return /(?:^|[_\s-])(click|cue|cues|count|guide|reference|ref|pad)(?:$|[_\s-])/i.test(basename(name, extname(name)));
+}
+
+function safeAnalyzerAudioPath(sourceFolder: string, analyzerPath: string) {
+  const resolvedRoot = resolve(sourceFolder), resolvedPath = resolve(sourceFolder, analyzerPath), relation = relative(resolvedRoot, resolvedPath);
+  if (!relation || relation.startsWith("..") || resolve(resolvedRoot, relation) !== resolvedPath) throw new Error(`Analyzer audio path escapes its song folder: ${analyzerPath}`);
+  return resolvedPath;
 }
 
 export function normalizeReviewKey(value: unknown) {
@@ -160,13 +193,14 @@ function reviewCueMarkers(regions: readonly Region[], warningSeconds: number) {
   }));
 }
 
-async function reviewCuePlan(markers: ReturnType<typeof reviewCueMarkers>, cueFolder: string, outputFolder:string, bpm:number, meter:TimeSignature, ffmpegPath:string) {
+async function reviewCuePlan(markers: readonly { position?:MusicalPosition;atSeconds:number;label:string;targetRegionId:string;countPattern?:AnalyzerCountPattern }[], cueFolder: string, outputFolder:string, bpm:number, meter:TimeSignature, ffmpegPath:string) {
   await mkdir(outputFolder,{recursive:true});
   const rendered=new Map<string,string>(),plans=[];
   for(const marker of markers){
     try{
-      let audioPath=rendered.get(marker.label);
-      if(!audioPath){const sourcePath=await resolveCueAudio(cueFolder,marker.label),destination=join(outputFolder,`${safeId(marker.label)}.wav`),temporary=`${destination}.${process.pid}.tmp.wav`;await writeCountedCue({sourcePath,destinationPath:temporary,numberDirectory:cueFolder,bpm,meter,ffmpegPath});await rename(temporary,destination);audioPath=destination;rendered.set(marker.label,audioPath);}
+      const renderKey=`${marker.label}:${marker.countPattern??"meter-default"}`;
+      let audioPath=rendered.get(renderKey);
+      if(!audioPath){const sourcePath=await resolveCueAudio(cueFolder,marker.label),destination=join(outputFolder,`${safeId(renderKey)}.wav`),temporary=`${destination}.${process.pid}.tmp.wav`;await writeCountedCue({sourcePath,destinationPath:temporary,numberDirectory:cueFolder,bpm,meter,ffmpegPath,...(marker.countPattern?{countPattern:marker.countPattern}:{})});await rm(destination,{force:true});await rename(temporary,destination);audioPath=destination;rendered.set(renderKey,audioPath);}
       plans.push({...marker,audioPath});
     }catch{}
   }
@@ -179,7 +213,7 @@ export function correctedReviewCueAt(regionStart: number, warningSeconds: number
 
 async function resolveCueAudio(directory: string, label: string) {
   const normalized = label.replace(/([A-Za-z])([0-9])$/, "$1 $2").replace(/^Turnaround/i, "Turn Around").toUpperCase();
-  const aliases: Record<string, string> = { START: "CountIn.wav" };
+  const aliases: Record<string, string> = { START: "CountIn.wav", BUILD: "BUILDITUP.wav" };
   const names = [aliases[normalized] ?? `${normalized}.wav`, `${normalized.replace(/\s+/g, "")}.wav`];
   for (const name of names) {
     const path = join(directory, name);

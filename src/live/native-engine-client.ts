@@ -52,6 +52,8 @@ export class NativeEngineClient extends EventEmitter {
   private process: ChildProcessWithoutNullStreams | null = null;
   private readonly expectedExits = new WeakSet<ChildProcessWithoutNullStreams>();
 
+  get isRunning(): boolean { return this.process !== null; }
+
   async start(executablePath: string, manifestPath: string, songIndex = 0, midiOutputName?: string | null, audioDevice?: NativeAudioDeviceSelection | null, midiInputName?: string | null, routing?: NativeAudioRouting): Promise<NativeReadyState> {
     if (this.process) throw new Error("Native engine is already running");
     const args = [manifestPath, "--interactive", "--song-index", String(songIndex)];

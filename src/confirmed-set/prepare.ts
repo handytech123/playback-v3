@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { CONFIRMED_SET_SCHEMA_VERSION, DEFAULT_SHOW_STATE, validateConfirmedSet, type ConfirmedSetManifest, type ConfirmedSetShowState, type ReadinessReport } from "./manifest.js";
-import type { PreparedSong } from "../domain/song.js";
+import type { MusicalPosition, PreparedSong } from "../domain/song.js";
 import { writeCombinedWaveformSummary } from "../prep/wav-waveform.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 import type { SongTransitionPlan } from "../live/song-transition.js";
@@ -27,7 +27,7 @@ export interface SongPreparationInput {
 
 export interface LiveAssetSources {
   readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly { atSeconds: number; accent: boolean }[]; readonly templateId: ClickTemplateId };
-  readonly cues: readonly { atSeconds: number; label: string; sourcePath: string; targetRegionId: string }[];
+  readonly cues: readonly { position?: MusicalPosition; atSeconds: number; label: string; sourcePath: string; targetRegionId: string }[];
   readonly countIn?: readonly { atSeconds: number; label: string; sourcePath: string }[];
   readonly repeatCuePath: string;
   readonly pad: { readonly key: string; readonly sourcePath: string };
@@ -195,7 +195,7 @@ async function prepareLiveAssets(sources: LiveAssetSources, song: PreparedSong, 
       else await writeCountedCue({ sourcePath: cue.sourcePath, destinationPath: audioPath, numberDirectory: dirname(sources.repeatCuePath), bpm: song.selectedBpm, meter: song.timeSignature, ...(ffmpegPath ? { ffmpegPath } : {}) });
       copied.set(cue.sourcePath, audioPath);
     }
-    cues.push({ atSeconds: cue.atSeconds, label: cue.label, audioPath, targetRegionId: cue.targetRegionId });
+    cues.push({ ...(cue.position ? { position: cue.position } : {}), atSeconds: cue.atSeconds, label: cue.label, audioPath, targetRegionId: cue.targetRegionId });
   }
   const padPath = join(assetDirectory, `pad-${safeFilename(sources.pad.key)}.wav`); await prepareAudioSource(sources.pad.sourcePath, padPath, ffmpegPath);
   return { click: { regularPath, accentPath, events: sources.click.events, templateId: sources.click.templateId }, cues, cueCountVersion: 2 as const, repeatCuePath, pad: { key: sources.pad.key, audioPath: padPath } };

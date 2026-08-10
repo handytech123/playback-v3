@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { validateConfirmedSet, type ConfirmedSetManifest } from "../confirmed-set/manifest.js";
 import { preparedControl, type PreparedSong } from "../domain/song.js";
+import { positionToGridBeats } from "../domain/grid.js";
 import type { NativeReadyState } from "./native-engine-client.js";
 
 export type PerformanceReadinessLevel = "ready" | "warning" | "blocked";
@@ -11,13 +12,15 @@ export interface PerformanceReadinessInput { readonly manifest: ConfirmedSetMani
 
 export async function evaluatePerformanceReadiness(input: PerformanceReadinessInput): Promise<PerformanceReadinessReport> {
   const checks: PerformanceReadinessCheck[] = [];
+  const analyzerReview=(input.manifest as any).review;
+  if(analyzerReview&&analyzerReview.performanceEligible!==true)checks.push(check("analyzer-review","Analyzer review","blocked","This song map is an Editor draft and requires operator approval before Performance Mode"));
   const manifestReport = validateConfirmedSet(input.manifest);
   checks.push(check("metadata", "Confirmed metadata", manifestReport.ready ? "ready" : "blocked", manifestReport.ready ? `${input.manifest.songs.length} prepared song${input.manifest.songs.length === 1 ? "" : "s"}` : manifestReport.issues.map((issue) => `${issue.songTitle ? `${issue.songTitle}: ` : ""}${issue.message}`).join("; ")));
   const active = input.manifest.songs[input.songIndex];
   checks.push(check("selection", "Armed song", active ? "ready" : "blocked", active ? `${active.song.title} · ${active.selectedKey} · ${active.selectedBpm} BPM` : `Song index ${input.songIndex} is outside the confirmed set`));
   const structureIssues = input.manifest.songs.flatMap((song) => validatePreparedStructure(song).map((message) => `${song.song.title}: ${message}`));
-  const controlPrerolls=input.manifest.songs.filter(hasValidReaperControlPreroll);
-  checks.push(check("structure", "Song structure", structureIssues.length ? "blocked" : "ready", structureIssues.length ? structureIssues.join("; ") : controlPrerolls.length?`Regions and cues are valid; ${controlPrerolls.map(song=>song.song.title).join(", ")} includes a one-measure ProPresenter MIDI control preroll` : "Regions, cues, duration, key, BPM, and grid are internally consistent"));
+  const controlPrerolls=input.manifest.songs.filter(hasValidMusicalPreroll);
+  checks.push(check("structure", "Song structure", structureIssues.length ? "blocked" : "ready", structureIssues.length ? structureIssues.join("; ") : controlPrerolls.length?`Regions and cues are valid; ${controlPrerolls.map(song=>song.song.title).join(", ")} includes a measure-and-beat control preroll` : "Regions, cues, duration, key, BPM, and grid are internally consistent"));
   const manifestDirectory = dirname(resolve(input.manifestPath));
   const packageRoot = basename(manifestDirectory).toLowerCase() === "performance" ? dirname(manifestDirectory) : manifestDirectory;
   const assetPaths = input.manifest.songs.flatMap(runtimeAssetPaths);
@@ -49,18 +52,20 @@ export async function evaluatePerformanceReadiness(input: PerformanceReadinessIn
 
 export function manifestReadiness(manifest: ConfirmedSetManifest): PerformanceReadinessReport {
   const validated = validateConfirmedSet(manifest);
-  return report([check("metadata", "Confirmed metadata", validated.ready ? "ready" : "blocked", validated.ready ? "Confirmed manifest is valid" : validated.issues.map((issue) => issue.message).join("; "))]);
+  const analyzerReview=(manifest as any).review,checks=[check("metadata", "Confirmed metadata", validated.ready ? "ready" : "blocked", validated.ready ? "Confirmed manifest is valid" : validated.issues.map((issue) => issue.message).join("; "))];
+  if(analyzerReview&&analyzerReview.performanceEligible!==true)checks.push(check("analyzer-review","Analyzer review","blocked","Operator approval is required"));
+  return report(checks);
 }
 function validatePreparedStructure(song: PreparedSong): string[] {
   const issues: string[] = [];
   if (!song.regions.length) issues.push("no regions");
-  if (song.regions[0] && Math.abs(song.regions[0].startSeconds) > .001&&!hasValidReaperControlPreroll(song)) issues.push("first region does not begin at 0.000");
+  if (song.regions[0] && Math.abs(song.regions[0].startSeconds) > .001&&!hasValidMusicalPreroll(song)) issues.push("first region has no valid measure-and-beat preroll");
   for (let index = 0; index < song.regions.length; index += 1) { const region = song.regions[index]!; if (!region.id || !region.name.trim() || region.endSeconds <= region.startSeconds) issues.push(`invalid region ${index + 1}`); const next = song.regions[index + 1]; if (next && Math.abs(region.endSeconds - next.startSeconds) > .001) issues.push(`gap or overlap after ${region.name}`); }
   const final = song.regions.at(-1); if (final && Math.abs(final.endSeconds - song.durationSeconds) > .05) issues.push("final region does not match song duration");
   const ids = new Set(song.regions.map((region) => region.id)); if (song.liveAssets?.cues.some((cue) => !ids.has(cue.targetRegionId))) issues.push("cue targets a missing region");
   return issues;
 }
-function hasValidReaperControlPreroll(song:PreparedSong):boolean{const start=song.regions[0]?.startSeconds??0,midi=preparedControl(song)?.proPresenterMidi??[],measureSeconds=song.timeSignature.numerator*(60/song.selectedBpm)*(4/song.timeSignature.denominator);return song.arrangement?.sourceType==="reaper-import"&&start>.001&&start<=measureSeconds+.05&&midi.some(event=>event.atSeconds>=0&&event.atSeconds<start);}
+function hasValidMusicalPreroll(song:PreparedSong):boolean{const first=song.regions[0];if(!first)return false;if(first.startPosition){const firstBeat=positionToGridBeats(first.startPosition,song.timeSignature),cue=song.cues.find(item=>item.targetRegionId===first.id&&item.position);if(cue?.position){const lead=firstBeat-positionToGridBeats(cue.position,song.timeSignature);if(lead>0&&lead<=song.timeSignature.numerator)return true;}}const start=first.startSeconds,midi=preparedControl(song)?.proPresenterMidi??[],measureSeconds=song.timeSignature.numerator*(60/song.selectedBpm)*(4/song.timeSignature.denominator);return song.arrangement?.sourceType==="reaper-import"&&start>.001&&start<=measureSeconds+.05&&midi.some(event=>event.atSeconds>=0&&event.atSeconds<start);}
 function runtimeAssetPaths(song: PreparedSong): string[] { return [song.waveformPath, ...song.stems.map((stem) => stem.sourcePath), song.liveAssets?.click.regularPath, song.liveAssets?.click.accentPath, song.liveAssets?.repeatCuePath, song.liveAssets?.pad.audioPath, ...(song.liveAssets?.cues.map((cue) => cue.audioPath) ?? []), ...(song.liveAssets?.countIn?.map((event) => event.audioPath) ?? [])].filter((value): value is string => Boolean(value)); }
 function hasMidi(song: PreparedSong | undefined) { return (preparedControl(song)?.proPresenterMidi.length ?? 0) > 0; }
 function check(id: string, label: string, level: PerformanceReadinessLevel, detail: string): PerformanceReadinessCheck { return { id, label, level, detail }; }

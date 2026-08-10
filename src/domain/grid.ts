@@ -1,11 +1,43 @@
-import type { ClickEvent, TimeSignature } from "./song.js";
+import type { ClickEvent, MusicalPosition, TimeSignature } from "./song.js";
 import { clickTemplate, requiredDefaultClickTemplate, type ClickTemplateId } from "./click-templates.js";
 
-export interface GridPosition {
-  readonly measure: number;
-  readonly beat: number;
+export interface GridPosition extends MusicalPosition {
   readonly timeSeconds: number;
   readonly isPulse: boolean;
+}
+
+export const TICKS_PER_BEAT = 960;
+
+export function musicalPosition(measure: number, beat: number, tick = 0, meter?: TimeSignature): MusicalPosition {
+  if (!Number.isInteger(measure) || measure < 1 || !Number.isInteger(beat) || beat < 1 || !Number.isInteger(tick) || tick < 0 || tick >= TICKS_PER_BEAT) throw new Error("Musical position is invalid");
+  if (meter && beat > meter.numerator) throw new Error(`Beat must be between 1 and ${meter.numerator}`);
+  return { measure, beat, tick };
+}
+
+export function positionToGridBeats(position: MusicalPosition, meter: TimeSignature): number {
+  musicalPosition(position.measure, position.beat, position.tick, meter);
+  return (position.measure - 1) * meter.numerator + (position.beat - 1) + position.tick / TICKS_PER_BEAT;
+}
+
+export function gridBeatsToPosition(gridBeats: number, meter: TimeSignature): MusicalPosition {
+  if (!Number.isFinite(gridBeats) || gridBeats < 0) throw new Error("Grid-beat location is invalid");
+  const whole = Math.floor(gridBeats + 1e-9), fraction = Math.max(0, gridBeats - whole);
+  return musicalPosition(Math.floor(whole / meter.numerator) + 1, whole % meter.numerator + 1, Math.min(TICKS_PER_BEAT - 1, Math.round(fraction * TICKS_PER_BEAT)), meter);
+}
+
+export function addGridBeats(position: MusicalPosition, count: number, meter: TimeSignature): MusicalPosition {
+  if (!Number.isFinite(count)) throw new Error("Grid-beat offset is invalid");
+  return gridBeatsToPosition(positionToGridBeats(position, meter) + count, meter);
+}
+
+/** The only musical-grid to clock-time conversion used before audio rendering/scheduling. */
+export function positionToSeconds(position: MusicalPosition, bpm: number, meter: TimeSignature): number {
+  return positionToGridBeats(position, meter) * secondsPerNotatedBeat(bpm, meter);
+}
+
+export function secondsToMusicalPosition(seconds: number, bpm: number, meter: TimeSignature): MusicalPosition {
+  if (!Number.isFinite(seconds) || seconds < 0) throw new Error("Clock time is invalid");
+  return gridBeatsToPosition(seconds / secondsPerNotatedBeat(bpm, meter), meter);
 }
 
 export function secondsPerNotatedBeat(bpm: number, meter: TimeSignature): number {
@@ -25,7 +57,7 @@ export function buildDynamicClickEvents(bpm: number, meter: TimeSignature, durat
   const events: ClickEvent[] = [];
   for (let index = 0; index <= count; index += 1) {
     const position = index % profile.positionsPerMeasure + 1;
-    if (triggers.has(position)) events.push({ atSeconds: index * step, accent: accents.has(position) });
+    if (triggers.has(position)) events.push({ atSeconds: index * step, accent: accents.has(position), ...(profile.maxDurationSeconds ? { maxDurationSeconds: profile.maxDurationSeconds } : {}) });
   }
   return events;
 }
@@ -48,6 +80,7 @@ export function buildZeroBasedGrid(
     positions.push({
       measure: Math.floor(index / meter.numerator) + 1,
       beat: beatIndex + 1,
+      tick: 0,
       timeSeconds: index * step,
       isPulse: compound ? beatIndex % 3 === 0 : true,
     });
