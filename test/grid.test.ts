@@ -14,8 +14,8 @@ test("4/4 grid begins at 1.1 = 0 and advances quarter notes", () => {
 });
 
 test("6/8 exposes all six eighth positions and preserves its two musical pulses", () => {
-  assert.equal(secondsPerNotatedBeat(60, { numerator: 6, denominator: 8 }), 1);
-  const grid = buildZeroBasedGrid(60, { numerator: 6, denominator: 8 }, 6);
+  assert.equal(secondsPerNotatedBeat(60, { numerator: 6, denominator: 8 }), 0.5);
+  const grid = buildZeroBasedGrid(60, { numerator: 6, denominator: 8 }, 3);
   assert.deepEqual(grid.slice(0, 7).map(({ measure, beat, isPulse }) => ({ measure, beat, isPulse })), [
     { measure: 1, beat: 1, isPulse: true },
     { measure: 1, beat: 2, isPulse: false },
@@ -25,15 +25,9 @@ test("6/8 exposes all six eighth positions and preserves its two musical pulses"
     { measure: 1, beat: 6, isPulse: false },
     { measure: 2, beat: 1, isPulse: true },
   ]);
-  assert.deepEqual(buildDynamicClickEvents(60, { numerator: 6, denominator: 8 }, 6, "6-8-full").slice(0, 7), [
-    { atSeconds: 0, accent: true },
-    { atSeconds: 1, accent: false },
-    { atSeconds: 2, accent: false },
-    { atSeconds: 3, accent: true },
-    { atSeconds: 4, accent: false },
-    { atSeconds: 5, accent: false },
-    { atSeconds: 6, accent: true },
-  ]);
+  const events = buildDynamicClickEvents(60, { numerator: 6, denominator: 8 }, 3, "6-8-full").slice(0, 7);
+  assert.deepEqual(events.map((event) => event.accent), [true, false, false, true, false, false, true]);
+  events.forEach((event, index) => assert.ok(Math.abs(event.atSeconds - index * 0.5) < 1e-9));
 });
 
 test("4/4 eighth template inserts subdivisions without moving the measure accent",()=>{
@@ -46,8 +40,8 @@ test("4/4 eighth template inserts subdivisions without moving the measure accent
 
 test("V3 feel templates own their trigger and accent patterns",()=>{
   assert.deepEqual(buildDynamicClickEvents(60,{numerator:4,denominator:4},4,"4-4-half-time").map(event=>[event.atSeconds,event.accent]),[[0,true],[1,false],[2,true],[3,false],[4,true]]);
-  assert.deepEqual(buildDynamicClickEvents(60,{numerator:6,denominator:8},6,"6-8-two-feel").map(event=>[event.atSeconds,event.accent]),[[0,true],[3,true],[6,true]]);
-  assert.deepEqual(buildDynamicClickEvents(60,{numerator:12,denominator:8},12,"12-8-four-feel").map(event=>[event.atSeconds,event.accent]),[[0,true],[3,true],[6,true],[9,true],[12,true]]);
+  assert.deepEqual(buildDynamicClickEvents(60,{numerator:6,denominator:8},2,"6-8-two-feel").map(event=>[event.atSeconds,event.accent]),[[0,true],[1.5,true]]);
+  assert.deepEqual(buildDynamicClickEvents(60,{numerator:12,denominator:8},4,"12-8-four-feel").map(event=>[event.atSeconds,event.accent]),[[0,true],[1.5,true],[3,true]]);
 });
 
 test("a click template cannot be applied to the wrong meter",()=>{

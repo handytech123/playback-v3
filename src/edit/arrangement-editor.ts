@@ -70,12 +70,7 @@ export function createArrangementDraft(
   song: PreparedSong,
   name = `${song.song.title} Arrangement`,
 ): AppArrangementDraft {
-  const sections: ArrangementSection[] = renumberOccurrences(song.regions.map((region) => ({
-    ...region,
-    sourceRegionId: region.id,
-    sourceStartSeconds: region.startSeconds,
-    sourceEndSeconds: region.endSeconds,
-  })));
+  const sections: ArrangementSection[] = renumberOccurrences(sourceTimelineSections(song));
   const sourceCues = song.liveAssets?.cues.map((cue) => ({
     phrase: cue.label,
     ...(cue.position ? { position: cue.position } : {}),
@@ -121,6 +116,44 @@ export function createArrangementDraft(
     midi,
     revision: 0,
   });
+}
+
+function sourceTimelineSections(song: PreparedSong): ArrangementSection[] {
+  const regions = [...song.regions].sort((a, b) => a.startSeconds - b.startSeconds);
+  const sections: ArrangementSection[] = [];
+  let cursor = 0;
+  for (const region of regions) {
+    if (region.startSeconds > cursor + 0.0001) {
+      sections.push({
+        id: `source-gap-${sections.length + 1}`,
+        name: cursor === 0 ? "Count Off" : "Gap",
+        startSeconds: cursor,
+        endSeconds: region.startSeconds,
+        sourceRegionId: `source-gap-${sections.length + 1}`,
+        sourceStartSeconds: cursor,
+        sourceEndSeconds: region.startSeconds,
+      });
+    }
+    sections.push({
+      ...region,
+      sourceRegionId: region.id,
+      sourceStartSeconds: region.startSeconds,
+      sourceEndSeconds: region.endSeconds,
+    });
+    cursor = Math.max(cursor, region.endSeconds);
+  }
+  if (song.durationSeconds > cursor + 0.0001) {
+    sections.push({
+      id: `source-tail-${sections.length + 1}`,
+      name: "Tail",
+      startSeconds: cursor,
+      endSeconds: song.durationSeconds,
+      sourceRegionId: `source-tail-${sections.length + 1}`,
+      sourceStartSeconds: cursor,
+      sourceEndSeconds: song.durationSeconds,
+    });
+  }
+  return sections;
 }
 
 export function applyArrangementCommand(

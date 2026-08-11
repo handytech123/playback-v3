@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { productionDefaults } from "../config/settings.js";
 import type { PreparedSong } from "../domain/song.js";
@@ -21,6 +21,8 @@ export interface SaveAppArrangementInput {
   readonly ffmpegPath?: string;
   readonly clickRegularPath?: string;
   readonly clickAccentPath?: string;
+  readonly sharedArrangementRoot?: string;
+  readonly sourceSongFolder?: string | null;
 }
 
 export async function saveAppArrangement(input: SaveAppArrangementInput) {
@@ -111,7 +113,21 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
   // Publish discoverable arrangement metadata only after every performance asset
   // and the confirmed manifest have been created successfully.
   const savedPath = await saveArrangementVersion(input.metadataRoot, arrangement);
-  return { id, savedPath, manifestPath: confirmed.manifestPath, arrangement };
+  const shared = input.sourceSongFolder
+    ? await publishSourceArrangementPackage({
+      localDirectory: directory,
+      sourceSongFolder: input.sourceSongFolder,
+      arrangement,
+    })
+    : input.sharedArrangementRoot
+      ? await publishSharedArrangementPackage({
+      localDirectory: directory,
+      sharedRoot: input.sharedArrangementRoot,
+      arrangement,
+      songTitle: input.source.song.title,
+    })
+      : null;
+  return { id, savedPath: shared?.arrangementPath ?? savedPath, manifestPath: confirmed.manifestPath, sharedManifestPath: shared?.manifestPath ?? null, arrangement };
 }
 
 function padKey(key: string) {
@@ -124,4 +140,53 @@ function padKey(key: string) {
   };
   const tonalCenter = key.replace(/m$/i, "");
   return aliases[tonalCenter] ?? tonalCenter;
+}
+
+async function publishSharedArrangementPackage(input: {
+  readonly localDirectory: string;
+  readonly sharedRoot: string;
+  readonly arrangement: ArrangementVersion;
+  readonly songTitle: string;
+}) {
+  const sharedDirectory = join(input.sharedRoot, "app-arrangements", safePathPart(input.songTitle), safePathPart(input.arrangement.name), input.arrangement.id);
+  await rm(sharedDirectory, { recursive: true, force: true });
+  await mkdir(sharedDirectory, { recursive: true });
+  await cp(input.localDirectory, sharedDirectory, { recursive: true, force: true });
+  const arrangement = rewritePathPrefix(input.arrangement, input.localDirectory, sharedDirectory) as ArrangementVersion;
+  const arrangementPath = join(sharedDirectory, "arrangement.json");
+  await writeFile(arrangementPath, JSON.stringify(arrangement, null, 2), "utf8");
+  const manifestPath = join(sharedDirectory, "performance", "confirmed-set.json");
+  const manifest = rewritePathPrefix(JSON.parse(await readFile(manifestPath, "utf8")), input.localDirectory, sharedDirectory);
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  return { arrangementPath, manifestPath };
+}
+
+async function publishSourceArrangementPackage(input: {
+  readonly localDirectory: string;
+  readonly sourceSongFolder: string;
+  readonly arrangement: ArrangementVersion;
+}) {
+  const arrangementDirectory = join(input.sourceSongFolder, "Arrangements", safePathPart(input.arrangement.name));
+  const sharedDirectory = join(arrangementDirectory, input.arrangement.id);
+  await rm(arrangementDirectory, { recursive: true, force: true });
+  await mkdir(sharedDirectory, { recursive: true });
+  await cp(input.localDirectory, sharedDirectory, { recursive: true, force: true });
+  const arrangement = rewritePathPrefix(input.arrangement, input.localDirectory, sharedDirectory) as ArrangementVersion;
+  const arrangementPath = join(sharedDirectory, "arrangement.json");
+  await writeFile(arrangementPath, JSON.stringify(arrangement, null, 2), "utf8");
+  const manifestPath = join(sharedDirectory, "performance", "confirmed-set.json");
+  const manifest = rewritePathPrefix(JSON.parse(await readFile(manifestPath, "utf8")), input.localDirectory, sharedDirectory);
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  return { arrangementPath, manifestPath };
+}
+
+function rewritePathPrefix(value: unknown, from: string, to: string): unknown {
+  if (typeof value === "string") return value.startsWith(from) ? join(to, value.slice(from.length)) : value;
+  if (Array.isArray(value)) return value.map((item) => rewritePathPrefix(item, from, to));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, rewritePathPrefix(item, from, to)]));
+  return value;
+}
+
+function safePathPart(value: string) {
+  return value.replace(/[<>:"/\\|?*\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Arrangement";
 }

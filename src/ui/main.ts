@@ -19,8 +19,8 @@ root.innerHTML = `
   </nav>
   <header class="app-heading"><div><span id="modeLabel" class="eyebrow">PERFORMANCE MODE · CONFIRMED SET</span><h1 id="title">Loading…</h1><p id="facts"></p></div><section class="transport"><div class="transport-buttons"><button id="stop" aria-label="Stop">■</button><button id="play" class="primary" aria-label="Play">▶</button><button id="pause" aria-label="Pause">Ⅱ</button><button id="pad">PAD</button><button id="panic" class="panic">PANIC</button></div><div class="transport-clock"><span>ELAPSED / REMAINING</span><strong id="clock">0:00.000 / -0:00.000</strong><small id="position">1.1</small></div></section><button id="ready" class="ready">ARMING</button></header>
   <section id="prepWorkspace" class="prep-workspace" hidden>
-    <div class="prep-toolbar"><div><span class="eyebrow">LIBRARY / PREPARATION LANE</span><h2>Build The Confirmed Set</h2><p>Scan production metadata, choose prepared versions, order the set, then freeze one isolated performance package.</p></div><button id="scanLibrary">SCAN MASTER LIBRARY</button></div>
-    <div class="prep-summary" id="librarySummary"><span>Library scan has not run in this session.</span></div>
+    <div class="prep-toolbar"><div><span class="eyebrow">LIBRARY / PREPARATION LANE</span><h2>Build The Confirmed Set</h2><p>Choose prepared versions, order the set, then freeze one isolated performance package. Library maintenance is in Settings.</p></div></div>
+    <div class="prep-summary" id="librarySummary"><span>Use Settings → Library / Analysis to update metadata and library content.</span></div>
     <div class="prep-columns">
       <section class="prep-panel"><header><div><h2>Prepared Songs</h2><small>Only performance-ready versions can enter the set.</small></div></header><div id="preparedLibrary" class="prepared-library"></div></section>
       <section class="prep-panel set-builder"><header><label>Set Name<input id="setlistName" value="Sunday Set"></label><button id="clearSetlist">CLEAR</button></header><div id="setlistItems" class="setlist-items"></div><footer><span id="setlistStatus">Draft saves automatically.</span><button id="confirmSet" class="primary">CONFIRM SET + LOAD</button></footer></section>
@@ -38,7 +38,7 @@ root.innerHTML = `
   </section>
   <section id="editorWorkspace" class="editor-workspace" hidden>
     <section class="editor-set-deck set-card-deck" aria-label="Songs in confirmed set"><div class="set-deck-label"><span>EDIT SET</span><strong id="editorSetName">Sunday Set</strong></div><div id="editorSetSongs" class="performance-set-songs"></div></section>
-    <section class="editor-setlist-toolbar"><label>SET NAME<input id="editorSetlistName" value="Sunday Set"></label><span id="editorSetlistStatus">Loading draft set…</span><button id="editorRefreshLibrary">REFRESH LIBRARY</button></section><div id="confirmSetProgress" class="confirm-set-progress" hidden><div><strong>CONFIRMING SET</strong><span id="confirmSetProgressLabel">Preparing isolated performance cache…</span><b id="confirmSetProgressPercent">0%</b></div><progress id="confirmSetProgressBar" max="100" value="0"></progress></div><div id="editorLoadStatus" class="editor-load-status" hidden><i><b id="editorLoadPercent">0%</b></i><span><strong>LOADING SONG</strong><small id="editorLoadLabel">Preparing editor…</small></span><progress id="editorLoadProgress" max="100" value="0"></progress></div>
+    <section class="editor-setlist-toolbar"><label>SET NAME<input id="editorSetlistName" value="Sunday Set"></label><span id="editorSetlistStatus">Loading draft set…</span></section><div id="confirmSetProgress" class="confirm-set-progress" hidden><div><strong>CONFIRMING SET</strong><span id="confirmSetProgressLabel">Preparing isolated performance cache…</span><b id="confirmSetProgressPercent">0%</b></div><progress id="confirmSetProgressBar" max="100" value="0"></progress></div><div id="editorLoadStatus" class="editor-load-status" hidden><i><b id="editorLoadPercent">0%</b></i><span><strong>LOADING SONG</strong><small id="editorLoadLabel">Preparing editor…</small></span><progress id="editorLoadProgress" max="100" value="0"></progress></div>
     <section id="editorSongVersions" class="editor-song-versions" hidden><div><span>SELECTED SONG</span><strong id="selectedSetSong">—</strong></div><label>ARRANGEMENT<select id="editorArrangementVersion"></select></label></section>
     <section id="editorEmptySelection" class="editor-empty-selection" hidden><strong>NO SONG LOADED</strong><span>Select + ADD SONG to load an Original Song or arrangement into this set card.</span></section>
     <div class="editor-topbar">
@@ -83,14 +83,14 @@ root.innerHTML = `
   </section>
   <section id="performanceMixer" class="daw-mixer" aria-label="Live mixer"><div id="mixerResizeHandle" class="mixer-resize-handle" title="Drag to resize mixer"></div><header><div><span>LIVE MIXER</span><strong id="mixerIemStatus">IEM SEND CHECKING</strong></div><button id="mixerCollapse" aria-expanded="true">COLLAPSE</button></header><div id="mixerChannels" class="mixer-channels"></div></section>
 </main>
-<dialog id="reaperImport"><h2>Reaper Arrangement Import</h2><div id="importSummary"></div><div id="importDifferences"></div><p id="importWarning"></p><footer><button data-action="cancel">CANCEL</button><button data-action="replace">REPLACE SELECTED ARRANGEMENT</button><button data-action="new" class="primary">IMPORT AS NEW VERSION</button></footer></dialog>
-<dialog id="arrangementNameDialog" class="arrangement-name-dialog"><form method="dialog"><span class="eyebrow">SAVE ARRANGEMENT</span><h2>Verify Arrangement Name</h2><p>This saves your current edits as a new non-destructive arrangement and adds it to the arrangement list.</p><label>Arrangement Name<input id="newArrangementName" autocomplete="off"></label><footer><button value="cancel">CANCEL</button><button id="confirmNewArrangement" value="default" class="primary">SAVE ARRANGEMENT</button></footer></form></dialog>
+<dialog id="reaperImport"><h2>Reaper Arrangement Import</h2><div id="importStatus" class="import-status idle"><strong>WAITING</strong><span>Choose a Reaper project to preview.</span><progress max="100" value="0"></progress></div><div id="importSummary"></div><div id="importDifferences"></div><p id="importWarning"></p><footer><button data-action="cancel">CANCEL</button><button data-action="replace">REPLACE SELECTED ARRANGEMENT</button><button data-action="new" class="primary">IMPORT AS NEW VERSION</button></footer></dialog>
+<dialog id="arrangementNameDialog" class="arrangement-name-dialog"><form method="dialog"><span class="eyebrow">SAVE ARRANGEMENT</span><h2>Verify Arrangement Name</h2><p>This saves your current edits as a new non-destructive arrangement and adds it to the arrangement list.</p><div id="saveArrangementStatus" class="import-status idle"><strong>WAITING</strong><span>Verify the name, then save the arrangement.</span><progress max="100" value="0"></progress></div><label>Arrangement Name<input id="newArrangementName" autocomplete="off"></label><footer><button value="cancel">CANCEL</button><button id="confirmNewArrangement" value="default" class="primary">SAVE ARRANGEMENT</button></footer></form></dialog>
 <dialog id="performanceReadiness"><header><div><span class="eyebrow">PRODUCTION PERFORMANCE READINESS</span><h2 id="performanceReadinessTitle">Checking…</h2></div><button id="closePerformanceReadiness">CLOSE</button></header><div id="performanceReadinessChecks"></div></dialog>
 <dialog id="songLibraryPicker" class="song-library-picker"><header><div><span class="eyebrow">ORIGINAL SONGS</span><h2>Master Song Library</h2></div><button id="closeSongLibrary">CLOSE</button></header><div class="song-library-filters"><label>SEARCH BY NAME<input id="songLibrarySearch" type="search" placeholder="Song title or artist…"></label><label>SPEED<select id="songLibrarySpeed"><option value="all">All tempos</option><option value="slow">Slow · 80 BPM or less</option><option value="medium">Medium · 81–110 BPM</option><option value="fast">Fast · 111 BPM or more</option></select></label></div><div id="songLibraryResults" class="song-library-results"></div></dialog>
 <dialog id="remoteSettings" class="settings-window"><header><div><span class="eyebrow">PLAYBACK V3</span><h2>Settings</h2><p id="settingsStatus">Configure the production system without crowding the performance surface.</p></div><button id="closeRemoteSettings">CLOSE</button></header><nav class="settings-tabs" aria-label="Settings sections"><button class="active" data-settings-tab="audio">AUDIO</button><button data-settings-tab="import">LIBRARY / ANALYSIS</button><button data-settings-tab="control">HTTP REMOTE / OSC</button><button data-settings-tab="transitions">TRANSITIONS</button><button data-settings-tab="midi">MIDI</button><button data-settings-tab="system">SYSTEM CHECK</button></nav><div class="settings-pages">
   <section class="settings-page active" data-settings-page="audio"><div class="settings-section-heading"><span>AUDIO ENGINE</span><h3>Device, routing, and output health</h3></div><div class="settings-grid"><label>Audio Device<select id="audioSelect" title="Audio output"></select></label><label>Active Outputs<select id="audioOutputCount" title="Number of active output channels"></select></label><div class="settings-readout"><span>Routing</span><strong id="routeStatus"></strong></div><div class="settings-readout"><span>IEM Outputs</span><strong id="settingsIemStatus">—</strong></div><button id="refreshAudioSettings">REFRESH DEVICE STATUS</button><button id="runAudioCheck">RUN AUDIO ERROR CHECK</button><div class="settings-section-heading settings-wide"><span>CLICK SOUNDS</span><h3>Choose the two WAV sounds used by every dynamic click pattern</h3></div><div class="click-sound-row settings-wide"><label><span>NORMAL CLICK</span><input id="normalClickPath" readonly></label><button id="chooseNormalClick">CHOOSE WAV</button><button id="previewNormalClick">PREVIEW</button></div><div class="click-sound-row settings-wide"><label><span>ACCENT CLICK</span><input id="accentClickPath" readonly></label><button id="chooseAccentClick">CHOOSE WAV</button><button id="previewAccentClick">PREVIEW</button></div><div class="click-sound-actions settings-wide"><button id="resetClickSounds">RESET TO PLAYBACK DEFAULTS</button><p id="clickSoundStatus">These sounds are saved on this computer and locked into the next Confirmed Set.</p></div><div class="settings-section-heading settings-wide"><span>DANTE OUTPUT MATRIX</span><h3 id="outputMatrixHeading">Assign stems and live buses to available outputs</h3></div><div id="outputMatrix" class="settings-grid settings-wide"></div><div id="audioCheckReport" class="settings-report settings-wide">Select Run Audio Error Check for a live readiness report.</div></div></section>
   <section class="settings-page" data-settings-page="midi"><div class="settings-section-heading"><span>MIDI DEVICES</span><h3>Slides and console MIDI</h3></div><div class="settings-grid"><label class="settings-wide">ProPresenter MIDI Output<select id="midiSelect" title="ProPresenter MIDI output"></select></label><div class="settings-readout"><span>Output Status</span><strong id="midiStatus"></strong></div><div class="settings-readout"><span>Loaded Slide Events</span><strong id="settingsMidiEvents">—</strong></div><p class="settings-help settings-wide">Reaper MIDI is imported only from a track named Slides. The selected output is saved and the native engine is re-armed when it changes.</p></div><section class="midi-input-settings"><h3>Allen &amp; Heath GLD-112 · Dedicated MIDI Output</h3><div><label>Output<select id="gldMidiOutput"></select></label><label>MIDI Channel<input id="gldChannel" type="number" min="1" max="16" value="2"></label><button id="testGld">TEST DEVICE · NO DATA</button></div><div class="gld-preview"><button id="previewGld">PREVIEW INPUT 1 MUTE</button><code id="gldHex">Writes locked</code></div><p id="gldStatus">The device-open test sends no MIDI data. Console writes remain locked pending physical acceptance.</p></section></section>
-  <section class="settings-page" data-settings-page="import"><div class="settings-section-heading"><span>LIBRARY / ANALYSIS</span><h3>Synchronization and analyzer activity</h3></div><div class="library-health-grid"><div class="library-health"><span>LIBRARY SYNC</span><strong id="librarySyncState">IDLE</strong><small id="librarySyncDetail">Not running</small></div><div class="library-health"><span>ANALYZER</span><strong id="libraryAnalyzerState">IDLE</strong><small id="libraryAnalyzerDetail">Waiting for a scan</small></div><div class="library-health"><span>READY SONGS</span><strong id="libraryReadyCount">—</strong><small>Analyzer files complete</small></div><div class="library-health"><span>NEEDS ANALYSIS</span><strong id="libraryNeedsCount">—</strong><small>Missing analyzer output</small></div><div class="library-health"><span>MISSING FOLDERS</span><strong id="libraryMissingCount">—</strong><small>Master path unavailable</small></div><div class="library-health"><span>LAST SCAN</span><strong id="libraryLastScan">NEVER</strong><small id="libraryLastDuration">No completed scan</small></div></div><div class="library-paths"><label>Library Root<input id="libraryRootPath" readonly></label><label>Master Workbook<input id="libraryWorkbookPath" readonly></label></div><div class="settings-action-list"><button id="settingsScanLibrary"><strong>SYNC + CHECK ANALYZER</strong><small>Read the master workbook, scan every song folder, and verify analyzer metadata.</small></button><button id="settingsRefreshLibrary"><strong>REFRESH PREPARED LIBRARY</strong><small>Reload prepared Original Songs and arrangements available to the set builder.</small></button><button id="importReaper"><strong>IMPORT REAPER ARRANGEMENT</strong><small>Preview regions, tempo/key changes, and Slides MIDI before writing.</small></button></div><div id="settingsSyncStatus" class="settings-report">No library task is running.</div><div id="libraryIssueList" class="library-issue-list"><p>Run Sync + Check Analyzer to see song readiness.</p></div></section>
+  <section class="settings-page" data-settings-page="import"><div class="settings-section-heading"><span>LIBRARY / ANALYSIS</span><h3>Metadata and library maintenance</h3></div><div class="library-health-grid"><div class="library-health"><span>LIBRARY UPDATE</span><strong id="librarySyncState">IDLE</strong><small id="librarySyncDetail">Not running</small></div><div class="library-health"><span>ANALYZER</span><strong id="libraryAnalyzerState">IDLE</strong><small id="libraryAnalyzerDetail">Waiting for an update</small></div><div class="library-health"><span>READY SONGS</span><strong id="libraryReadyCount">—</strong><small>Analyzer files complete</small></div><div class="library-health"><span>NEEDS ANALYSIS</span><strong id="libraryNeedsCount">—</strong><small>Missing analyzer output</small></div><div class="library-health"><span>MISSING FOLDERS</span><strong id="libraryMissingCount">—</strong><small>Master path unavailable</small></div><div class="library-health"><span>LAST UPDATE</span><strong id="libraryLastScan">NEVER</strong><small id="libraryLastDuration">No completed update</small></div></div><div class="library-paths"><label>Library Root<input id="libraryRootPath" readonly></label><label>Master Workbook<input id="libraryWorkbookPath" readonly></label></div><div class="settings-action-list"><button id="settingsUpdateLibrary"><strong>UPDATE METADATA + LIBRARY</strong><small>Rescan song sources, rebuild changed Analyzer drafts, and refresh the set-builder library without removing setlists or arrangements.</small></button><button id="importReaper"><strong>IMPORT REAPER ARRANGEMENT</strong><small>Preview regions, tempo/key changes, and Slides MIDI before writing.</small></button></div><div id="settingsSyncStatus" class="settings-report">No library task is running.</div><div id="libraryIssueList" class="library-issue-list"><p>Run Update Metadata + Library to see song readiness.</p></div></section>
   <section class="settings-page" data-settings-page="control"><div class="settings-section-heading"><span>HTTP PERFORMANCE REMOTE</span><h3>Control Performance Mode from a phone, tablet, or browser</h3></div><div class="remote-settings"><p id="remoteStatus"></p><section id="httpQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>HTTP PERFORMANCE REMOTE</span><h3>Scan To Open Remote</h3><p id="httpQrStatus">Enable LAN to create a connection for other devices on this network.</p><label>Private Remote Link<input id="remoteUrl" type="password" readonly></label><div class="remote-buttons"><button id="openHttpRemote">OPEN REMOTE HERE</button><button id="copyRemoteUrl">COPY PRIVATE LINK</button><button id="toggleLanRemote">ENABLE LAN</button></div></div><div class="osc-qr-code"><canvas id="httpQrCanvas" width="210" height="210"></canvas><small>PRIVATE · DO NOT SHARE PUBLICLY</small></div></section><dl><div><dt>HTTP REMOTE</dt><dd id="remoteHttp">—</dd></div><div><dt>OSC CONTROL</dt><dd id="remoteOsc">—</dd></div></dl><section id="oscQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>OSC REMOTE CONNECTION</span><h3>Scan To Connect OSC</h3><p id="oscQrStatus">Enable LAN and OSC to create a stage-ready connection code.</p><label>Network Address<select id="oscQrAddress"></select></label><label>Private OSC Profile<input id="oscQrPayload" type="password" readonly></label><div class="remote-buttons"><button id="copyOscProfile">COPY OSC PROFILE</button><button id="toggleOsc">OSC ON</button></div></div><div class="osc-qr-code"><canvas id="oscQrCanvas" width="210" height="210"></canvas><small>PRIVATE · DO NOT SHARE PUBLICLY</small></div></section><section class="midi-input-settings"><h3>Foot Controller / MIDI Input</h3><div><label>Input<select id="midiInputDevice"></select></label><label>Profile<select id="footControllerProfile"><option value="disabled">Disabled</option><option value="basic-notes">Basic Notes · CH 1 · 20–26</option></select></label><button id="applyMidiInput">APPLY + ARM</button></div><p id="midiInputStatus">MIDI input is disabled.</p></section><p class="remote-warning">The HTTP remote mirrors the Performance page without its mixer. LAN links and OSC profiles contain a private control token; keep them inside the production network.</p></div></section>
   <section class="settings-page" data-settings-page="transitions"><div class="settings-section-heading"><span>SONG-TO-SONG PLAYBACK</span><h3>Transition timing presets</h3></div><div class="settings-grid transition-timing-grid"><label>Overlap Maximum<input id="transitionOverlapSeconds" type="number" min="0.5" max="5" step="0.5"><small>How early the next song may begin while the outgoing song continues.</small></label><label>Crossfade Length<input id="transitionCrossfadeSeconds" type="number" min="0.5" max="5" step="0.5"><small>Length of the equal-power fade between outgoing and incoming songs.</small></label><button id="saveTransitionSettings" class="settings-wide">SAVE TRANSITION TIMING</button><div id="transitionSettingsStatus" class="settings-report settings-wide">These presets are written into the Confirmed Set when you enter Performance Mode.</div></div><div class="transition-behaviors"><article><strong>CUE NEXT</strong><span>Finish the current song, select and prepare the next song, but do not play it.</span></article><article><strong>STAY</strong><span>Finish and remain on the current song.</span></article><article><strong>AUTO LINK</strong><span>Start the next song immediately when the current song ends.</span></article><article><strong>OVERLAP</strong><span>Start the next song before the current song has completely finished.</span></article><article><strong>CROSSFADE</strong><span>Fade the current song down while fading the next song up.</span></article></div></section>
   <section class="settings-page" data-settings-page="system"><div class="settings-section-heading"><span>DIAGNOSTICS</span><h3>Production readiness and error check</h3></div><div class="settings-grid"><button id="runSystemCheck">RUN FULL ERROR CHECK</button><button id="openReadinessDetails">OPEN READINESS DETAILS</button><div class="settings-readout"><span>Native Engine</span><strong id="settingsEngineStatus">—</strong></div><div class="settings-readout"><span>Current Set</span><strong id="settingsSetStatus">—</strong></div><div id="systemCheckReport" class="settings-report settings-wide">The full check validates the confirmed package, cache isolation, native engine, routing, MIDI, and next-song preload.</div></div></section>
@@ -141,7 +141,7 @@ const mixerCommandTimers = new Map<number,number>();
 const editorMixerCommandTimers = new Map<number,number>();
 const storedEditorZoom = Number(localStorage.getItem("playback.editor.zoom"));
 if (storedEditorZoom >= 1 && storedEditorZoom <= 6) ($("#editorZoom") as HTMLInputElement).value = String(storedEditorZoom);
-document.body.classList.add("performance-mode");
+document.body.classList.add("edit-mode");
 
 setupWindowsMenu();
 setupNavigation();
@@ -154,7 +154,7 @@ setupEditorControls();
 setupPrep();
 renderPerformanceTimeline();
 renderLiveState();
-if(localStorage.getItem("playback.ui.mode")==="edit") await setMode(true);
+void setMode(true);
 
 function setupWindowsMenu(){
   const bridge=(window.playback as any).windows;
@@ -327,7 +327,7 @@ function renderEditorSelectionState(items:any[]){
   const empty=$("#editorEmptySelection");empty.hidden=loaded;
   if(!loaded){
     empty.querySelector("strong")!.textContent=item?"SONG NOT LOADED":"NO SONG LOADED";
-    empty.querySelector("span")!.textContent=item?"Loading the selected song into Edit…":"Select + ADD SONG to load an Original Song or arrangement into this set card.";
+    empty.querySelector("span")!.textContent=item?"Click the selected song card to load it into Edit.":"Select + ADD SONG to load an Original Song or arrangement into this set card.";
     $("#title").textContent=item?item.title:"NO SONG LOADED";
     $("#facts").textContent=item?`${item.key} • ${item.bpm} BPM • WAITING TO LOAD`:"Select a song card to begin editing.";
     return;
@@ -338,7 +338,7 @@ function renderEditorSelectionState(items:any[]){
 
 async function showSongLibraryPicker() {
   ($<HTMLInputElement>("#songLibrarySearch")).value = ""; ($<HTMLSelectElement>("#songLibrarySpeed")).value = "all";
-  const dialog=$<HTMLDialogElement>("#songLibraryPicker");dialog.showModal();$("#songLibraryResults").innerHTML="<p>Synchronizing the master library…</p>";try{catalogState=await window.playback.prep.scan();renderSongLibraryResults();}catch(error){showError(error);$("#songLibraryResults").innerHTML="<p>The master library could not be synchronized.</p>";}($<HTMLInputElement>("#songLibrarySearch")).focus();
+  const dialog=$<HTMLDialogElement>("#songLibraryPicker");dialog.showModal();$("#songLibraryResults").innerHTML="<p>Loading the prepared library…</p>";try{const status=await window.playback.prep.status();catalogState=status.lastScan??catalogState;renderSongLibraryResults();if(!catalogState&&!prepState?.prepared?.length)$("#songLibraryResults").innerHTML="<p>Open Settings → Library / Analysis and run Update Metadata + Library first.</p>";}catch(error){showError(error);$("#songLibraryResults").innerHTML="<p>The prepared library could not be loaded.</p>";}($<HTMLInputElement>("#songLibrarySearch")).focus();
 }
 
 function renderSongLibraryResults() {
@@ -500,8 +500,7 @@ function setupRemoteControl() {
     const blocked = checks.filter((item: any) => item.level === "blocked").length, warnings = checks.filter((item: any) => item.level === "warning").length;
     $("#settingsStatus").textContent = blocked ? `System check failed · ${blocked} blocking error${blocked === 1 ? "" : "s"}.` : warnings ? `System check passed with ${warnings} warning${warnings === 1 ? "" : "s"}.` : "System check passed · performance ready.";
   };
-  $("#settingsRefreshLibrary").onclick = async () => { const button = $<HTMLButtonElement>("#settingsRefreshLibrary"); button.disabled = true; $("#settingsSyncStatus").textContent = "Refreshing prepared versions…"; try { prepState = await window.playback.prep.get(); if (editMode) renderEditorSetBuilder(); $("#settingsSyncStatus").textContent = `Prepared library refreshed · ${prepState.prepared.length} versions available.`; } catch (error) { $("#settingsSyncStatus").textContent = `Refresh failed · ${error instanceof Error ? error.message : String(error)}`; } finally { button.disabled = false; } };
-  $("#settingsScanLibrary").onclick = async () => { const button = $<HTMLButtonElement>("#settingsScanLibrary"); button.disabled = true; $("#settingsSyncStatus").textContent = "Scanning master spreadsheet, Dropbox review records, and song folders…"; try { catalogState = await window.playback.prep.scan(); renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Sync complete · ${catalogState.counts.ready} ready · ${catalogState.counts["needs-review"]??0} ready for review · ${catalogState.counts["needs-analysis"]} need analysis · ${catalogState.counts["missing-folder"]} missing folders.`; } catch (error) { renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Sync failed · ${error instanceof Error ? error.message : String(error)}`; } finally { button.disabled = false; } };
+  $("#settingsUpdateLibrary").onclick = async () => { const button = $<HTMLButtonElement>("#settingsUpdateLibrary"); button.disabled = true; $("#settingsSyncStatus").textContent = "Reading metadata and updating changed songs…"; try { const result = await window.playback.prep.update(); catalogState = result; prepState = { setlist: result.setlist, prepared: result.prepared }; if (editMode) renderEditorSetBuilder(); renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Update complete · ${result.updated} rebuilt · ${result.unchanged} unchanged · ${result.prepared.length} versions available${result.failures.length ? ` · ${result.failures.length} need attention` : ""}.`; } catch (error) { renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Update failed · ${error instanceof Error ? error.message : String(error)}`; } finally { button.disabled = false; } };
   window.playback.prep.onStatus((state:any)=>renderLibraryStatus(state));
   $("#copyRemoteUrl").onclick = async () => { const input = $("#remoteUrl") as HTMLInputElement; try { await navigator.clipboard.writeText(input.value); $("#remoteStatus").textContent = "REMOTE LINK COPIED"; } catch { input.select(); document.execCommand("copy"); $("#remoteStatus").textContent = "REMOTE LINK COPIED"; } };
   $("#openHttpRemote").onclick = () => { const url=$<HTMLInputElement>("#remoteUrl").value;if(url.startsWith("http://")||url.startsWith("https://"))window.open(url,"_blank","noopener"); };
@@ -518,31 +517,59 @@ function setupRemoteControl() {
 function setupReaperImport() {
   const dialog = $("#reaperImport") as HTMLDialogElement;
   let preview: any = null;
+  const setImportStatus=(state:"idle"|"working"|"ready"|"error",title:string,detail:string,percent:number)=>{
+    const status=$("#importStatus");
+    status.className=`import-status ${state}`;
+    status.querySelector("strong")!.textContent=title;
+    status.querySelector("span")!.textContent=detail;
+    (status.querySelector("progress") as HTMLProgressElement).value=percent;
+  };
+  const setImportButtons=(disabled:boolean,previewReady:boolean)=>{
+    for(const item of dialog.querySelectorAll<HTMLButtonElement>("[data-action]"))item.disabled=disabled||(item.dataset.action!=="cancel"&&!previewReady);
+  };
   $("#importReaper").onclick = async () => {
+    preview=null;
+    $("#importSummary").textContent="";
+    $("#importDifferences").innerHTML="";
+    $("#importWarning").textContent="Nothing is written until you choose an import action. Original Song remains unchanged.";
+    setImportStatus("working","CHOOSE RPP","Waiting for Reaper project selection.",12);
+    setImportButtons(false,false);
+    if(!dialog.open)dialog.showModal();
     try {
-      preview = await window.playback.arrangements.previewReaper(); if (!preview) return;
+      preview = await window.playback.arrangements.previewReaper(); if (!preview) { setImportStatus("idle","CANCELLED","No Reaper project was selected.",0); dialog.close(); return; }
+      setImportStatus("working","READING RPP","Parsing regions, cues, tempo, stems, and Slides MIDI.",45);
       const a = preview.arrangement;
       $("#importSummary").textContent = `${a.name} · ${a.selectedKey ?? "Key unknown"} · ${a.selectedBpm} BPM · ${a.timeSignature.numerator}/${a.timeSignature.denominator} · ${a.regions.length} regions · ${a.proPresenterMidi.length} Slides MIDI events`;
       $("#importDifferences").innerHTML = preview.differences.length ? `<h3>Preview Differences</h3><ul>${preview.differences.map((item: any) => `<li>${escapeHtml(item.field)}: ${escapeHtml(JSON.stringify(item.original))} → ${escapeHtml(JSON.stringify(item.arrangement))}</li>`).join("")}</ul>` : "<p>No structural differences from Original Song.</p>";
       $("#importWarning").textContent = "Nothing is written until you choose an import action. Original Song remains unchanged.";
-      dialog.showModal();
-    } catch (error) { showError(error); }
+      setImportStatus("ready","PREVIEW READY","Review the changes, then choose how to import this arrangement.",100);
+      setImportButtons(false,true);
+    } catch (error) { setImportStatus("error","PREVIEW FAILED",error instanceof Error ? error.message : String(error),100); setImportButtons(false,false); showError(error); }
   };
   for (const button of dialog.querySelectorAll<HTMLButtonElement>("[data-action]")) button.onclick = async () => {
-    const action = button.dataset.action as "new" | "replace" | "cancel";
+    const action = button.dataset.action as "new" | "replace" | "cancel" | string;
+    if(action==="cancel"){preview=null;dialog.close();return;}
+    if(!preview){setImportStatus("error","NO PREVIEW","Choose a Reaper project before importing.",100);return;}
     const buttons=[...dialog.querySelectorAll<HTMLButtonElement>("[data-action]")],originalText=button.textContent;
     buttons.forEach(item=>item.disabled=true);
+    setImportStatus("working","IMPORTING","Rendering stems, building cues, copying pad/click assets, and writing the arrangement.",35);
     if(action!=="cancel")button.textContent="PREPARING PLAYABLE ARRANGEMENT…";
     try {
-      const result = await window.playback.arrangements.commitReaper(action);
+      const result = await window.playback.arrangements.commitReaper(action as "new" | "replace" | "cancel");
       dialog.close();
       if (!result.cancelled) {
         prepState=await window.playback.prep.get();
-        if(editMode)renderEditorSetBuilder();
-        setEditorStatus("Reaper arrangement imported, rendered, and available in the Arrangement selector.");
+        const itemId=selectedSetItemId;
+        const wanted=normalizeLocalPath(result.preparedManifestPath);
+        const choice=(prepState.prepared as any[]).find((item:any)=>normalizeLocalPath(item.manifestPath)===wanted);
+        if(itemId&&choice)prepState=await window.playback.prep.command({action:"replace",itemId,choiceId:choice.id});
+        await setMode(true);
+        renderEditorSetBuilder();
+        if(itemId&&choice)await loadEditorItem(itemId);
+        setEditorStatus(choice?"Reaper arrangement imported and loaded in Editor.":"Reaper arrangement imported. Select it from the Arrangement dropdown.");
       }
     }
-    catch (error) { showError(error); }
+    catch (error) { setImportStatus("error","IMPORT FAILED",error instanceof Error ? error.message : String(error),100); showError(error); }
     finally{buttons.forEach(item=>item.disabled=false);button.textContent=originalText;}
   };
 }
@@ -588,12 +615,11 @@ function setupPerformance() {
 function setupMixerResize(){const stored=Number(localStorage.getItem("playback.performance.mixerHeight")),initial=Number.isFinite(stored)&&stored>=180?stored:innerWidth>=1600?310:270;document.body.style.setProperty("--performance-mixer-height",`${initial}px`);const handle=$("#mixerResizeHandle");let originY=0,originHeight=initial;handle.onpointerdown=(event:PointerEvent)=>{if(document.body.classList.contains("mixer-collapsed"))return;originY=event.clientY;originHeight=$("#performanceMixer").getBoundingClientRect().height;handle.setPointerCapture(event.pointerId);document.body.classList.add("mixer-resizing");};handle.onpointermove=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;const maximum=Math.min(520,innerHeight-330),height=Math.max(180,Math.min(maximum,originHeight+originY-event.clientY));document.body.style.setProperty("--performance-mixer-height",`${Math.round(height)}px`);};handle.onpointerup=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;handle.releasePointerCapture(event.pointerId);document.body.classList.remove("mixer-resizing");localStorage.setItem("playback.performance.mixerHeight",String(Math.round($("#performanceMixer").getBoundingClientRect().height)));};}
 
 function setupEditorControls() {
-  $("#confirmNewArrangement").onclick=async(event)=>{event.preventDefault();const input=$("#newArrangementName") as HTMLInputElement,name=input.value.trim();if(!name){input.classList.add("invalid");return;}const button=$("#confirmNewArrangement") as HTMLButtonElement;button.disabled=true;try{await saveCurrentArrangement(name);($("#arrangementNameDialog") as HTMLDialogElement).close();}catch(error){showError(error);}finally{button.disabled=false;}};
+  $("#confirmNewArrangement").onclick=async(event)=>{event.preventDefault();const input=$("#newArrangementName") as HTMLInputElement,name=input.value.trim();if(!name){input.classList.add("invalid");setSaveArrangementStatus("error","NAME REQUIRED","Enter an arrangement name before saving.",100);return;}const button=$("#confirmNewArrangement") as HTMLButtonElement;button.disabled=true;try{setSaveArrangementStatus("working","STARTING SAVE","Checking the arrangement name and editor state.",10);await saveCurrentArrangement(name);($("#arrangementNameDialog") as HTMLDialogElement).close();}catch(error){setSaveArrangementStatus("error","SAVE FAILED",error instanceof Error ? error.message : String(error),100);showError(error);}finally{button.disabled=false;}};
   $("#closeSongLibrary").onclick = () => ($<HTMLDialogElement>("#songLibraryPicker")).close();
   $("#songLibrarySearch").oninput = () => renderSongLibraryResults();
   $("#songLibrarySpeed").onchange = () => renderSongLibraryResults();
   $("#editorSetlistName").onchange = (event) => void prepCommand({ action: "rename", name: (event.currentTarget as HTMLInputElement).value });
-  $("#editorRefreshLibrary").onclick = async () => { prepState = await window.playback.prep.get(); renderEditorSetBuilder(); $("#editorSetlistStatus").textContent = "Library refreshed."; };
   $("#summaryView").onclick = () => { expandedStems = false; renderEditorViewMode(); };
   $("#stemsView").onclick = () => { expandedStems = true; renderEditorViewMode(); };
   $("#editorZoom").oninput = () => { localStorage.setItem("playback.editor.zoom", ($("#editorZoom") as HTMLInputElement).value); renderEditorTimeline(); };
@@ -631,6 +657,7 @@ function setupEditorControls() {
 }
 
 async function promptArrangementSave(){
+  setSaveArrangementStatus("working","VERIFYING","Checking key, tempo, regions, cues, and readiness.",20);
   try{
     await window.playback.arrange.command({type:"set-key-tempo",key:($("#arrangementKey") as HTMLSelectElement).value,bpm:Number(($("#arrangementBpm") as HTMLInputElement).value)});
     workspace=await window.playback.arrange.workspace();
@@ -638,15 +665,25 @@ async function promptArrangementSave(){
     const input=$("#newArrangementName") as HTMLInputElement;
     input.classList.remove("invalid");
     input.value=`${workspace.originalFacts.title} - ${workspace.draft.selectedKey} - ${workspace.draft.selectedBpm} BPM`;
+    setSaveArrangementStatus("idle","WAITING","Verify the name, then save the arrangement.",0);
     const dialog=$("#arrangementNameDialog") as HTMLDialogElement;
     dialog.showModal();
     requestAnimationFrame(()=>{input.focus();input.select();});
   }catch(error){showError(error);}
 }
 
+function setSaveArrangementStatus(state:"idle"|"working"|"ready"|"error",title:string,detail:string,percent:number){
+  const status=$("#saveArrangementStatus");
+  status.className=`import-status ${state}`;
+  status.querySelector("strong")!.textContent=title;
+  status.querySelector("span")!.textContent=detail;
+  (status.querySelector("progress") as HTMLProgressElement).value=percent;
+}
+
 async function saveCurrentArrangement(name:string){
   const buttons=[$("#saveArrangement"),$("#saveArrangementTop")] as HTMLButtonElement[];
   for(const button of buttons)button.disabled=true;
+  setSaveArrangementStatus("working","VERIFYING","Checking key, tempo, regions, cues, and readiness.",20);
   setEditorStatus("Verifying arrangement…");
   try{
     await window.playback.arrange.command({type:"set-name",name});
@@ -654,11 +691,15 @@ async function saveCurrentArrangement(name:string){
     renderEditor();
     if(workspace.readiness.status==="Blocked")throw new Error("This arrangement is not ready to save. Check the red readiness items.");
     setEditorStatus("Rendering every stem and preparing the arrangement version…");
+    setSaveArrangementStatus("working","RENDERING","Rendering every stem and preparing the playable arrangement package.",45);
     const saved=await window.playback.arrange.save(),itemId=selectedSetItemId;
+    setSaveArrangementStatus("working","PUBLISHING","Adding the saved arrangement to the prepared arrangement library.",75);
     prepState=await window.playback.prep.get();
     const wanted=normalizeLocalPath(saved.manifestPath),choice=(prepState.prepared as any[]).find((item:any)=>normalizeLocalPath(item.manifestPath)===wanted);
     if(!choice)throw new Error(`${saved.arrangement.name} was rendered but did not publish to the arrangement library.`);
+    setSaveArrangementStatus("working","LOADING EDITOR","Selecting the saved version on this set card.",90);
     if(itemId){prepState=await window.playback.prep.command({action:"replace",itemId,choiceId:choice.id});renderEditorSetBuilder();await loadEditorItem(itemId);}
+    setSaveArrangementStatus("ready","SAVE COMPLETE",`${saved.arrangement.name} is selected and loaded in Editor.`,100);
     setEditorStatus(`Saved ${saved.arrangement.name} in ${saved.arrangement.selectedKey}. It is selected on this set card.`);
   }catch(error){throw error;}
   finally{for(const button of buttons)button.disabled=false;}
@@ -685,20 +726,21 @@ async function setMode(edit: boolean) {
   $("#title").textContent = `${song.song.title} — ${song.song.artist}`;
   $("#facts").textContent = `${song.selectedKey} • ${song.selectedBpm} BPM • ${song.timeSignature.numerator}/${song.timeSignature.denominator} • ${song.stems.length} stems`;
   $("#modeLabel").textContent = edit ? "EDIT · SONG MAP + ARRANGEMENT WORKSPACE" : "PERFORMANCE MODE · CONFIRMED SET";
-  if (edit && !prepState) prepState = await window.playback.prep.get();
-  const hasEditorSong=Boolean(prepState?.setlist?.items?.length);
-  if (edit && !workspace && hasEditorSong) {
-    $("#editorStatus").textContent = "Preparing stacked stem waveforms…";
-    editorLoading ??= refreshWorkspace();
-    await editorLoading;
+  if (edit && !prepState) {
+    $("#editorSetlistStatus").textContent = "Loading setlist...";
+    void window.playback.prep.get().then((state) => {
+      prepState = state;
+      if (editMode) renderEditorSetBuilder();
+    }).catch(showError);
   }
+  if (edit && !workspace) $("#editorStatus").textContent = "Select a song card to load it into Edit.";
   if (edit && workspace) {
     try {
       const pending = JSON.parse(localStorage.getItem("playback.editor.createNew") ?? "null");
       if (pending?.songId === String(song.song.id)) { await window.playback.arrange.command({ type: "set-name", name: pending.name }); localStorage.removeItem("playback.editor.createNew"); await refreshWorkspace(); setEditorStatus(`New arrangement ready: ${pending.name}`); }
     } catch { localStorage.removeItem("playback.editor.createNew"); }
   }
-  if (edit) renderEditorSetBuilder();
+  if (edit && prepState) renderEditorSetBuilder();
   renderEditorSnapMode();
   renderPerformanceReadiness(liveState.readiness);
 }
@@ -739,7 +781,6 @@ function confirmedSetMatchesDraft(){
 function setupPrep() {
   window.playback.prep.onConfirmStatus((state)=>{const progress=Math.max(0,Math.min(100,Math.round(state.progress))),status=$("#confirmSetProgress");status.hidden=false;status.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=progress;$("#confirmSetProgressPercent").textContent=`${progress}%`;$("#confirmSetProgressLabel").textContent=state.label;$("#editorSetlistStatus").textContent=state.label;});
   window.playback.prep.onLoadStatus((state)=>{loadingSetItemId=state.itemId;loadingProgress=Math.max(0,Math.min(100,Math.round(state.progress)));loadingLabel=state.label;renderEditorSetBuilder();if(loadingProgress===100)window.setTimeout(()=>{if(loadingSetItemId===state.itemId&&loadingProgress===100){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}},650);});
-  $("#scanLibrary").onclick = async () => { const button = $("#scanLibrary") as HTMLButtonElement; button.disabled = true; button.textContent = "SCANNING…"; try { catalogState = await window.playback.prep.scan(); renderCatalog(); } catch (error) { showError(error); } finally { button.disabled = false; button.textContent = "SCAN MASTER LIBRARY"; } };
   $("#libraryFilter").oninput = () => renderCatalog();
   $("#setlistName").onchange = () => void prepCommand({ action: "rename", name: ($("#setlistName") as HTMLInputElement).value });
   $("#clearSetlist").onclick = () => void prepCommand({ action: "clear" });
@@ -755,7 +796,7 @@ async function setPrepMode() {
 }
 
 async function prepCommand(command: any) { try { prepState = await window.playback.prep.command(command); renderPrep(); renderEditorSetBuilder(); } catch (error) { showError(error); } }
-function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{try{const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;workspace=result.workspace;selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
+function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{try{const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;prepState=await window.playback.prep.get();workspace=result.workspace;selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
 function renderEditorLoadStatus(){const status=$("#editorLoadStatus"),visible=loadingSetItemId!==null;status.hidden=!visible;if(!visible)return;status.style.setProperty("--load-angle",`${loadingProgress*3.6}deg`);$("#editorLoadPercent").textContent=`${loadingProgress}%`;$("#editorLoadLabel").textContent=loadingLabel;($<HTMLProgressElement>("#editorLoadProgress")).value=loadingProgress;}
 function renderPrep() {
   if (!prepState) return;
@@ -970,7 +1011,7 @@ function renderPerformanceTimeline() {
   const boundaries=$("#performanceBoundaryLines");boundaries.replaceChildren();
   for(const region of song.regions.slice(1)){const line=document.createElement("i");line.style.left=`${(region.startSeconds/performanceDuration)*100}%`;line.title=`${region.name} boundary`;boundaries.append(line);}
   const cues = $("#cueMarkers"); cues.replaceChildren();
-  for (const cue of song.liveAssets?.cues ?? []) { const marker = document.createElement("i"); marker.style.left = `${(cue.atSeconds / performanceDuration) * 100}%`; marker.title = cue.label; marker.innerHTML = `<span>${escapeHtml(cue.label)}</span>`; cues.append(marker); }
+  for (const cue of song.cues ?? []) { const marker = document.createElement("i"); marker.style.left = `${(cue.atSeconds / performanceDuration) * 100}%`; marker.title = cue.phrase; marker.innerHTML = `<span>${escapeHtml(cue.phrase)}</span>`; cues.append(marker); }
   $("#performanceTimeline").onclick = (event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); window.playback.command("seek", ((event.clientX - rect.left) / rect.width) * performanceDuration); };
   updatePerformanceProgress();
   addEventListener("resize", () => { drawWaveform(canvas, data.waveform.buckets, "#63d8ff"); drawWaveform(progressCanvas, data.waveform.buckets, "#ffffff"); });

@@ -1,0 +1,208 @@
+# =====================================================
+# STEM DICTIONARY / INSTRUMENT BUS BIBLE
+#
+# Authoritative filename classification dictionary
+# for Analyzer V2 and Playback V3.
+#
+# Format:
+# Filename keyword | canonical bus | analyzer role | play live
+#
+# Canonical buses:
+#   drums
+#   bass
+#   acoustic
+#   electric
+#   keys
+#   orchestra
+#   pad
+#   vocals
+#   misc
+#
+# Do NOT edit Python/TypeScript to add stems.
+# Edit this file only, then copy it to Playback V3.
+# =====================================================
+
+[DRUMS]
+Drums              | drums       | music-stem | true
+Kick               | drums       | music-stem | true
+Snare              | drums       | music-stem | true
+Tom                | drums       | music-stem | true
+Floor Tom          | drums       | music-stem | true
+Rack Tom           | drums       | music-stem | true
+HiHat              | drums       | music-stem | true
+HH                 | drums       | music-stem | true
+Hat                | drums       | music-stem | true
+Ride               | drums       | music-stem | true
+Crash              | drums       | music-stem | true
+Splash             | drums       | music-stem | true
+China              | drums       | music-stem | true
+Cymbals            | drums       | music-stem | true
+OH                 | drums       | music-stem | true
+Overheads          | drums       | music-stem | true
+Room               | drums       | music-stem | true
+Side Stick         | drums       | music-stem | true
+Sidestick          | drums       | music-stem | true
+Rim                | drums       | music-stem | true
+Rimshot            | drums       | music-stem | true
+Beat               | drums       | music-stem | true
+Program            | drums       | music-stem | true
+808                | drums       | music-stem | true
+Electronic Drums   | drums       | music-stem | true
+Percussion         | drums       | music-stem | true
+Perc               | drums       | music-stem | true
+Shaker             | drums       | music-stem | true
+Tambourine         | drums       | music-stem | true
+Claps              | drums       | music-stem | true
+Loop               | drums       | music-stem | true
+Loops              | drums       | music-stem | true
+Conga              | drums       | music-stem | true
+Congas             | drums       | music-stem | true
+Bongo              | drums       | music-stem | true
+Bongos             | drums       | music-stem | true
+Cajon              | drums       | music-stem | true
+Djembe             | drums       | music-stem | true
+Cowbell            | drums       | music-stem | true
+Triangle           | drums       | music-stem | true
+Cabasa             | drums       | music-stem | true
+Guiro              | drums       | music-stem | true
+Finger Snap        | drums       | music-stem | true
+Finger Snaps       | drums       | music-stem | true
+
+[BASS]
+Bass               | bass        | music-stem | true
+Bass Guitar        | bass        | music-stem | true
+Sub                | bass        | music-stem | true
+Synth Bass         | bass        | music-stem | true
+Bass Synth         | bass        | music-stem | true
+808 Bass           | bass        | music-stem | true
+
+[ACOUSTIC]
+Acoustic           | acoustic    | music-stem | true
+AG                 | acoustic    | music-stem | true
+Ac Gtr             | acoustic    | music-stem | true
+Mandolin           | acoustic    | music-stem | true
+Banjo              | acoustic    | music-stem | true
+Dobro              | acoustic    | music-stem | true
+Ukulele            | acoustic    | music-stem | true
+
+[ELECTRIC]
+Electric           | electric    | music-stem | true
+Electric Guitar    | electric    | music-stem | true
+Elec Guitar        | electric    | music-stem | true
+EG                 | electric    | music-stem | true
+EG 1               | electric    | music-stem | true
+EG 2               | electric    | music-stem | true
+EG 3               | electric    | music-stem | true
+Elec               | electric    | music-stem | true
+Lead Gtr           | electric    | music-stem | true
+Rhythm Gtr         | electric    | music-stem | true
+Gtr                | electric    | music-stem | true
+Gtrs               | electric    | music-stem | true
+
+[KEYS]
+Piano              | keys        | music-stem | true
+Keys               | keys        | music-stem | true
+Keys 1             | keys        | music-stem | true
+Keyboard           | keys        | music-stem | true
+EP                 | keys        | music-stem | true
+Electric Piano     | keys        | music-stem | true
+Rhodes             | keys        | music-stem | true
+Wurlitzer          | keys        | music-stem | true
+CP70               | keys        | music-stem | true
+Clav               | keys        | music-stem | true
+Clavinet           | keys        | music-stem | true
+Organ              | keys        | music-stem | true
+Bell               | keys        | music-stem | true
+Bells              | keys        | music-stem | true
+Synth              | keys        | music-stem | true
+Synth Lead         | keys        | music-stem | true
+Lead Synth         | keys        | music-stem | true
+Arp                | keys        | music-stem | true
+Arpeggio           | keys        | music-stem | true
+Pluck              | keys        | music-stem | true
+
+[ORCHESTRA]
+Strings            | orchestra   | music-stem | true
+Strings High       | orchestra   | music-stem | true
+Strings Low        | orchestra   | music-stem | true
+Violin             | orchestra   | music-stem | true
+Violins            | orchestra   | music-stem | true
+Viola              | orchestra   | music-stem | true
+Cello              | orchestra   | music-stem | true
+Cellos             | orchestra   | music-stem | true
+Orchestra          | orchestra   | music-stem | true
+Brass              | orchestra   | music-stem | true
+Brass Ensemble     | orchestra   | music-stem | true
+Horns              | orchestra   | music-stem | true
+French Horn        | orchestra   | music-stem | true
+Trumpet            | orchestra   | music-stem | true
+Trombone           | orchestra   | music-stem | true
+Sax                | orchestra   | music-stem | true
+Woodwinds          | orchestra   | music-stem | true
+
+[PAD]
+Pad                | pad         | pad-stem   | true
+Pads               | pad         | pad-stem   | true
+Ambient Pad        | pad         | pad-stem   | true
+Atmos Pad          | pad         | pad-stem   | true
+Texture Pad        | pad         | pad-stem   | true
+Drone Pad          | pad         | pad-stem   | true
+Choir Pad          | pad         | pad-stem   | true
+
+[VOCALS]
+Lead Vocal         | vocals      | vocal-stem | true
+Lead Vocals        | vocals      | vocal-stem | true
+Lead Vox           | vocals      | vocal-stem | true
+Vocals             | vocals      | vocal-stem | true
+Vocal              | vocals      | vocal-stem | true
+Background Vocals  | vocals      | vocal-stem | true
+Background Vocal   | vocals      | vocal-stem | true
+Background Vox     | vocals      | vocal-stem | true
+Backing Vocals     | vocals      | vocal-stem | true
+Backing Vocal      | vocals      | vocal-stem | true
+Backing Vox        | vocals      | vocal-stem | true
+BGV                | vocals      | vocal-stem | true
+BGVS               | vocals      | vocal-stem | true
+BGVS 2             | vocals      | vocal-stem | true
+BG Vox             | vocals      | vocal-stem | true
+BV                 | vocals      | vocal-stem | true
+BVs                | vocals      | vocal-stem | true
+Harmony            | vocals      | vocal-stem | true
+Harmonies          | vocals      | vocal-stem | true
+Choir              | vocals      | vocal-stem | true
+Choirs             | vocals      | vocal-stem | true
+Soprano            | vocals      | vocal-stem | true
+Sop                | vocals      | vocal-stem | true
+Alto               | vocals      | vocal-stem | true
+Alt                | vocals      | vocal-stem | true
+Tenor              | vocals      | vocal-stem | true
+Ten                | vocals      | vocal-stem | true
+Bass Vocal         | vocals      | vocal-stem | true
+Bass Vox           | vocals      | vocal-stem | true
+SATB               | vocals      | vocal-stem | true
+SAT                | vocals      | vocal-stem | true
+Gang               | vocals      | vocal-stem | true
+Gang Vox           | vocals      | vocal-stem | true
+Stack              | vocals      | vocal-stem | true
+Stacks             | vocals      | vocal-stem | true
+Ooh                | vocals      | vocal-stem | true
+Oohs               | vocals      | vocal-stem | true
+Aah                | vocals      | vocal-stem | true
+Aahs               | vocals      | vocal-stem | true
+Adlib              | vocals      | vocal-stem | true
+Adlibs             | vocals      | vocal-stem | true
+
+[MISC]
+FX                 | misc        | music-stem | true
+SFX                | misc        | music-stem | true
+Effects            | misc        | music-stem | true
+Rise               | misc        | music-stem | true
+Riser              | misc        | music-stem | true
+Drop               | misc        | music-stem | true
+Hit                | misc        | music-stem | true
+Impact             | misc        | music-stem | true
+Swell              | misc        | music-stem | true
+Noise              | misc        | music-stem | true
+Atmosphere         | misc        | music-stem | true
+Texture            | misc        | music-stem | true
+Drone              | misc        | music-stem | true

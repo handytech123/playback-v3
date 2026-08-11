@@ -133,7 +133,7 @@ async function missing(paths: readonly string[]) {
 }
 
 async function cueAvailable(directory: string, label: string) {
-  const normalized = label.replace(/([A-Za-z])([0-9])$/, "$1 $2").replace(/^Turnaround/i, "Turn Around");
+  const normalized = normalizeCueFileLabel(label);
   const aliases: Record<string, string> = { START: "CountIn.wav" };
   const direct = [
     aliases[normalized.toUpperCase()] ?? `${normalized.toUpperCase()}.wav`,
@@ -147,4 +147,14 @@ async function cueAvailable(directory: string, label: string) {
     join(directory, `${match[1]!.toUpperCase()}.wav`),
     join(directory, `${numbers[Number(match[2])]}.wav`),
   ])).length === 0;
+}
+
+function normalizeCueFileLabel(label: string) {
+  return label
+    .trim()
+    .replace(/([A-Za-z])([0-9])$/, "$1 $2")
+    .replace(/^Turn\s*Arround/i, "Turn Around")
+    .replace(/^Turnaround/i, "Turn Around")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ");
 }

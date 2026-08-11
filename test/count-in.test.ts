@@ -21,5 +21,5 @@ test("4/4 count-in schedules 2 3 4 after the section announcement", () => {
 test("6/8 count-in schedules all six written eighth-note positions", () => {
   const events = buildCountInSources(song(6, 120, 2, 5), "C:\\Cues");
   assert.deepEqual(events.map((event) => event.label), ["2", "3", "4", "5", "6"]);
-  events.forEach((event, index) => assert.ok(Math.abs(event.atSeconds - (2 + (index + 1) / 2)) < 1e-9));
+  events.forEach((event, index) => assert.ok(Math.abs(event.atSeconds - (2 + (index + 1) * 0.25)) < 1e-9));
 });

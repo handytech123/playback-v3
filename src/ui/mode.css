@@ -319,6 +319,33 @@ body.mixer-collapsed.performance-mode main{padding-bottom:54px}body.mixer-collap
 .click-sound-actions{display:flex;align-items:center;gap:14px}.click-sound-actions button{min-width:220px}.click-sound-actions p{margin:0;color:#8fa5b3;font-size:10px;line-height:1.4}
 .settings-action-list{display:grid;gap:10px}
 #remoteSettings .settings-action-list button{display:grid!important;gap:4px;justify-items:start;padding:14px 16px;text-align:left}
+#reaperImport{overflow:hidden}
+#reaperImport .import-status{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;margin:0 0 14px;padding:10px 12px;border:1px solid #344655;border-radius:8px;background:#0b1219;color:#a9bac6}
+#reaperImport .import-status strong{font-size:10px;letter-spacing:.12em;color:#edf6fc}
+#reaperImport .import-status span{font-size:11px;line-height:1.35}
+#reaperImport .import-status progress{grid-column:1/-1;width:100%;height:7px;border:0;border-radius:99px;overflow:hidden;background:#21303b}
+#reaperImport .import-status progress::-webkit-progress-bar{background:#21303b}
+#reaperImport .import-status progress::-webkit-progress-value{background:#63d8ff}
+#reaperImport .import-status.working{border-color:#38708a;box-shadow:inset 3px 0 #63d8ff}
+#reaperImport .import-status.ready{border-color:#2e8068;box-shadow:inset 3px 0 #3bd68d}
+#reaperImport .import-status.ready progress::-webkit-progress-value{background:#3bd68d}
+#reaperImport .import-status.error{border-color:#8a3a46;box-shadow:inset 3px 0 #ff7188}
+#reaperImport .import-status.error progress::-webkit-progress-value{background:#ff7188}
+.arrangement-name-dialog .import-status{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;margin:0;padding:10px 12px;border:1px solid #344655;border-radius:8px;background:#0b1219;color:#a9bac6}
+.arrangement-name-dialog .import-status strong{font-size:10px;letter-spacing:.12em;color:#edf6fc}
+.arrangement-name-dialog .import-status span{font-size:11px;line-height:1.35}
+.arrangement-name-dialog .import-status progress{grid-column:1/-1;width:100%;height:7px;border:0;border-radius:99px;overflow:hidden;background:#21303b}
+.arrangement-name-dialog .import-status progress::-webkit-progress-bar{background:#21303b}
+.arrangement-name-dialog .import-status progress::-webkit-progress-value{background:#63d8ff}
+.arrangement-name-dialog .import-status.working{border-color:#38708a;box-shadow:inset 3px 0 #63d8ff}
+.arrangement-name-dialog .import-status.ready{border-color:#2e8068;box-shadow:inset 3px 0 #3bd68d}
+.arrangement-name-dialog .import-status.ready progress::-webkit-progress-value{background:#3bd68d}
+.arrangement-name-dialog .import-status.error{border-color:#8a3a46;box-shadow:inset 3px 0 #ff7188}
+.arrangement-name-dialog .import-status.error progress::-webkit-progress-value{background:#ff7188}
+#importDifferences{max-height:260px;overflow:auto}
+#importDifferences ul{display:grid;gap:8px;margin:0;padding-left:18px}
+#importDifferences li{max-width:100%;overflow-wrap:anywhere;word-break:break-word;white-space:normal}
+#reaperImport footer{flex-wrap:wrap}
 .settings-action-list button strong{font-size:10px}.settings-action-list button small{color:#8399a7;font-size:9px;font-weight:500;letter-spacing:0}
 .settings-action-list+#settingsSyncStatus{margin-top:14px}
 .library-health-grid{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:10px;margin-bottom:14px}.library-health{display:grid;gap:5px;min-height:78px;padding:12px 14px;border:1px solid #304654;border-radius:7px;background:#101b23}.library-health>span{color:#718796;font-size:8px;font-weight:900;letter-spacing:.1em}.library-health>strong{color:#e6f2f8;font-size:16px}.library-health>strong.running,.library-health>strong.scanning{color:#63d8ff}.library-health>strong.complete{color:#74efb8}.library-health>strong.waiting{color:#ffcf67}.library-health>strong.fault{color:#ff8294}.library-health>small{color:#8399a7;font-size:9px}.library-paths{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.library-paths label{display:grid;gap:6px;color:#8197a5;font-size:8px;font-weight:900;letter-spacing:.08em}.library-paths input{min-height:38px;padding:8px 10px;border:1px solid #304654;border-radius:5px;background:#081118;color:#c7d9e3;font-size:9px}.library-issue-list{display:grid;gap:7px;max-height:220px;margin-top:12px;overflow:auto}.library-issue-list>p{margin:0;padding:12px;color:#8fa3b0}.library-issue{display:grid;grid-template-columns:minmax(180px,.7fr) 1fr;gap:14px;padding:10px 12px;border:1px solid #30414d;border-left:4px solid #ffcf67;border-radius:5px;background:#0c161d}.library-issue.missing-folder{border-left-color:#ff8294}.library-issue span{display:grid;gap:3px}.library-issue strong{color:#e8f2f7;font-size:10px}.library-issue small{color:#8298a6;font-size:8px}.library-issue p{margin:0;color:#a9bbc5;font-size:9px;line-height:1.4}

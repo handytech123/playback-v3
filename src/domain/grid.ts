@@ -42,8 +42,6 @@ export function secondsToMusicalPosition(seconds: number, bpm: number, meter: Ti
 
 export function secondsPerNotatedBeat(bpm: number, meter: TimeSignature): number {
   assertMeterAndTempo(bpm, meter);
-  const compoundEighthMeter = meter.denominator === 8 && meter.numerator % 3 === 0 && meter.numerator > 3;
-  if (compoundEighthMeter) return 60 / bpm;
   return (60 / bpm) * (4 / meter.denominator);
 }
 
