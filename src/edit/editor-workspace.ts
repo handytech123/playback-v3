@@ -81,11 +81,30 @@ export function editorStemDisplayLabels(
   song: PreparedSong,
   originalSong?: PreparedSong,
 ): readonly string[] {
+  const roleCounts = new Map<string, number>();
+  const originalByRole = new Map<string, PreparedSong["stems"]>();
+  for (const original of originalSong?.stems ?? []) {
+    const role = normalizedRoleKey(original.role);
+    originalByRole.set(role, [...(originalByRole.get(role) ?? []), original]);
+  }
+  return song.stems.map((stem, index) => {
+    if (stem.displayName?.trim()) return stem.displayName.trim();
+    const role = normalizedRoleKey(stem.role);
+    const roleIndex = roleCounts.get(role) ?? 0;
+    roleCounts.set(role, roleIndex + 1);
+    const original = originalByRole.get(role)?.[roleIndex] ?? originalSong?.stems[index];
+    if (original?.displayName?.trim()) return original.displayName.trim();
+    const sourceLabel = labelFromPath(original?.sourcePath ?? stem.sourcePath, index);
+    if (sourceLabel) return sourceLabel;
+    const displayRole = normalizeLabel(stem.role);
+    return displayRole || `Stem ${index + 1}`;
+  });
+}
+
+export function performanceStemDisplayLabels(song: PreparedSong): readonly string[] {
   return song.stems.map((stem, index) => {
     const role = normalizeLabel(stem.role);
-    if (!/^(music[ -]?stem|music)(?:\s+\d+)?$/i.test(role)) return role;
-    const original = originalSong?.stems[index];
-    return labelFromPath(original?.sourcePath ?? stem.sourcePath, index);
+    return role || `Stem ${index + 1}`;
   });
 }
 
@@ -179,9 +198,13 @@ function uniqueRole(role: string, index: number, stems: PreparedSong["stems"]) {
 
 function labelFromPath(sourcePath: string, index: number) {
   const filename = sourcePath.replaceAll("\\", "/").split("/").at(-1)?.replace(/\.[^.]+$/, "") ?? `Music ${index + 1}`;
-  const withoutRenderPrefix = filename.replace(/^\d{2}-music-stem(?:-\d+)?$/i, "");
+  const withoutRenderPrefix = filename.replace(/^\d{2}[-_ ]+(?=.+)/, "").replace(/^music-stem(?:-\d+)?$/i, "");
   if (!withoutRenderPrefix) return `Music ${index + 1}`;
-  return normalizeLabel(withoutRenderPrefix.replace(/_/g, " "));
+  return withoutRenderPrefix.trim();
+}
+
+function normalizedRoleKey(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function normalizeLabel(value: string) {

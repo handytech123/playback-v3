@@ -9,7 +9,8 @@ export type PlaybackCommand =
   | { readonly type: "bus.set"; readonly bus: LiveBus; readonly enabled: boolean }
   | { readonly type: "bus.gain"; readonly bus: LiveBus; readonly gain: number }
   | { readonly type: "mixer.channel"; readonly index:number;readonly gain:number;readonly muted:boolean;readonly solo:boolean;readonly iem:boolean }
-  | { readonly type: "mixer.master"; readonly gain:number };
+  | { readonly type: "mixer.master"; readonly gain:number }
+  | { readonly type: "midi.slides" | "midi.surface"; readonly enabled:boolean };
 
 export interface CommandEnvelope { readonly id: string; readonly source: ControlSource; readonly issuedAt: string; readonly command: PlaybackCommand; }
 export interface CommandResult { readonly id: string; readonly ok: boolean; readonly completedAt: string; readonly state: PerformanceSnapshot; readonly error?: string; }
@@ -62,6 +63,8 @@ export class PlaybackCommandBus {
       else if (command.type === "bus.gain") this.session.setBusGain(command.bus, command.gain);
       else if (command.type === "mixer.channel") this.session.setMixerChannel(command.index,command);
       else if (command.type === "mixer.master") this.session.setMasterGain(command.gain);
+      else if (command.type === "midi.slides") this.session.setSlidesMidiEnabled(command.enabled);
+      else if (command.type === "midi.surface") this.session.setSurfaceMixerMidiEnabled(command.enabled);
       else throw new Error("Unsupported normalized command");
       const state = this.publishState(), result: CommandResult = { id: envelope.id, ok: true, completedAt: new Date().toISOString(), state: state.performance };
       for (const listener of this.resultListeners) listener(result);
@@ -89,6 +92,8 @@ export function parsePlaybackCommand(value: unknown): PlaybackCommand {
   if (type === "bus.gain") { const bus = parseBus(item.bus), gain = Number(item.gain); if (!Number.isFinite(gain) || gain < 0 || gain > 1.25) throw new Error("gain must be between 0 and 1.25"); return { type, bus, gain }; }
   if(type==="mixer.channel"){const index=Number(item.index),gain=Number(item.gain);if(!Number.isInteger(index)||index<0)throw new Error("index must be a non-negative integer");if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("gain must be between 0 and 1.25");if(typeof item.muted!=="boolean"||typeof item.solo!=="boolean"||typeof item.iem!=="boolean")throw new Error("mixer channel switches must be boolean");return{type,index,gain,muted:item.muted,solo:item.solo,iem:item.iem};}
   if(type==="mixer.master"){const gain=Number(item.gain);if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("gain must be between 0 and 1.25");return{type,gain};}
+  if(type==="midi.slides"){if(typeof item.enabled!=="boolean")throw new Error("enabled must be boolean");return{type,enabled:item.enabled};}
+  if(type==="midi.surface"){if(typeof item.enabled!=="boolean")throw new Error("enabled must be boolean");return{type,enabled:item.enabled};}
   throw new Error(`Unsupported command: ${type}`);
 }
 

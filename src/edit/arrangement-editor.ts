@@ -5,6 +5,7 @@ import type {
   PreparedMidiEvent,
   PreparedSong,
   Region,
+  StemMixSetting,
   TimeSignature,
 } from "../domain/song.js";
 import { preparedControl } from "../domain/song.js";
@@ -34,6 +35,9 @@ export interface ArrangementMidiEvent extends PreparedMidiEvent {
 export interface AppArrangementDraft {
   readonly schemaVersion: 1;
   readonly baseSongId: string;
+  readonly sourceManifestPath?: string;
+  readonly sourceFingerprint?: string;
+  readonly sourceArrangementId?: string;
   readonly name: string;
   readonly baseKey: string;
   readonly baseBpm: number;
@@ -45,6 +49,7 @@ export interface AppArrangementDraft {
   readonly sections: readonly ArrangementSection[];
   readonly cues: readonly ArrangementCue[];
   readonly midi: readonly ArrangementMidiEvent[];
+  readonly stemMix: readonly StemMixSetting[];
   readonly revision: number;
 }
 
@@ -103,6 +108,8 @@ export function createArrangementDraft(
   return withMusicalLocations({
     schemaVersion: 1,
     baseSongId: String(song.song.id),
+    sourceFingerprint: arrangementSourceFingerprint(song),
+    sourceArrangementId: song.arrangement?.id ?? "original-song",
     name,
     baseKey: song.selectedKey,
     baseBpm: song.selectedBpm,
@@ -114,8 +121,34 @@ export function createArrangementDraft(
     sections,
     cues,
     midi,
+    stemMix: normalizeStemMix(song.stemMix, song.stems.length),
     revision: 0,
   });
+}
+
+export function normalizeStemMix(value: readonly StemMixSetting[] | undefined, stemCount: number): readonly StemMixSetting[] {
+  return Array.from({ length: stemCount }, (_, index) => {
+    const source = value?.find((item) => item.index === index);
+    const gain = Number(source?.gain ?? 1);
+    return {
+      index,
+      gain: Number.isFinite(gain) ? Math.max(0, Math.min(1.25, gain)) : 1,
+      muted: Boolean(source?.muted),
+      solo: Boolean(source?.solo),
+      iem: Boolean(source?.iem),
+    };
+  });
+}
+
+function arrangementSourceFingerprint(song: PreparedSong): string {
+  return [
+    song.cacheFingerprint,
+    song.arrangement?.id ?? "original-song",
+    song.arrangement?.sourceSha256 ?? "",
+    song.selectedKey,
+    song.selectedBpm,
+    `${song.timeSignature.numerator}/${song.timeSignature.denominator}`,
+  ].join("|");
 }
 
 function sourceTimelineSections(song: PreparedSong): ArrangementSection[] {

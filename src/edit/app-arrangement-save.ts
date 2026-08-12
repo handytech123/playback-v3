@@ -4,6 +4,7 @@ import { productionDefaults } from "../config/settings.js";
 import type { PreparedSong } from "../domain/song.js";
 import type { ArrangementVersion } from "../reaper/arrangement.js";
 import { confirmArrangement } from "../reaper/arrangement-confirm.js";
+import { registerSourceArrangement } from "../reaper/arrangement-index.js";
 import { saveArrangementVersion } from "../reaper/arrangement-persistence.js";
 import {
   arrangementFingerprint,
@@ -57,6 +58,7 @@ export async function saveAppArrangement(input: SaveAppArrangementInput) {
     timeSignature: input.draft.timeSignature,
     clickTemplateId: input.draft.clickTemplateId,
     durationSeconds: input.draft.durationSeconds,
+    stemMix: input.draft.stemMix,
     regions: input.draft.sections.map(
       ({ id: regionId, name, startPosition, endPosition, startSeconds, endSeconds }) => ({
         id: regionId,
@@ -177,6 +179,12 @@ async function publishSourceArrangementPackage(input: {
   const manifestPath = join(sharedDirectory, "performance", "confirmed-set.json");
   const manifest = rewritePathPrefix(JSON.parse(await readFile(manifestPath, "utf8")), input.localDirectory, sharedDirectory);
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  await registerSourceArrangement({
+    sourceSongFolder: input.sourceSongFolder,
+    arrangement,
+    arrangementPath,
+    performanceManifestPath: manifestPath,
+  });
   return { arrangementPath, manifestPath };
 }
 

@@ -28,6 +28,15 @@ export interface AudioStem {
   readonly role: string;
   readonly sourcePath: string;
   readonly durationSeconds: number;
+  readonly displayName?: string;
+}
+
+export interface StemMixSetting {
+  readonly index: number;
+  readonly gain: number;
+  readonly muted: boolean;
+  readonly solo: boolean;
+  readonly iem: boolean;
 }
 
 export interface Region {
@@ -56,6 +65,7 @@ export interface PreparedSong {
   readonly timeSignature: TimeSignature;
   readonly durationSeconds: number;
   readonly stems: readonly AudioStem[];
+  readonly stemMix?: readonly StemMixSetting[];
   readonly regions: readonly Region[];
   readonly cues: readonly Cue[];
   readonly cacheFingerprint: string;

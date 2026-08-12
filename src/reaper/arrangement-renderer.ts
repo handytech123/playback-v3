@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { ArrangementMediaItem,ArrangementVersion } from "./arrangement.js";
 
-export interface RenderedArrangementStem {readonly role:string;readonly sourcePath:string;readonly durationSeconds:number;readonly rendered:boolean;}
+export interface RenderedArrangementStem {readonly role:string;readonly sourcePath:string;readonly durationSeconds:number;readonly rendered:boolean;readonly displayName?:string;}
 const excludedTrack=/^(click|cue|slides|bc mix)$/i,excludedPad=/^pad(?:\s|$)/i;
 export async function renderArrangementTracks(arrangement:ArrangementVersion,outputDirectory:string,ffmpegPath="ffmpeg"):Promise<readonly RenderedArrangementStem[]>{
   await mkdir(outputDirectory,{recursive:true});const groups=new Map<string,ArrangementMediaItem[]>();for(const item of arrangement.mediaItems){if(!item.sourcePath||excludedTrack.test(item.trackName)||excludedPad.test(item.trackName))continue;const list=groups.get(item.trackName)??[];list.push(item);groups.set(item.trackName,list);}

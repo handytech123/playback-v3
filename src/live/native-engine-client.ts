@@ -87,6 +87,7 @@ export class NativeEngineClient extends EventEmitter {
   musicOn(): void { this.send("music_on"); } musicOff(): void { this.send("music_off"); }
   clickOn(): void { this.send("click_on"); } clickOff(): void { this.send("click_off"); }
   cueOn(): void { this.send("cue_on"); } cueOff(): void { this.send("cue_off"); }
+  slidesMidiOn(): void { this.send("slides_midi_on"); } slidesMidiOff(): void { this.send("slides_midi_off"); }
   setCueTime(targetRegionId:string,atSeconds:number):void { if(!/^[a-zA-Z0-9._:-]+$/.test(targetRegionId)||!Number.isFinite(atSeconds)||atSeconds<0)throw new Error("Cue schedule update is invalid");this.send(`cue_time ${targetRegionId} ${atSeconds}`); }
   panic(): void { this.send("panic"); }
   announceRecovery(regionId: string, atSeconds: number, repeatAtSeconds: number | null): void { if (!/^[a-zA-Z0-9._:-]+$/.test(regionId) || !Number.isFinite(atSeconds) || atSeconds < 0 || repeatAtSeconds !== null && (!Number.isFinite(repeatAtSeconds) || repeatAtSeconds < 0 || repeatAtSeconds >= atSeconds)) throw new Error("Recovery announcement is invalid"); this.send(`announce_recovery ${regionId} ${atSeconds} ${repeatAtSeconds ?? -1}`); }

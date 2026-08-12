@@ -3,14 +3,17 @@ import { createHash } from "node:crypto";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { DEFAULT_SHOW_STATE, type ConfirmedSetManifest } from "../confirmed-set/manifest.js";
 import { CLICK_TEMPLATES, clickTemplate, type ClickTemplateId } from "../domain/click-templates.js";
+import { positionToSeconds } from "../domain/grid.js";
 import { songId, type ClickEvent, type MusicalPosition, type PreparedSong, type TimeSignature } from "../domain/song.js";
 import { loadOrBuildEditorWaveforms } from "../edit/editor-workspace.js";
 import { writeCountedCue } from "../prep/cue-sequence.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
+import { isReferenceAudio } from "./audio-role.js";
 import { parseTimeSignature, type MasterSongRow } from "./normalize-song.js";
 import { loadPlaybackAnalyzerPackage, mapAnalyzerTimelineFacts, mapAnalyzerTimelinePackage, type AnalyzerArrangementFact } from "./analyzer-package.js";
 
-export const ANALYZER_SONG_MAP_VERSION = 13;
+export const ANALYZER_SONG_MAP_VERSION = 14;
+const REVIEW_STEM_CACHE_VERSION = 3;
 
 export async function prepareCandidateReview(input: {
   readonly catalogId: string;
@@ -46,7 +49,7 @@ export async function prepareCandidateReview(input: {
     analyzerPackage,
     clickRegularPath: input.clickRegularPath,
     clickAccentPath: input.clickAccentPath,
-    reviewStemCacheVersion: 1,
+    reviewStemCacheVersion: REVIEW_STEM_CACHE_VERSION,
     analyzerControlVersion: 1,
   })).digest("hex");
   try {
@@ -58,7 +61,7 @@ export async function prepareCandidateReview(input: {
   // so the normal waveform cache validity check is not enough here.
   await Promise.all([rm(waveformPath, { force: true }), rm(bundlePath, { force: true })]);
 
-  const sourceStems = analyzerPackage.audioFiles.filter(file => file.playLive === true && !isReferenceAudio(file.path)).map(file => ({ role: file.playbackBus ?? file.role ?? "music-stem", sourcePath: safeAnalyzerAudioPath(sourceFolder, file.path), durationSeconds: duration }));
+  const sourceStems = analyzerPackage.audioFiles.filter(isPlayableEditorStem).map(file => ({ role: file.playbackBus ?? file.role ?? "music-stem", sourcePath: safeAnalyzerAudioPath(sourceFolder, file.path), durationSeconds: duration, displayName: originalStemDisplayName(file.path) }));
   if (!sourceStems.length) throw new Error("No playable music file is available for Editor review");
   const stems=await prepareReviewStems(sourceStems, join(reviewRoot, "stems"), input.ffmpegPath);
   const analyzerTimeline = mapAnalyzerTimelinePackage(analyzerPackage, duration, input.master.bpm, meter);
@@ -115,7 +118,8 @@ export async function prepareCandidateReview(input: {
   for (const arrangement of analyzerPackage.arrangements ?? []) {
     const arrangementMeter = arrangement.timeSignature ? parseTimeSignature(arrangement.timeSignature) : meter;
     const arrangementBpm = Number(arrangement.bpm ?? input.master.bpm);
-    const arrangementTimeline = mapAnalyzerArrangement(arrangement, duration, arrangementBpm, arrangementMeter);
+    const arrangementDuration = analyzerArrangementDuration(arrangement, arrangementBpm, arrangementMeter, duration);
+    const arrangementTimeline = mapAnalyzerArrangement(arrangement, arrangementDuration, arrangementBpm, arrangementMeter);
     if (!arrangementTimeline) continue;
     const arrangementCueMarkers = arrangementTimeline.cues.map(cue => ({ ...(cue.position ? { position: cue.position } : {}), atSeconds: cue.atSeconds, label: cue.phrase, targetRegionId: cue.targetRegionId }));
     const safeArrangementId = safeId(String(arrangement.id ?? arrangement.name ?? arrangement.sourcePath ?? `arrangement-${arrangementSongs.length + 1}`));
@@ -123,6 +127,7 @@ export async function prepareCandidateReview(input: {
       ...arrangementBaseSong,
       selectedBpm: arrangementBpm,
       timeSignature: arrangementMeter,
+      durationSeconds: arrangementDuration,
       regions: arrangementTimeline.regions,
       cues: arrangementCueMarkers.map(cue => ({ phrase: cue.label, ...("position" in cue ? { position: cue.position } : {}), atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId })),
       liveAssets: {
@@ -198,10 +203,6 @@ export async function selectedSongClickPlan(sourceFolder: string, meter: TimeSig
   return { templateId: packageSelected as ClickTemplateId, events };
 }
 
-function isReferenceAudio(name: string) {
-  return /(?:^|[_\s-])(click|cue|cues|count|guide|reference|ref|pad)(?:$|[_\s-])/i.test(basename(name, extname(name)));
-}
-
 function safeAnalyzerAudioPath(sourceFolder: string, analyzerPath: string) {
   const resolvedRoot = resolve(sourceFolder), resolvedPath = resolve(sourceFolder, analyzerPath), relation = relative(resolvedRoot, resolvedPath);
   if (!relation || relation.startsWith("..") || resolve(resolvedRoot, relation) !== resolvedPath) throw new Error(`Analyzer audio path escapes its song folder: ${analyzerPath}`);
@@ -251,7 +252,23 @@ function mapAnalyzerArrangement(arrangement: AnalyzerArrangementFact, duration: 
   return mapAnalyzerTimelineFacts(arrangement.regions ?? [], arrangement.cues ?? [], duration, bpm, meter);
 }
 
-async function prepareReviewStems(stems: readonly { role: string; sourcePath: string; durationSeconds: number }[], outputFolder: string, ffmpegPath: string) {
+function analyzerArrangementDuration(arrangement: AnalyzerArrangementFact, bpm: number, meter: TimeSignature, fallbackDuration: number) {
+  const ends = (arrangement.regions ?? []).map(region => {
+    const endPosition = region.end?.position;
+    if (endPosition) return positionToSeconds({
+      measure: Number(endPosition.measure),
+      beat: Number(endPosition.beat),
+      tick: Number(endPosition.tick ?? 0),
+    }, bpm, meter);
+    const endMs = Number(region.end?.timeMs);
+    if (Number.isFinite(endMs)) return endMs / 1000;
+    const endSeconds = Number(region.end?.timeSeconds ?? region.endSeconds);
+    return Number.isFinite(endSeconds) ? endSeconds : 0;
+  }).filter(value => Number.isFinite(value) && value > 0);
+  return ends.length ? Math.max(...ends) : fallbackDuration;
+}
+
+async function prepareReviewStems(stems: readonly { role: string; sourcePath: string; durationSeconds: number; displayName?: string }[], outputFolder: string, ffmpegPath: string) {
   await rm(outputFolder, { recursive: true, force: true });
   await mkdir(outputFolder, { recursive: true });
   const usedNames = new Set<string>();
@@ -268,6 +285,17 @@ async function prepareReviewStems(stems: readonly { role: string; sourcePath: st
     prepared.push({ ...stem, sourcePath: destination });
   }
   return prepared;
+}
+
+function isPlayableEditorStem(file: { readonly path: string; readonly role?: string; readonly playbackBus?: string | null; readonly playLive?: boolean }) {
+  if (isReferenceAudio(file.path)) return false;
+  if (file.role === "click-reference" || file.role === "cue-reference" || file.role === "ignore") return false;
+  if (file.playLive === true) return true;
+  return file.role === "vocal-stem" || file.playbackBus === "vocals";
+}
+
+function originalStemDisplayName(path: string) {
+  return basename(path.replaceAll("\\", "/"), extname(path)).trim();
 }
 
 async function reviewCuePlan(markers: readonly { position?:MusicalPosition;atSeconds:number;label:string;targetRegionId:string }[], cueFolder: string, outputFolder:string, bpm:number, meter:TimeSignature, ffmpegPath:string) {
@@ -292,7 +320,7 @@ export function cueAudioLookupNames(label: string) {
   const spaced = label.replace(/([A-Za-z])([0-9])$/, "$1 $2").replace(/^Turnaround/i, "Turn Around").replace(/^Turn Arround/i, "Turn Around").replace(/-/g, " ");
   const normalized = spaced.toUpperCase();
   const base = spaced.replace(/\s+\d+$/,"").toUpperCase();
-  const aliases: Record<string, string> = { START: "CountIn.wav", "COUNT OFF": "CountIn.wav", BUILD: "BUILDITUP.wav", REFRAIN: "CHORUS.wav" };
+  const aliases: Record<string, string> = { START: "CountIn.wav", "COUNT OFF": "CountIn.wav", BUILD: "BUILDITUP.wav" };
   return Array.from(new Set([
     aliases[normalized] ?? `${normalized}.wav`,
     `${normalized.replace(/\s+/g, "")}.wav`,

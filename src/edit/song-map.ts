@@ -27,7 +27,7 @@ export interface OriginalSongMap {
   readonly durationSeconds: number;
   readonly reviewState: MapReviewState;
   readonly revision: number;
-  readonly source: { readonly kind: "analyzer" | "reaper" | "app"; readonly path: string; readonly importedAt: string };
+  readonly source: { readonly kind: "analyzer" | "reaper" | "app"; readonly path: string; readonly importedAt: string; readonly sourceFingerprint?: string; readonly sourceArrangementId?: string };
   readonly regions: readonly EditableRegion[];
   readonly cues: readonly EditableCue[];
 }

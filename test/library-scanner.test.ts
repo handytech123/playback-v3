@@ -54,6 +54,57 @@ test("playback-song package is the library gate for editor review", async () => 
   assert.equal(song.analyzerMetadataPath, join(root, "playback-song.json"));
 });
 
+test("vendor pad stems count as playable library audio", async () => {
+  const root = await mkdtemp(join(tmpdir(), "playback-library-pad-stem-"));
+  await writeFile(join(root, "playback-song.json"), JSON.stringify({
+    schema: "playback-analyzer-package/v1",
+    schemaVersion: 1,
+    generatedAt: "2026-08-10T00:00:00.000Z",
+    review: { status: "ready" },
+    master: { catalogId: "Pad Stem", title: "Pad Stem" },
+    timeline: { durationMs: 10000 },
+    audioFiles: [
+      { path: "PAD.wav", role: "pad-stem", playbackBus: "pad", playLive: true },
+      { path: "CLICK.wav", role: "click-reference", playbackBus: "click", playLive: true },
+    ],
+    regions: [{ id: "r1", name: "Intro", start: { position: { measure: 1, beat: 1 } }, end: { position: { measure: 5, beat: 1 } } }],
+    cues: [],
+    click: { playbackPattern: { templateId: "4-4-quarter", events: [{ atSeconds: 0, accent: true }] } },
+  }));
+
+  const result = await scanMasterLibrary([row(root, "Pad Stem")]);
+  const song = result.songs[0]!;
+
+  assert.equal(song.readiness, "needs-review");
+  assert.equal(song.wavCount, 1);
+  assert.equal(song.audioFileCount, 1);
+});
+
+test("reference audio still does not count as playable library audio", async () => {
+  const root = await mkdtemp(join(tmpdir(), "playback-library-reference-audio-"));
+  await writeFile(join(root, "playback-song.json"), JSON.stringify({
+    schema: "playback-analyzer-package/v1",
+    schemaVersion: 1,
+    generatedAt: "2026-08-10T00:00:00.000Z",
+    review: { status: "ready" },
+    master: { catalogId: "Reference Only", title: "Reference Only" },
+    timeline: { durationMs: 10000 },
+    audioFiles: [
+      { path: "CLICK.wav", role: "click-reference", playbackBus: "click", playLive: true },
+      { path: "Guide.wav", role: "cue-reference", playbackBus: "cue", playLive: true },
+    ],
+    regions: [{ id: "r1", name: "Intro", start: { position: { measure: 1, beat: 1 } }, end: { position: { measure: 5, beat: 1 } } }],
+    cues: [],
+    click: { playbackPattern: { templateId: "4-4-quarter", events: [{ atSeconds: 0, accent: true }] } },
+  }));
+
+  const result = await scanMasterLibrary([row(root, "Reference Only")]);
+  const song = result.songs[0]!;
+
+  assert.equal(song.readiness, "needs-analysis");
+  assert.equal(song.audioFileCount, 0);
+});
+
 test("playback-song package with nested MultiTracks live paths requires reanalysis", async () => {
   const root = await mkdtemp(join(tmpdir(), "playback-library-stale-path-"));
   await writeFile(join(root, "playback-song.json"), JSON.stringify({

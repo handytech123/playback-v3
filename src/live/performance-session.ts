@@ -17,6 +17,8 @@ export interface PerformanceEffects {
   setBusGain?(bus:LiveBus,gain:number):void;
   setMixerChannel?(channel:MixerChannelState):void;
   setMasterGain?(gain:number):void;
+  setSlidesMidiEnabled?(enabled:boolean):void;
+  setSurfaceMixerMidiEnabled?(enabled:boolean):void;
   beginTimedSongTransition?(plan:SongTransitionPlan):Promise<PerformanceReadinessReport | void>;
   selectSong(index: number): Promise<PerformanceReadinessReport | void>;
 }
@@ -26,6 +28,8 @@ export interface PerformanceSnapshot {
   readonly loopRegionId: string | null; readonly channels: LiveChannels; readonly routes: RoutingPlan;
   readonly gains:Readonly<Record<LiveBus,number>>;
   readonly mixer:LiveMixerState;
+  readonly slidesMidiEnabled:boolean;
+  readonly surfaceMixerMidiEnabled:boolean;
   readonly panicActive:boolean;readonly recoveryRegionId:string|null;readonly recoveryCueAtSeconds:number|null;readonly recoverAtSeconds:number|null;
 }
 
@@ -42,7 +46,7 @@ export class PerformanceSession {
     if (!manifest.songs[initialSongIndex]) throw new Error("Initial song is outside the confirmed set");
     validateRoutingPlan(routes);
     const initialSong=manifest.songs[initialSongIndex]!;
-    this.current={ready:readiness.ready,readiness,fault:null,songIndex:initialSongIndex,positionSeconds:0,playing:false,currentRegionId:initialSong.regions[0]?.id??null,loopRegionId:null,channels:{music:true,click:true,cue:true,pad:false},gains:{...gains},mixer:createMixerState(initialSong),routes,panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};
+    this.current={ready:readiness.ready,readiness,fault:null,songIndex:initialSongIndex,positionSeconds:0,playing:false,currentRegionId:initialSong.regions[0]?.id??null,loopRegionId:null,channels:{music:true,click:true,cue:true,pad:false},gains:{...gains},mixer:createMixerState(initialSong),slidesMidiEnabled:true,surfaceMixerMidiEnabled:true,routes,panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};
   }
   get snapshot():PerformanceSnapshot{return structuredClone(this.current);}
   get confirmedSet():ConfirmedSetManifest{return this.manifest;}
@@ -66,6 +70,8 @@ export class PerformanceSession {
   setBusGain(bus:LiveBus,gain:number):void{this.requireReady();if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("Bus gain must be between 0 and 125%");this.effects.setBusGain?.(bus,gain);this.current={...this.current,gains:{...this.current.gains,[bus]:gain}};}
   setMixerChannel(index:number,patch:Partial<Pick<MixerChannelState,"gain"|"muted"|"solo"|"iem">>):void{this.requireReady();const current=this.current.mixer.channels[index];if(!current)throw new Error("Mixer channel is outside the armed song");const next={...current,...patch};if(!Number.isFinite(next.gain)||next.gain<0||next.gain>1.25)throw new Error("Mixer gain must be between 0 and 125%");this.effects.setMixerChannel?.(next);const channels=[...this.current.mixer.channels];channels[index]=next;this.current={...this.current,mixer:{...this.current.mixer,channels}};}
   setMasterGain(gain:number):void{this.requireReady();if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("Master gain must be between 0 and 125%");this.effects.setMasterGain?.(gain);this.current={...this.current,mixer:{...this.current.mixer,masterGain:gain}};}
+  setSlidesMidiEnabled(enabled:boolean):void{this.requireReady();this.effects.setSlidesMidiEnabled?.(enabled);this.current={...this.current,slidesMidiEnabled:enabled};}
+  setSurfaceMixerMidiEnabled(enabled:boolean):void{this.requireReady();this.effects.setSurfaceMixerMidiEnabled?.(enabled);this.current={...this.current,surfaceMixerMidiEnabled:enabled};}
   setRoutingPlan(routes:RoutingPlan):void{validateRoutingPlan(routes);this.current={...this.current,routes:structuredClone(routes)};}
   async selectSong(index:number):Promise<void>{const song=this.manifest.songs[index];if(!song)throw new Error("Song is outside the confirmed set");this.effects.stop();const readiness=await this.effects.selectSong(index),nextReadiness=readiness??this.current.readiness;this.current={...this.current,readiness:nextReadiness,ready:nextReadiness.ready,songIndex:index,positionSeconds:0,playing:false,currentRegionId:song.regions[0]?.id??null,loopRegionId:null,fault:null,channels:{...this.current.channels,pad:false},mixer:createMixerState(song),panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};}
   async cueNext():Promise<void>{const index=this.current.songIndex+1,song=this.manifest.songs[index];if(!song)throw new Error("There is no next song in the confirmed set");this.effects.stop();const readiness=await this.effects.selectSong(index),nextReadiness=readiness??this.current.readiness;if(!nextReadiness.ready)throw new Error("Next song did not pass performance readiness");this.effects.setBus("pad",true);this.current={...this.current,readiness:nextReadiness,ready:true,songIndex:index,positionSeconds:0,playing:false,currentRegionId:song.regions[0]?.id??null,loopRegionId:null,fault:null,channels:{...this.current.channels,pad:true},mixer:createMixerState(song),panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};}
@@ -84,5 +90,5 @@ export type KeyboardAction="play-pause"|"panic"|"previous-section"|"next-section
 export function keyboardAction(key:string):KeyboardAction|null{const normalized=key.toLowerCase();return normalized===" "?"play-pause":normalized==="escape"?"panic":normalized==="arrowleft"?"previous-section":normalized==="arrowright"?"next-section":normalized==="l"?"loop":normalized==="c"?"toggle-click":normalized==="q"?"toggle-cue":normalized==="p"?"toggle-pad":null;}
 export function validateRoutingPlan(plan:RoutingPlan):void{const used=new Set<number>();for(const [bus,route] of Object.entries(plan)){if(!Number.isInteger(route.firstOutput)||route.firstOutput<1)throw new Error(`${bus} route must begin on a positive output`);for(let channel=route.firstOutput;channel<route.firstOutput+route.channels;channel+=1){if(used.has(channel))throw new Error(`Output ${channel} is assigned more than once`);used.add(channel);}}}
 function regionAt(song:PreparedSong,seconds:number):Region|undefined{return song.regions.find((region)=>seconds>=region.startSeconds&&seconds<region.endSeconds)??song.regions.at(-1);}
-function createMixerState(song:PreparedSong):LiveMixerState{const channels:MixerChannelState[]=song.stems.map((_,index)=>({id:`stem-${index}`,index,kind:"stem",gain:1,muted:false,solo:false,iem:false}));for(const kind of ["click","cue","pad"] as const){const index=channels.length;channels.push({id:kind,index,kind,gain:1,muted:false,solo:false,iem:false});}return{masterGain:1,channels};}
+export function createMixerState(song:PreparedSong):LiveMixerState{const channels:MixerChannelState[]=song.stems.map((_,index)=>{const mix=song.stemMix?.find(item=>item.index===index),gain=Number(mix?.gain??1);return{id:`stem-${index}`,index,kind:"stem",gain:Number.isFinite(gain)?Math.max(0,Math.min(1.25,gain)):1,muted:Boolean(mix?.muted),solo:Boolean(mix?.solo),iem:Boolean(mix?.iem)};});for(const kind of ["click","cue","pad"] as const){const index=channels.length;channels.push({id:kind,index,kind,gain:1,muted:false,solo:false,iem:false});}return{masterGain:1,channels};}
 function unverifiedReadiness():PerformanceReadinessReport{return{ready:true,status:"Ready with warnings",checks:[{id:"runtime",label:"Runtime readiness",level:"warning",detail:"Runtime readiness was not supplied by the desktop host"}]};}

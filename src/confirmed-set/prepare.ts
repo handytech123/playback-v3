@@ -16,6 +16,7 @@ export interface StemSource {
   readonly role: string;
   readonly durationSeconds: number;
   readonly sha256: string;
+  readonly displayName?: string;
 }
 
 export interface SongPreparationInput {
@@ -85,7 +86,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
         }
         await prepareAudioSource(sourcePath, destinationPath, input.ffmpegPath);
         copiedBytes += before.size;
-        cachedStems.push({ role: source.role, sourcePath: destinationPath, durationSeconds: source.durationSeconds });
+        cachedStems.push({ role: source.role, sourcePath: destinationPath, durationSeconds: source.durationSeconds, ...(source.displayName ? { displayName: source.displayName } : {}) });
         completedUnits+=1;report(`Caching ${inputSong.preparedSong.song.title} · ${source.role}`);
       }
 

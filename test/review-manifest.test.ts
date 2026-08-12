@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ANALYZER_SONG_MAP_VERSION, correctedReviewCueAt, cueAudioLookupNames, normalizeReviewKey, prepareCandidateReview, selectedSongClickTemplate } from "../src/library/review-manifest.js";
+import { isReferenceAudio } from "../src/library/audio-role.js";
 import { discoverPreparedLibrary } from "../src/prep/operator-workflow.js";
 
 async function writeSilentWav(path: string, seconds = 1) {
@@ -26,7 +27,15 @@ async function writeSilentWav(path: string, seconds = 1) {
 }
 
 test("analyzer song-map format has an explicit invalidation version",()=>{
-  assert.equal(ANALYZER_SONG_MAP_VERSION,13);
+  assert.equal(ANALYZER_SONG_MAP_VERSION,14);
+});
+
+test("vendor pad stems are playable stems, not reference audio", () => {
+  assert.equal(isReferenceAudio("CLICK.wav"), true);
+  assert.equal(isReferenceAudio("Guide.wav"), true);
+  assert.equal(isReferenceAudio("CUES.wav"), true);
+  assert.equal(isReferenceAudio("PAD.wav"), false);
+  assert.equal(isReferenceAudio("Synth Pad.wav"), false);
 });
 
 test("playback-song package selects the live click template",async()=>{
@@ -144,4 +153,93 @@ test("review preparation exposes Analyzer RPP arrangements as prepared choices",
   assert.equal((result.manifest as any).review.arrangementCount, 1);
   const prepared = await discoverPreparedLibrary([result.manifestPath]);
   assert.deepEqual(prepared.map(item => item.arrangement), ["Original Song", "Short Version"]);
+});
+
+test("review preparation keeps analyzer pad-stem in the expanded stem list", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vendor-pad-stem-"));
+  const song = join(root, "Song");
+  const cues = join(root, "cues");
+  await mkdir(song, { recursive: true });
+  await mkdir(cues, { recursive: true });
+  await Promise.all(["INTRO.wav", "TWO.wav", "THREE.wav", "FOUR.wav"].map(name => writeSilentWav(join(cues, name))));
+  await writeSilentWav(join(song, "Bass.wav"), 4);
+  await writeSilentWav(join(song, "PAD.wav"), 4);
+  await writeFile(join(song, "playback-song.json"), JSON.stringify({
+    schema: "playback-analyzer-package/v1",
+    schemaVersion: 1,
+    generatedAt: "now",
+    review: { status: "ready" },
+    master: { catalogId: "1", title: "Song", originalKey: "C" },
+    keyAnalysis: { approvedKey: "C" },
+    timeline: { durationMs: 4000 },
+    audioFiles: [
+      { path: "Bass.wav", playLive: true, playbackBus: "bass", role: "music-stem", sha256: "bass" },
+      { path: "PAD.wav", playLive: true, playbackBus: "pad", role: "pad-stem", sha256: "pad" },
+      { path: "CLICK.wav", playLive: true, playbackBus: "click", role: "click-reference", sha256: "click" },
+    ],
+    regions: [{ id: "r1", name: "Intro", start: { position: { measure: 1, beat: 1, tick: 0 } }, end: { position: { measure: 2, beat: 1, tick: 0 } } }],
+    cues: [{ phrase: "Intro", cueStart: { position: { measure: 1, beat: 1, tick: 0 } }, targetRegionId: "r1" }],
+    click: { playbackPattern: { templateId: "4-4-quarter", events: [{ atSeconds: 0, accent: true }] } },
+  }));
+
+  const result = await prepareCandidateReview({
+    catalogId: "1",
+    sharedMetadataRoot: root,
+    libraryRoot: root,
+    cacheRoot: join(root, "cache"),
+    clickRegularPath: join(root, "click.wav"),
+    clickAccentPath: join(root, "accent.wav"),
+    cueFolder: cues,
+    padFolder: root,
+    ffmpegPath: "ffmpeg",
+    master: { catalogId: "1", title: "Song", artist: "Artist", vendor: "Loop Community", key: "C", bpm: 120, timeSignature: "4/4", folderPath: song },
+  });
+
+  assert.deepEqual(result.manifest.songs[0]!.stems.map(stem => stem.role), ["bass", "pad"]);
+  assert.match(result.manifest.songs[0]!.stems[1]!.sourcePath, /02-PAD\.wav$/);
+});
+
+test("review preparation keeps vocal stems in editor mixers even when analyzer playLive is false", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vocal-stems-"));
+  const song = join(root, "Song");
+  const cues = join(root, "cues");
+  await mkdir(song, { recursive: true });
+  await mkdir(cues, { recursive: true });
+  await Promise.all(["INTRO.wav", "TWO.wav", "THREE.wav", "FOUR.wav"].map(name => writeSilentWav(join(cues, name))));
+  await writeSilentWav(join(song, "Bass.wav"), 4);
+  await writeSilentWav(join(song, "BGVS.wav"), 4);
+  await writeSilentWav(join(song, "CUES.wav"), 4);
+  await writeFile(join(song, "playback-song.json"), JSON.stringify({
+    schema: "playback-analyzer-package/v1",
+    schemaVersion: 1,
+    generatedAt: "now",
+    review: { status: "ready" },
+    master: { catalogId: "1", title: "Song", originalKey: "C" },
+    keyAnalysis: { approvedKey: "C" },
+    timeline: { durationMs: 4000 },
+    audioFiles: [
+      { path: "Bass.wav", playLive: true, playbackBus: "bass", role: "music-stem", sha256: "bass" },
+      { path: "BGVS.wav", playLive: false, playbackBus: "vocals", role: "vocal-stem", sha256: "bgvs" },
+      { path: "CUES.wav", playLive: false, role: "cue-reference", sha256: "cue" },
+    ],
+    regions: [{ id: "r1", name: "Intro", start: { position: { measure: 1, beat: 1, tick: 0 } }, end: { position: { measure: 2, beat: 1, tick: 0 } } }],
+    cues: [{ phrase: "Intro", cueStart: { position: { measure: 1, beat: 1, tick: 0 } }, targetRegionId: "r1" }],
+    click: { playbackPattern: { templateId: "4-4-quarter", events: [{ atSeconds: 0, accent: true }] } },
+  }));
+
+  const result = await prepareCandidateReview({
+    catalogId: "1",
+    sharedMetadataRoot: root,
+    libraryRoot: root,
+    cacheRoot: join(root, "cache"),
+    clickRegularPath: join(root, "click.wav"),
+    clickAccentPath: join(root, "accent.wav"),
+    cueFolder: cues,
+    padFolder: root,
+    ffmpegPath: "ffmpeg",
+    master: { catalogId: "1", title: "Song", artist: "Artist", vendor: "Loop Community", key: "C", bpm: 120, timeSignature: "4/4", folderPath: song },
+  });
+
+  assert.deepEqual(result.manifest.songs[0]!.stems.map(stem => stem.role), ["bass", "vocals"]);
+  assert.deepEqual(result.manifest.songs[0]!.stems.map(stem => stem.displayName), ["Bass", "BGVS"]);
 });
