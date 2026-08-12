@@ -73,6 +73,7 @@ let midiInputRouter:MidiInputRouter|null=null;
 let surfaceMixerMidiEnabled=true;
 let libraryActivity:{sync:"idle"|"running"|"complete"|"fault";analyzer:"idle"|"scanning"|"waiting";startedAt:string|null;finishedAt:string|null;message:string;lastScan:any|null}={sync:"idle",analyzer:"idle",startedAt:null,finishedAt:null,message:"Library has not been scanned in this session.",lastScan:null};
 
+const SETLIST_EXPORT_DIRECTORY="D:\\Dropbox\\Worship\\Setlists";
 const EMPTY_SONG_ID="__playback_empty__";
 const emptyWaveform={schemaVersion:1,source:"",sampleRate:44100,channels:1,durationSeconds:1,buckets:[]};
 function emptyStartupManifest():ConfirmedSetManifest{return{schemaVersion:1,id:"empty-startup",name:"No Confirmed Set",confirmedAt:new Date(0).toISOString(),songs:[{song:{id:EMPTY_SONG_ID as any,title:"No Song Loaded",artist:"",vendor:"",originalKey:"C",originalBpm:120,originalTimeSignature:{numerator:4,denominator:4}},selectedKey:"C",selectedBpm:120,timeSignature:{numerator:4,denominator:4},durationSeconds:1,stems:[],regions:[],cues:[],cacheFingerprint:"empty-startup"}]};}
@@ -218,6 +219,8 @@ async function createWindow(): Promise<void> {
   });
   ipcMain.handle("prep:review",async(_event,catalogId:string)=>{const catalog=await importMasterCatalog(productionDefaults.masterWorkbookPath),master=catalog.songs.find(song=>song.catalogId===catalogId);if(!master)throw new Error("Song is not present in the master catalog");const review=await prepareCandidateReview({catalogId,master,sharedMetadataRoot:productionDefaults.sharedMetadataRoot,libraryRoot:productionDefaults.libraryRoot,cacheRoot:join(projectRoot,".playback-cache","library-review"),clickRegularPath:clickSoundSettings.normalPath,clickAccentPath:clickSoundSettings.accentPath,cueFolder:productionDefaults.cueFolder,padFolder:productionDefaults.padFolder,ffmpegPath:runtimeFfmpegPath}),reviewChoices=await discoverPreparedLibrary([review.manifestPath]),choice=reviewChoices.find(item=>item.arrangement==="Original Song")??reviewChoices[0];if(!choice)throw new Error("Prepared review song could not be loaded");operatorSetlist=addPreparedSong(operatorSetlist,choice);await saveOperatorSetlist(operatorSetlistPath,operatorSetlist);await pruneRuntimeDataForSetlist(operatorSetlist);return prepResponse({addedItemId:operatorSetlist.items.at(-1)?.itemId,manifestPath:review.manifestPath});});
   ipcMain.handle("prep:command",async(_event,command:any)=>{if(command.action==="add"){const choice=(await preparedChoices()).find(item=>item.id===command.choiceId);if(!choice)throw new Error("Prepared song version is no longer available");operatorSetlist=addPreparedSong(operatorSetlist,choice);}else if(command.action==="replace"){const choice=(await preparedChoices()).find(item=>item.id===command.choiceId);if(!choice)throw new Error("Prepared song version is no longer available");operatorSetlist=replacePreparedSong(operatorSetlist,command.itemId,choice);}else if(command.action==="remove")operatorSetlist=removePreparedSong(operatorSetlist,command.itemId);else if(command.action==="move")operatorSetlist=movePreparedSong(operatorSetlist,command.itemId,command.direction);else if(command.action==="reorder")operatorSetlist=reorderPreparedSong(operatorSetlist,command.itemId,command.beforeItemId??null);else if(command.action==="transition")operatorSetlist=setOperatorSetTransition(operatorSetlist,command.itemId,command.type as SongTransitionType,command.continuePad!==false);else if(command.action==="rename")operatorSetlist=renameOperatorSetlist(operatorSetlist,command.name);else if(command.action==="clear")operatorSetlist={...operatorSetlist,items:[],updatedAt:new Date().toISOString()};else throw new Error("Unknown setlist command");await saveOperatorSetlist(operatorSetlistPath,operatorSetlist);editorContexts.clear();await pruneRuntimeDataForSetlist(operatorSetlist);return prepResponse();});
+  ipcMain.handle("prep:export-setlist",async()=>{const exportPath=await exportOperatorSetlist(operatorSetlist);return{path:exportPath,setlist:operatorSetlist};});
+  ipcMain.handle("prep:import-setlist",async()=>{const chosen=await dialog.showOpenDialog(window!,{title:"Import Playback Setlist",defaultPath:SETLIST_EXPORT_DIRECTORY,properties:["openFile"],filters:[{name:"Playback setlists",extensions:["json"]}]});if(chosen.canceled||!chosen.filePaths[0])return prepResponse({cancelled:true});const imported=parseExportedSetlist(JSON.parse(await readFile(chosen.filePaths[0],"utf8")));const prepared=await ensureSetlistOriginalVersions(await discoverPreparedLibrary(await allPreparedManifestPaths(imported)),imported,clickSoundSettings,runtimeFfmpegPath);operatorSetlist=relinkImportedSetlist(imported,prepared);await saveOperatorSetlist(operatorSetlistPath,operatorSetlist);editorContexts.clear();editorContext=null;editor=null;arrangementEditor=null;await pruneRuntimeDataForSetlist(operatorSetlist);return prepResponse({importedPath:chosen.filePaths[0]});});
   ipcMain.handle("prep:load-item",async(_event,itemId:string)=>{const report=(progress:number,label:string)=>sendToRenderer("editor:load-status",{itemId,progress,label}),item=operatorSetlist.items.find(candidate=>candidate.itemId===itemId);if(!item)throw new Error("Set song is no longer available");const choices=await preparedChoices(),found=choices.find(candidate=>candidate.id===item.id)??choices.find(candidate=>candidate.songId===item.songId&&candidate.arrangement===item.arrangement);if(!found)throw new Error("The selected Original Song or arrangement is not prepared");const choice:any=await repairLegacyReviewCues(found);report(25,choice.arrangement==="Original Song"?"Loading Original Song":"Preparing selected arrangement");await hydrateReviewSongLiveAssets({manifestPath:choice.manifestPath,songIndex:choice.songIndex,cueFolder:productionDefaults.cueFolder,ffmpegPath:runtimeFfmpegPath});const alreadyLoaded=await loadEditorContext(choice.manifestPath,choice.songIndex);if(!alreadyLoaded)report(40,"Preparing song workspace");const readyState=await ensureSourceSongArmed(choice.manifestPath,choice.songIndex);const workspace=await workspaceState();if(!alreadyLoaded)report(100,"Ready to edit");return{itemId,manifestPath:choice.manifestPath,workspace,ready:readyState};});
   ipcMain.handle("transitions:get",()=>transitionSettings);
   ipcMain.handle("transitions:set",async(_event,value:Partial<SongTransitionSettings>)=>{transitionSettings=normalizeSongTransitionSettings(value);await saveTransitionSettings(transitionSettings);return transitionSettings;});
@@ -342,6 +345,9 @@ function installWindowsMenu(target:BrowserWindow):void{
   const template:MenuItemConstructorOptions[]=[
     {label:"File",submenu:[
       {label:"Settings",accelerator:"CmdOrCtrl+,",click:rendererAction("settings")},
+      {label:"Import Setlist",click:rendererAction("import-setlist")},
+      {label:"Export Setlist",click:rendererAction("export-setlist")},
+      {type:"separator"},
       {label:"Import Reaper Arrangement",accelerator:"CmdOrCtrl+I",click:rendererAction("import-reaper")},
       {type:"separator"},
       {label:"Exit Playback V3",accelerator:"Alt+F4",click:()=>app.quit()},
@@ -433,6 +439,35 @@ function preparedVersionSourcePriority(choice:PreparedLibraryChoice):number{
   if(cacheRel!==""&&!cacheRel.startsWith("..")&&!isAbsolute(cacheRel))return 3;
   return 4;
 }
+
+async function exportOperatorSetlist(setlist:OperatorSetlist):Promise<string>{
+  if(!setlist.items.length)throw new Error("Add at least one song before exporting the setlist");
+  await mkdir(SETLIST_EXPORT_DIRECTORY,{recursive:true});
+  const date=new Date(),stamp=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}-${String(date.getHours()).padStart(2,"0")}${String(date.getMinutes()).padStart(2,"0")}`;
+  const path=join(SETLIST_EXPORT_DIRECTORY,`${safeSetlistFilename(setlist.name)}-${stamp}.playback-setlist.json`);
+  const payload={schema:"playback-v3-setlist-export/v1",schemaVersion:1,exportedAt:new Date().toISOString(),setlist};
+  const temporary=`${path}.${process.pid}.tmp`;
+  await writeFile(temporary,`${JSON.stringify(payload,null,2)}\n`,"utf8");
+  await rename(temporary,path);
+  return path;
+}
+
+function parseExportedSetlist(value:any):OperatorSetlist{
+  const setlist=value?.schema==="playback-v3-setlist-export/v1"?value.setlist:value;
+  if(setlist?.schemaVersion!==1||!Array.isArray(setlist.items)||typeof setlist.name!=="string")throw new Error("That file is not a Playback V3 setlist export");
+  return setlist as OperatorSetlist;
+}
+
+function relinkImportedSetlist(imported:OperatorSetlist,prepared:readonly PreparedLibraryChoice[]):OperatorSetlist{
+  const items=imported.items.map(item=>{
+    const match=prepared.find(choice=>String(choice.songId)===String(item.songId)&&choice.arrangement===item.arrangement)??prepared.find(choice=>choice.title===item.title&&choice.arrangement===item.arrangement);
+    if(!match)throw new Error(`${item.title} - ${item.arrangement} is not prepared on this computer. Update Metadata + Library or import that arrangement first.`);
+    return{...match,itemId:item.itemId,...(item.transitionToNext?{transitionToNext:item.transitionToNext}:{}),...(item.stemMix?{stemMix:item.stemMix}:{})};
+  });
+  return{schemaVersion:1,id:imported.id,name:imported.name,items,updatedAt:new Date().toISOString()};
+}
+
+function safeSetlistFilename(value:string):string{return(value.trim()||"Sunday Set").replace(/[<>:"/\\|?*\x00-\x1f]+/g,"-").replace(/\s+/g," ").replace(/^-|-$/g,"").slice(0,80)||"Sunday Set";}
 
 async function pruneRuntimeDataForSetlist(setlist:OperatorSetlist):Promise<void>{
   const cacheRoot=resolve(projectRoot,".playback-cache"),dataRoot=resolve(projectRoot,".playback-data"),allowedManifests=new Set(setlist.items.map(item=>resolve(item.manifestPath).toLowerCase()));
