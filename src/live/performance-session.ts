@@ -34,8 +34,8 @@ export interface PerformanceSnapshot {
 }
 
 export const DEFAULT_ROUTES: RoutingPlan = {
-  music: { firstOutput: 15, channels: 1 }, click: { firstOutput: 1, channels: 1 },
-  cue: { firstOutput: 2, channels: 1 }, pad: { firstOutput: 16, channels: 1 },
+  music: { firstOutput: 4, channels: 1 }, click: { firstOutput: 1, channels: 1 },
+  cue: { firstOutput: 2, channels: 1 }, pad: { firstOutput: 12, channels: 1 },
 };
 
 export class PerformanceSession {
@@ -54,6 +54,7 @@ export class PerformanceSession {
   get song():PreparedSong{return this.manifest.songs[this.current.songIndex]!;}
   play():void{this.requireReady();this.effects.play();this.current={...this.current,playing:true};}
   pause():void{this.requireReady();this.effects.pause();this.current={...this.current,playing:false};}
+  seek(seconds:number):void{this.requireReady();const position=Math.max(0,Math.min(Number(seconds),this.song.durationSeconds));if(!Number.isFinite(position))throw new Error("Seek position must be a finite number");this.effects.seek(position);this.current={...this.current,positionSeconds:position,currentRegionId:regionAt(this.song,position)?.id??null};}
   stop():void{this.effects.stop();this.current={...this.current,playing:false,positionSeconds:0,currentRegionId:this.song.regions[0]?.id??null,loopRegionId:null,panicActive:false,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null};}
   panic():void{this.requireReady();if(!this.current.playing)throw new Error("Musical Panic is available while the timeline is playing");this.effects.panic();this.current={...this.current,panicActive:true,recoveryRegionId:null,recoveryCueAtSeconds:null,recoverAtSeconds:null,loopRegionId:null,channels:{...this.current.channels,pad:true}};}
   armRecovery(regionId:string):void{if(!this.current.panicActive)throw new Error("Panic recovery is not active");const region=this.region(regionId);if(!region)throw new Error("Recovery section is not in the armed song");const cue=this.song.liveAssets?.cues.find((item)=>item.targetRegionId===regionId);if(!cue)throw new Error("Recovery section has no prepared announcement");const leadSeconds=this.cueLeadSeconds(region,cue),regions=this.song.regions;let index=Math.max(0,regions.findIndex((item)=>this.current.positionSeconds>=item.startSeconds&&this.current.positionSeconds<item.endSeconds)),boundary=regions[index]?.endSeconds??this.current.positionSeconds,cueAt=boundary-leadSeconds;if(cueAt<=this.current.positionSeconds+.05&&index+1<regions.length){boundary=regions[++index]!.endSeconds;cueAt=boundary-leadSeconds;}if(cueAt<=this.current.positionSeconds)throw new Error("Not enough song remains to give the full recovery announcement");this.effects.announceRecovery(regionId,cueAt,null);this.current={...this.current,recoveryRegionId:regionId,recoveryCueAtSeconds:cueAt,recoverAtSeconds:boundary};}

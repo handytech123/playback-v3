@@ -345,17 +345,16 @@ Classification priority is:
 Each audio file must include a detailed role and a Playback bus. Supported music buses are:
 
 - `drums`
-- `percussion`
 - `bass`
 - `acoustic`
 - `electric`
-- `piano`
-- `organ`
-- `synths`
-- `orchestra`
+- `keys`
+- `strings`
 - `vocals`
-- `misc`
+- `other`
 - `pad`
+
+Piano is classified to `keys`. Percussion and loops are classified to `drums`.
 
 Reference tracks use `click-reference` or `cue-reference` and set `playLive` to `false`.
 
@@ -440,7 +439,7 @@ This is a complete four-measure 4/4 demonstration at 120 BPM and 48 kHz. The cue
   },
   "audioFiles": [
     {
-      "id": "stem-piano-01",
+      "id": "stem-keys-01",
       "path": "Piano.wav",
       "format": "wav",
       "sha256": "45c91c1f4223e014ddc9c73ca9031c1c5ef5a64fb917351a589f3014525c8f2a",
@@ -449,8 +448,8 @@ This is a complete four-measure 4/4 demonstration at 120 BPM and 48 kHz. The cue
       "durationSamples": 384000,
       "durationMs": 8000,
       "timelineOffsetSamples": 0,
-      "role": "piano",
-      "playbackBus": "piano",
+      "role": "keys",
+      "playbackBus": "keys",
       "playLive": true,
       "classification": {
         "method": "filename",
@@ -648,7 +647,7 @@ This is a complete four-measure 4/4 demonstration at 120 BPM and 48 kHz. The cue
     "mode": "major",
     "confidence": 0.93,
     "status": "confirmed-by-master",
-    "supportingAudioIds": ["stem-piano-01"],
+    "supportingAudioIds": ["stem-keys-01"],
     "excludedAudio": [
       { "audioId": "stem-drums-01", "reason": "non-harmonic" },
       { "audioId": "reference-click-01", "reason": "click-reference" },

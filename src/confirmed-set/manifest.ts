@@ -22,7 +22,7 @@ export interface ConfirmedSetShowState {
 
 export const DEFAULT_SHOW_STATE: ConfirmedSetShowState = {
   mixer: { music: 1, click: 1, cue: 1, pad: 1 },
-  routing: { music: { firstOutput: 15, channels: 1 }, click: { firstOutput: 1, channels: 1 }, cue: { firstOutput: 2, channels: 1 }, pad: { firstOutput: 16, channels: 1 } },
+  routing: { music: { firstOutput: 4, channels: 1 }, click: { firstOutput: 1, channels: 1 }, cue: { firstOutput: 2, channels: 1 }, pad: { firstOutput: 12, channels: 1 } },
   transition: { cueNextEnablesPad: true, stopBeforeSongChange: true },
   panic: { musicFadeMs: 120, padFadeMs: 400, recoveryAtSectionBoundary: true },
 };

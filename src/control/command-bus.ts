@@ -1,9 +1,11 @@
 import type { LiveBus, PerformanceSession, PerformanceSnapshot } from "../live/performance-session.js";
 import { preparedControl } from "../domain/song.js";
+import type { MusicalPosition, TimeSignature } from "../domain/song.js";
 
 export type ControlSource = "ui" | "keyboard" | "remote" | "osc" | "midi" | "system";
 export type PlaybackCommand =
   | { readonly type: "transport.play" | "transport.pause" | "transport.stop" | "transport.toggle" | "panic.enter" | "section.next" | "section.previous" | "song.cue-next" }
+  | { readonly type: "transport.seek"; readonly seconds: number }
   | { readonly type: "panic.recover" | "section.jump" | "section.loop" | "section.repeat-once"; readonly regionId: string }
   | { readonly type: "song.select"; readonly index: number }
   | { readonly type: "bus.set"; readonly bus: LiveBus; readonly enabled: boolean }
@@ -14,7 +16,7 @@ export type PlaybackCommand =
 
 export interface CommandEnvelope { readonly id: string; readonly source: ControlSource; readonly issuedAt: string; readonly command: PlaybackCommand; }
 export interface CommandResult { readonly id: string; readonly ok: boolean; readonly completedAt: string; readonly state: PerformanceSnapshot; readonly error?: string; }
-export interface ControlState { readonly revision: number; readonly updatedAt: string; readonly setName: string; readonly songs: readonly { index: number; title: string; artist: string; arrangement:string;key:string;bpm:number;durationSeconds:number;regions: readonly { id: string; name: string; startSeconds: number; endSeconds: number }[];proPresenterMidi:readonly {atSeconds:number;status:number;data1:number;data2:number}[] }[]; readonly transitions:readonly {fromSongIndex:number;toSongIndex:number;type:string;durationSeconds:number;continuePad:boolean}[];readonly performance: PerformanceSnapshot; }
+export interface ControlState { readonly revision: number; readonly updatedAt: string; readonly setName: string; readonly songs: readonly { index: number; title: string; artist: string; arrangement:string;key:string;bpm:number;timeSignature:TimeSignature;durationSeconds:number;waveformPath?:string;regions: readonly { id: string; name: string; startSeconds: number; endSeconds: number; startPosition?:MusicalPosition; endPosition?:MusicalPosition }[];cues:readonly { phrase:string; atSeconds:number; targetRegionId:string; position?:MusicalPosition }[];proPresenterMidi:readonly {atSeconds:number;status:number;data1:number;data2:number}[] }[]; readonly transitions:readonly {fromSongIndex:number;toSongIndex:number;type:string;durationSeconds:number;continuePad:boolean}[];readonly performance: PerformanceSnapshot; }
 
 type StateListener = (state: ControlState) => void;
 type ResultListener = (result: CommandResult) => void;
@@ -29,7 +31,7 @@ export class PlaybackCommandBus {
 
   state(): ControlState {
     const manifest = this.session.confirmedSet;
-    return { revision: this.revision, updatedAt: new Date().toISOString(), setName: this.setName, songs: manifest.songs.map((song, index) => ({ index, title: song.song.title, artist: song.song.artist, arrangement:song.arrangement?.name??"Original Song",key:song.selectedKey,bpm:song.selectedBpm,durationSeconds:song.durationSeconds,regions: song.regions.map(({ id, name, startSeconds, endSeconds }) => ({ id, name, startSeconds, endSeconds })),proPresenterMidi:(preparedControl(song)?.proPresenterMidi??[]).map(({atSeconds,status,data1,data2})=>({atSeconds,status,data1,data2})) })),transitions:(manifest.transitions??[]).map(({fromSongIndex,toSongIndex,type,durationSeconds,continuePad})=>({fromSongIndex,toSongIndex,type,durationSeconds,continuePad})), performance: this.session.snapshot };
+    return { revision: this.revision, updatedAt: new Date().toISOString(), setName: this.setName, songs: manifest.songs.map((song, index) => ({ index, title: song.song.title, artist: song.song.artist, arrangement:song.arrangement?.name??"Original Song",key:song.selectedKey,bpm:song.selectedBpm,timeSignature:song.timeSignature,durationSeconds:song.durationSeconds,...(song.waveformPath?{waveformPath:song.waveformPath}:{}),regions: song.regions.map(({ id, name, startSeconds, endSeconds, startPosition, endPosition }) => ({ id, name, startSeconds, endSeconds, ...(startPosition?{startPosition}:{}), ...(endPosition?{endPosition}:{}) })),cues:(song.liveAssets?.cues??song.cues.map(cue=>({label:cue.phrase,atSeconds:cue.atSeconds,targetRegionId:cue.targetRegionId,position:cue.position}))).map(cue=>({phrase:cue.label,atSeconds:cue.atSeconds,targetRegionId:cue.targetRegionId,...(cue.position?{position:cue.position}:{})})),proPresenterMidi:(preparedControl(song)?.proPresenterMidi??[]).map(({atSeconds,status,data1,data2})=>({atSeconds,status,data1,data2})) })),transitions:(manifest.transitions??[]).map(({fromSongIndex,toSongIndex,type,durationSeconds,continuePad})=>({fromSongIndex,toSongIndex,type,durationSeconds,continuePad})), performance: this.session.snapshot };
   }
 
   dispatch(command: PlaybackCommand, source: ControlSource = "system"): Promise<CommandResult> {
@@ -50,6 +52,7 @@ export class PlaybackCommandBus {
       else if (command.type === "transport.pause") this.session.pause();
       else if (command.type === "transport.stop") this.session.stop();
       else if (command.type === "transport.toggle") this.session.snapshot.playing?this.session.pause():this.session.play();
+      else if (command.type === "transport.seek") this.session.seek(command.seconds);
       else if (command.type === "panic.enter") this.session.panic();
       else if (command.type === "panic.recover") this.session.armRecovery(command.regionId);
       else if (command.type === "section.jump") this.session.jumpToRegion(command.regionId);
@@ -83,6 +86,7 @@ export function parsePlaybackCommand(value: unknown): PlaybackCommand {
   if (typeof type !== "string") throw new Error("Command type is required");
   const simple = ["transport.play", "transport.pause", "transport.stop", "transport.toggle", "panic.enter", "section.next", "section.previous", "song.cue-next"] as const;
   if (simple.includes(type as typeof simple[number])) return { type: type as typeof simple[number] };
+  if (type === "transport.seek") { const seconds = Number(item.seconds); if (!Number.isFinite(seconds) || seconds < 0) throw new Error("seconds must be a non-negative number"); return { type, seconds }; }
   if (["panic.recover", "section.jump", "section.loop", "section.repeat-once"].includes(type)) {
     if (typeof item.regionId !== "string" || !item.regionId.trim()) throw new Error("regionId is required");
     return { type: type as "panic.recover" | "section.jump" | "section.loop" | "section.repeat-once", regionId: item.regionId };

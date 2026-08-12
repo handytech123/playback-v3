@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createSocket, type Socket } from "node:dgram";
 import { timingSafeEqual } from "node:crypto";
 import type { AddressInfo } from "node:net";
+import { readFile } from "node:fs/promises";
 import { PlaybackCommandBus, parsePlaybackCommand, type ControlState } from "./command-bus.js";
 import { decodeOscMessage, oscToPlaybackCommand } from "./osc.js";
 import { REMOTE_CONTROL_PAGE } from "./remote-page.js";
@@ -30,6 +31,7 @@ export class RemoteControlServer {
     const url = new URL(request.url ?? "/", "http://playback.local");
     if (request.method === "GET" && url.pathname === "/") { response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'" }); response.end(REMOTE_CONTROL_PAGE); return; }
     if (request.method === "GET" && url.pathname === "/api/state") { json(response, 200, this.bus.state()); return; }
+    if (request.method === "GET" && url.pathname === "/api/waveform") { try { const index=Number(url.searchParams.get("index")??0),song=this.bus.state().songs[index]; if(!song?.waveformPath)throw new Error("Waveform is not prepared for this song"); json(response,200,JSON.parse(await readFile(song.waveformPath,"utf8"))); } catch(error) { json(response,404,{error:error instanceof Error?error.message:String(error),buckets:[]}); } return; }
     if (request.method === "GET" && url.pathname === "/api/events") { response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" }); response.write(`event: state\ndata: ${JSON.stringify(this.bus.state())}\n\n`); this.streams.add(response); request.on("close", () => this.streams.delete(response)); return; }
     if (request.method === "POST" && url.pathname === "/api/command") { try { const command = parsePlaybackCommand(JSON.parse(await body(request))); const result = await this.bus.dispatch(command, "remote"); json(response, result.ok ? 200 : 409, result); } catch (error) { json(response, 400, { error: error instanceof Error ? error.message : String(error) }); } return; }
     json(response, 404, { error: "Not found" });

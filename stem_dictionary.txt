@@ -13,13 +13,28 @@
 #   acoustic
 #   electric
 #   keys
-#   orchestra
+#   strings
 #   pad
 #   vocals
-#   misc
+#   other
 #
-# Do NOT edit Python/TypeScript to add stems.
-# Edit this file only, then copy it to Playback V3.
+# Production Dante / bus outputs:
+#   01 PB_CLICK    - Dynamic Click
+#   02 PB_CUE      - Dynamic Cue
+#   03 PB_IEM      - In-ear monitor feed
+#   04 PB_ACOUSTIC - Acoustic guitars
+#   05 PB_ELECTRIC - Electric guitars
+#   06 PB_BASS     - Bass
+#   07 PB_KEYS     - Piano / keys / organ / Rhodes / synth
+#   08 PB_STRINGS  - Strings / orchestra / horns / brass
+#   09 PB_DRUMS    - Drums / percussion / loops
+#   10 PB_VOCALS   - Vocals / choir / BGVs
+#   11 PB_OTHER    - Other / misc / FX / unknown musical stems
+#   12 PB_PAD      - Dynamic Pad
+#
+# Do NOT create separate piano or percussion buses.
+# Piano belongs to keys. Percussion and loops belong to drums.
+# Analyzer V2 and Playback V3 must use this same dictionary.
 # =====================================================
 
 [DRUMS]
@@ -121,24 +136,24 @@ Arp                | keys        | music-stem | true
 Arpeggio           | keys        | music-stem | true
 Pluck              | keys        | music-stem | true
 
-[ORCHESTRA]
-Strings            | orchestra   | music-stem | true
-Strings High       | orchestra   | music-stem | true
-Strings Low        | orchestra   | music-stem | true
-Violin             | orchestra   | music-stem | true
-Violins            | orchestra   | music-stem | true
-Viola              | orchestra   | music-stem | true
-Cello              | orchestra   | music-stem | true
-Cellos             | orchestra   | music-stem | true
-Orchestra          | orchestra   | music-stem | true
-Brass              | orchestra   | music-stem | true
-Brass Ensemble     | orchestra   | music-stem | true
-Horns              | orchestra   | music-stem | true
-French Horn        | orchestra   | music-stem | true
-Trumpet            | orchestra   | music-stem | true
-Trombone           | orchestra   | music-stem | true
-Sax                | orchestra   | music-stem | true
-Woodwinds          | orchestra   | music-stem | true
+[STRINGS]
+Strings            | strings     | music-stem | true
+Strings High       | strings     | music-stem | true
+Strings Low        | strings     | music-stem | true
+Violin             | strings     | music-stem | true
+Violins            | strings     | music-stem | true
+Viola              | strings     | music-stem | true
+Cello              | strings     | music-stem | true
+Cellos             | strings     | music-stem | true
+Orchestra          | strings     | music-stem | true
+Brass              | strings     | music-stem | true
+Brass Ensemble     | strings     | music-stem | true
+Horns              | strings     | music-stem | true
+French Horn        | strings     | music-stem | true
+Trumpet            | strings     | music-stem | true
+Trombone           | strings     | music-stem | true
+Sax                | strings     | music-stem | true
+Woodwinds          | strings     | music-stem | true
 
 [PAD]
 Pad                | pad         | pad-stem   | true
@@ -192,17 +207,17 @@ Aahs               | vocals      | vocal-stem | true
 Adlib              | vocals      | vocal-stem | true
 Adlibs             | vocals      | vocal-stem | true
 
-[MISC]
-FX                 | misc        | music-stem | true
-SFX                | misc        | music-stem | true
-Effects            | misc        | music-stem | true
-Rise               | misc        | music-stem | true
-Riser              | misc        | music-stem | true
-Drop               | misc        | music-stem | true
-Hit                | misc        | music-stem | true
-Impact             | misc        | music-stem | true
-Swell              | misc        | music-stem | true
-Noise              | misc        | music-stem | true
-Atmosphere         | misc        | music-stem | true
-Texture            | misc        | music-stem | true
-Drone              | misc        | music-stem | true
+[OTHER]
+FX                 | other       | music-stem | true
+SFX                | other       | music-stem | true
+Effects            | other       | music-stem | true
+Rise               | other       | music-stem | true
+Riser              | other       | music-stem | true
+Drop               | other       | music-stem | true
+Hit                | other       | music-stem | true
+Impact             | other       | music-stem | true
+Swell              | other       | music-stem | true
+Noise              | other       | music-stem | true
+Atmosphere         | other       | music-stem | true
+Texture            | other       | music-stem | true
+Drone              | other       | music-stem | true
