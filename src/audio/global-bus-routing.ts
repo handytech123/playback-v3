@@ -28,14 +28,7 @@ export function deriveAudioRouting(busRouting:GlobalBusRouting,stemLabels:readon
   };
 }
 
-export function migrateGlobalBusRouting(saved:unknown,legacy:NativeAudioRouting|null,stemLabels:readonly string[]):GlobalBusRouting {
+export function migrateGlobalBusRouting(saved:unknown,_legacy:NativeAudioRouting|null,_stemLabels:readonly string[]):GlobalBusRouting {
   if(saved&&typeof saved==="object")return normalizeGlobalBusRouting(saved);
-  const next={...defaultGlobalBusRouting()} as Record<GlobalBusKey,GlobalBusRoute>;
-  if(legacy)for(const key of keys.filter(key=>!["click","cue","iem","pad"].includes(key))){
-    const indices=stemLabels.map((label,index)=>({key:classifyStemOutput(label),index})).filter(item=>item.key===key).map(item=>item.index);
-    const outputs=indices.map(index=>legacy.stems[index]).filter(Number.isInteger),widths=indices.map(index=>legacy.stemChannels[index]).filter(Boolean);
-    if(outputs.length&&outputs.every(output=>output===outputs[0])&&widths.every(width=>width===widths[0]))next[key]={output:outputs[0]!,channels:widths[0]??1};
-  }
-  if(legacy){next.click={output:legacy.click,channels:legacy.clickChannels};next.cue={output:legacy.cue,channels:legacy.cueChannels};next.pad={output:legacy.pad,channels:legacy.padChannels};next.iem={output:legacy.iem,channels:legacy.iemChannels};}
-  return normalizeGlobalBusRouting(next);
+  return defaultGlobalBusRouting();
 }

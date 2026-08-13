@@ -9,10 +9,8 @@ test("global bus routing is independent of the selected song",()=>{
   assert.equal(global.keys.output,17);
 });
 
-test("legacy per-song routing migrates matching buses once",()=>{
+test("legacy per-song routing cannot scramble the canonical global bus table",()=>{
   const legacy={stems:[0,8,7,7],stemChannels:[1,1,1,1] as const,click:1,clickChannels:1 as const,cue:2,cueChannels:1 as const,pad:4,padChannels:1 as const,iem:3,iemChannels:1 as const};
   const migrated=migrateGlobalBusRouting(null,legacy,["Piano.wav","Bass.wav","Drums.wav","Perc.wav"]);
-  assert.equal(migrated.keys.output,0);
-  assert.equal(migrated.bass.output,8);
-  assert.equal(migrated.drums.output,7);
+  assert.deepEqual(migrated,defaultGlobalBusRouting());
 });
