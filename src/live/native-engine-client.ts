@@ -16,6 +16,13 @@ export interface NativeSongSelectionState extends NativeReadyState { readonly in
 export interface NativeMidiInputEvent { readonly status: number; readonly data1: number; readonly data2: number; }
 export interface NativeMixerMeters { readonly master: number; readonly channels: readonly number[]; }
 
+export function nativeRoutingCommand(routing:NativeAudioRouting):string {
+  const values=["routing",String(routing.stems.length)];
+  for(let index=0;index<routing.stems.length;index++)values.push(String(routing.stems[index]),String(routing.stemChannels[index]));
+  values.push(String(routing.click),String(routing.clickChannels),String(routing.cue),String(routing.cueChannels),String(routing.pad),String(routing.padChannels),String(routing.iem),String(routing.iemChannels));
+  return values.join(" ");
+}
+
 export function parseNativeLine(line: string): NativeReadyState | NativeTransportState | null {
   const fields = fieldsFromLine(line);
   if (line.startsWith("READY ")) return {
@@ -95,6 +102,10 @@ export class NativeEngineClient extends EventEmitter {
   setBusGain(bus: "music" | "click" | "cue" | "pad", gain: number): void { validateGain(gain); this.send(`gain ${bus} ${gain}`); }
   setMixerChannel(index: number, gain: number, muted: boolean, solo: boolean, iem: boolean): void { if (!Number.isInteger(index) || index < 0) throw new Error("Mixer channel index must be non-negative"); validateGain(gain); this.send(`mixer_channel ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
   setMasterGain(gain: number): void { validateGain(gain); this.send(`master_gain ${gain}`); }
+  setRouting(routing:NativeAudioRouting):Promise<void>{
+    if(routing.stems.length!==routing.stemChannels.length)throw new Error("Every stem route requires a channel width");
+    return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{this.off("native-line",onLine);reject(new Error("Native routing update timed out"));},3000),onLine=(line:string):void=>{if(line.startsWith("ROUTING_FAILED")){clearTimeout(timeout);this.off("native-line",onLine);reject(new Error(line));}else if(line.startsWith("ROUTING_UPDATED")){clearTimeout(timeout);this.off("native-line",onLine);resolve();}};this.on("native-line",onLine);this.send(nativeRoutingCommand(routing));});
+  }
   selectSong(index: number): Promise<NativeSongSelectionState> {
     if (!Number.isInteger(index) || index < 0) throw new Error("Song index must be non-negative");
     return new Promise((resolve, reject) => {

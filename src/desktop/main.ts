@@ -151,7 +151,7 @@ async function createWindow(): Promise<void> {
   let transitionSettings=await loadTransitionSettings();
   let currentReady:NativeReadyState|null=null,nativeArmError:string|null=null;
   let armedManifestPath=resolve(manifestPath),armedSongIndex=selectedSongIndex;
-  const armSourceSong=async(sourceManifestPath:string,songIndex:number)=>{const readyState=await armNativeSong(songIndex,sourceManifestPath);currentReady=readyState;nativeArmError=null;armedManifestPath=resolve(sourceManifestPath);armedSongIndex=songIndex;return readyState;};
+  const armSourceSong=async(sourceManifestPath:string,songIndex:number)=>{const targetPath=resolve(sourceManifestPath),routing=activeAudioRouting();let readyState:NativeReadyState;try{if(!engine.isRunning)throw new Error("Native engine is not running");if(routing)await engine.setRouting(routing);readyState=armedManifestPath===targetPath?await engine.selectSong(songIndex):await engine.selectManifest(targetPath,songIndex);}catch(error){console.warn("Warm song activation failed; using verified cold restart",error);readyState=await armNativeSong(songIndex,targetPath,routing);}currentReady=readyState;nativeArmError=null;armedManifestPath=targetPath;armedSongIndex=songIndex;return readyState;};
   const ensureSourceSongArmed=async(sourceManifestPath:string,songIndex:number)=>armedManifestPath===resolve(sourceManifestPath)&&armedSongIndex===songIndex&&currentReady?currentReady:armSourceSong(sourceManifestPath,songIndex);
   const ready=currentReady??{deviceOpenMs:0,armMs:0,stems:0,nextReady:false,nextIndex:-1,outputChannels:0,routingReady:false,iemReady:false,stereoFallback:false,midiEvents:0,midiEnabled:false};
   const mapRoot=join(projectRoot,".playback-data");
