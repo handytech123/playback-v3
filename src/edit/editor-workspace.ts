@@ -88,13 +88,15 @@ export function editorStemDisplayLabels(
     originalByRole.set(role, [...(originalByRole.get(role) ?? []), original]);
   }
   return song.stems.map((stem, index) => {
-    if (stem.displayName?.trim()) return stem.displayName.trim();
     const role = normalizedRoleKey(stem.role);
     const roleIndex = roleCounts.get(role) ?? 0;
     roleCounts.set(role, roleIndex + 1);
     const original = originalByRole.get(role)?.[roleIndex] ?? originalSong?.stems[index];
     if (original?.displayName?.trim()) return original.displayName.trim();
-    const sourceLabel = labelFromPath(original?.sourcePath ?? stem.sourcePath, index);
+    const originalSourceLabel = original ? labelFromPath(original.sourcePath, index) : "";
+    if (originalSourceLabel) return originalSourceLabel;
+    if (stem.displayName?.trim()) return stem.displayName.trim();
+    const sourceLabel = labelFromPath(stem.sourcePath, index);
     if (sourceLabel) return sourceLabel;
     const displayRole = normalizeLabel(stem.role);
     return displayRole || `Stem ${index + 1}`;
