@@ -134,8 +134,7 @@ let loadingSetItemId:string|null=null,loadingProgress=0,loadingLabel="";
 let editorLoadSerial:Promise<void>=Promise.resolve();
 let performanceSongLoadSerial=0;
 let performanceRegionSelectionExplicit=false;
-let pendingSetRemoveItemId:string|null=null;
-let pendingSetRemoveTimer:number|null=null;
+let setCardContextMenu:HTMLElement|null=null;
 const transitionLabels:Record<SongTransitionType,{label:string;detail:string}>={
   "cue-next":{label:"CUE NEXT",detail:"SELECT NEXT"},
   "stay-in-song":{label:"STAY",detail:"KEEP CURRENT"},
@@ -288,12 +287,11 @@ function renderEditorSetBuilder() {
       const card = document.createElement("article");
       const loaded=workspace?.originalFacts?.id===item.songId&&workspace?.source?.name===item.arrangement;
       card.className = `set-song-card editor-draft-card ${loaded ? "active" : ""} ${item.itemId === selectedSetItemId ? "selected" : ""}`;
-      const removeArmed=pendingSetRemoveItemId===item.itemId;
-      card.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.key)} · ${item.bpm} BPM</small>${loadingSetItemId===item.itemId?`<i class="set-card-load-pie" style="--load-angle:${loadingProgress*3.6}deg"><b>${loadingProgress}%</b></i>`:""}<button class="set-card-remove ${removeArmed?"armed":""}" title="${removeArmed?`Click again to remove ${escapeHtml(item.title)}`:`Arm removal for ${escapeHtml(item.title)}`}" aria-label="${removeArmed?`Confirm removal of ${escapeHtml(item.title)}`:`Arm removal of ${escapeHtml(item.title)}`}">${removeArmed?"REMOVE?":"×"}</button>`;
-      card.title = loaded ? `${item.title} is loaded for editing · drag to reorder` : `Load ${item.title} for editing · drag to reorder`;
+      card.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.key)} · ${item.bpm} BPM</small>${loadingSetItemId===item.itemId?`<i class="set-card-load-pie" style="--load-angle:${loadingProgress*3.6}deg"><b>${loadingProgress}%</b></i>`:""}`;
+      card.title = loaded ? `${item.title} is loaded for editing · drag to reorder · right-click for options` : `Load ${item.title} for editing · drag to reorder · right-click for options`;
       card.draggable=true;
       card.onclick = async () => { selectedSetItemId = item.itemId; renderEditorSetBuilder();await loadEditorItem(item.itemId); };
-      card.querySelector<HTMLButtonElement>(".set-card-remove")!.onclick=(event)=>{event.stopPropagation();void confirmSetCardRemove(item.itemId,item.title);};
+      card.oncontextmenu=(event)=>{event.preventDefault();event.stopPropagation();showSetCardContextMenu(event.clientX,event.clientY,item.itemId,item.title);};
       card.ondragstart=(event)=>{dragSetItemId=item.itemId;event.dataTransfer!.effectAllowed="move";event.dataTransfer!.setData("text/plain",item.itemId);requestAnimationFrame(()=>card.classList.add("dragging"));};
       card.ondragover=(event)=>{if(!dragSetItemId||dragSetItemId===item.itemId)return;event.preventDefault();event.dataTransfer!.dropEffect="move";strip.querySelectorAll(".drop-before,.drop-after").forEach(element=>element.classList.remove("drop-before","drop-after"));card.classList.add(event.clientX<card.getBoundingClientRect().left+card.offsetWidth/2?"drop-before":"drop-after");};
       card.ondragleave=(event)=>{if(!card.contains(event.relatedTarget as Node|null))card.classList.remove("drop-before","drop-after");};
@@ -884,20 +882,16 @@ async function importSetlist(){
   }catch(error){showError(error);$("#editorSetlistStatus").textContent="Setlist import failed.";}
   finally{button.disabled=false;}
 }
-async function confirmSetCardRemove(itemId:string,title:string){
-  if(pendingSetRemoveItemId===itemId){
-    if(pendingSetRemoveTimer!==null)window.clearTimeout(pendingSetRemoveTimer);
-    pendingSetRemoveItemId=null;
-    pendingSetRemoveTimer=null;
-    if(selectedSetItemId===itemId){selectedSetItemId=null;workspace=null;}
-    await prepCommand({action:"remove",itemId});
-    return;
-  }
-  pendingSetRemoveItemId=itemId;
-  if(pendingSetRemoveTimer!==null)window.clearTimeout(pendingSetRemoveTimer);
-  pendingSetRemoveTimer=window.setTimeout(()=>{if(pendingSetRemoveItemId===itemId){pendingSetRemoveItemId=null;pendingSetRemoveTimer=null;renderEditorSetBuilder();}},3500);
-  $("#editorSetlistStatus").textContent=`Click REMOVE? again to remove ${title} from the set.`;
-  renderEditorSetBuilder();
+function closeSetCardContextMenu(){setCardContextMenu?.remove();setCardContextMenu=null;}
+function showSetCardContextMenu(clientX:number,clientY:number,itemId:string,title:string){
+  closeSetCardContextMenu();
+  const menu=document.createElement("div");menu.className="set-card-context-menu";menu.setAttribute("role","menu");menu.onpointerdown=(event)=>event.stopPropagation();
+  const heading=document.createElement("strong");heading.textContent=title;
+  const remove=document.createElement("button");remove.type="button";remove.className="danger";remove.textContent="Remove Song from Set";remove.setAttribute("role","menuitem");
+  remove.onclick=async(event)=>{event.stopPropagation();closeSetCardContextMenu();if(selectedSetItemId===itemId){selectedSetItemId=null;workspace=null;}await prepCommand({action:"remove",itemId});};
+  menu.append(heading,remove);document.body.append(menu);setCardContextMenu=menu;
+  const bounds=menu.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(clientX,innerWidth-bounds.width-8))}px`;menu.style.top=`${Math.max(8,Math.min(clientY,innerHeight-bounds.height-8))}px`;
+  window.setTimeout(()=>document.addEventListener("pointerdown",closeSetCardContextMenu,{once:true}),0);
 }
 function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{try{const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;prepState=await window.playback.prep.get();workspace=result.workspace;selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
 function renderEditorLoadStatus(){const status=$("#editorLoadStatus"),visible=loadingSetItemId!==null;status.hidden=!visible;if(!visible)return;status.style.setProperty("--load-angle",`${loadingProgress*3.6}deg`);$("#editorLoadPercent").textContent=`${loadingProgress}%`;$("#editorLoadLabel").textContent=loadingLabel;($<HTMLProgressElement>("#editorLoadProgress")).value=loadingProgress;}
