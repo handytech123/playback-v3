@@ -1,6 +1,6 @@
 {
   "name": "playback-v3",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
@@ -37,7 +37,7 @@
     "ui:build": "vite build",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/bootstrap-native.ps1",
     "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js",
-    "package:win": "npm run native:build && npm run build && npm run ui:build && electron-builder --win nsis --config.electronDist=node_modules/electron/dist"
+    "package:win": "npm run native:build && node tools/verify-packaged-runtime.mjs && npm run build && npm run ui:build && electron-builder --win nsis --config.electronDist=node_modules/electron/dist"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
