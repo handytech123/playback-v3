@@ -4,7 +4,7 @@ import { buildZeroBasedGrid, positionToGridBeats, secondsToMusicalPosition } fro
 import { keyboardAction } from "../live/performance-session.js";
 import { snapEditorPosition, type EditorSnapMode } from "../edit/editor-snap.js";
 import type { SongTransitionType } from "../live/song-transition.js";
-import { classifyStemOutput, PLAYBACK_OUTPUTS } from "../audio/output-layout.js";
+import { PLAYBACK_OUTPUTS } from "../audio/output-layout.js";
 import QRCode from "qrcode";
 import { createOscConnectionUri } from "../control/osc-profile.js";
 import { compatibleClickTemplates } from "../domain/click-templates.js";
@@ -423,18 +423,17 @@ function setupDeviceSelectors() {
     const activeOutputs=Math.max(2,Number(data.audio.selectedDevice?.outputChannels??data.audio.outputChannels??2));
     const danteActive=/dante/i.test(`${data.audio.selectedDevice?.type??""} ${data.audio.selectedDevice?.name??""}`),stereo=activeOutputs===2;
     $("#outputMatrixHeading").textContent=stereo?"Choose Left, Right, or Both for every track and live bus":danteActive?`Assign stems and live buses to Dante outputs 1–${activeOutputs}`:`Assign stems and live buses to device outputs 1–${activeOutputs}`;
-    const instrumentBuses=PLAYBACK_OUTPUTS.filter((bus)=>bus.output>=4&&bus.output<=11).map((bus)=>{const indices=data.audio.routingLabels.map((label:string,index:number)=>({index,key:classifyStemOutput(label)})).filter((item:any)=>item.key===bus.key).map((item:any)=>item.index),outputs=indices.map((index:number)=>data.audio.routing.stems[index]),widths=indices.map((index:number)=>data.audio.routing.stemChannels[index]),sameOutput=outputs.length>0&&outputs.every((value:number)=>value===outputs[0]),sameWidth=widths.length>0&&widths.every((value:number)=>value===widths[0]);return{label:bus.appBus,width:sameWidth?widths[0]:1,widthKey:"stemChannels",kind:"stem-bus",indices,value:sameOutput?outputs[0]:bus.output,mixed:outputs.length>0&&(!sameOutput||!sameWidth),fixedOutput:bus.output};});
-    const fields:any[]=[{label:"Dynamic Click",width:data.audio.routing.clickChannels,widthKey:"clickChannels",kind:"click",value:data.audio.routing.click},{label:"Dynamic Cue",width:data.audio.routing.cueChannels,widthKey:"cueChannels",kind:"cue",value:data.audio.routing.cue},{label:"PB_IEM",width:1,widthKey:"iemChannels",kind:"iem",value:data.audio.routing.iem},...instrumentBuses,{label:"Dynamic Pad",width:data.audio.routing.padChannels,widthKey:"padChannels",kind:"pad",value:data.audio.routing.pad}];
+    const fields:any[]=PLAYBACK_OUTPUTS.map(bus=>({label:bus.appBus,key:bus.key,value:data.audio.globalBusRouting[bus.key].output,width:data.audio.globalBusRouting[bus.key].channels}));
     const grid=document.createElement("div");grid.className="dante-routing-grid";grid.style.gridTemplateColumns=`minmax(240px, 1fr) repeat(${activeOutputs}, ${activeOutputs<=8?"minmax(48px, 72px)":"36px"})`;grid.style.width=activeOutputs<=8?"100%":"max-content";
-    const makeRouting=()=>({stems:[...data.audio.routing.stems],stemChannels:[...data.audio.routing.stemChannels],click:data.audio.routing.click,clickChannels:data.audio.routing.clickChannels,cue:data.audio.routing.cue,cueChannels:data.audio.routing.cueChannels,pad:data.audio.routing.pad,padChannels:data.audio.routing.padChannels,iem:data.audio.routing.iem,iemChannels:data.audio.routing.iemChannels});
-    const setRoute=(routing:any,field:any,output:number)=>{if(field.kind==="stem-bus")for(const index of field.indices)routing.stems[index]=output;else routing[field.kind]=output;};
+    const makeRouting=()=>structuredClone(data.audio.globalBusRouting);
+    const setRoute=(routing:any,field:any,output:number)=>{routing[field.key]={...routing[field.key],output};};
     grid.append(Object.assign(document.createElement("strong"),{textContent:"OUTPUT / BUS"}));
     for(let output=1;output<=activeOutputs;output++)grid.append(Object.assign(document.createElement("b"),{textContent:String(output)}));
     for(const field of fields){
-      const heading=document.createElement("span");heading.innerHTML=`<strong>${escapeHtml(field.label)}</strong><button class="route-mode">${field.mixed?"MIXED":field.width===2?(stereo?"BOTH":"MONO"):(stereo&&field.value===2?"RIGHT":stereo?"LEFT":"MONO")}</button>`;grid.append(heading);
+      const heading=document.createElement("span");heading.innerHTML=`<strong>${escapeHtml(field.label)}</strong><button class="route-mode">${field.width===2?(stereo?"BOTH":"STEREO"):(stereo&&field.value===2?"RIGHT":stereo?"LEFT":"MONO")}</button>`;grid.append(heading);
       const mode=heading.querySelector<HTMLButtonElement>(".route-mode");
       if(mode)mode.disabled=!stereo;
-      if(mode)mode.onclick=async()=>{if(!stereo)return;const routing:any=makeRouting();let nextWidth:1|2,nextOutput:number;if(field.width===2&&!field.mixed){nextWidth=1;nextOutput=1;}else if(field.value===1&&!field.mixed){nextWidth=1;nextOutput=2;}else{nextWidth=2;nextOutput=1;}setRoute(routing,field,nextOutput);if(field.kind==="stem-bus")for(const index of field.indices)routing.stemChannels[index]=nextWidth;else routing[field.widthKey]=nextWidth;grid.classList.add("busy");try{const state=await window.playback.audio.setRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=`${field.label} output balance updated.`;}catch(error){showError(error);$("#settingsStatus").textContent="Output selection could not be saved.";}renderOutputMatrix();};
+      if(mode)mode.onclick=async()=>{if(!stereo)return;const routing:any=makeRouting();let nextWidth:1|2,nextOutput:number;if(field.width===2){nextWidth=1;nextOutput=1;}else if(field.value===1){nextWidth=1;nextOutput=2;}else{nextWidth=2;nextOutput=1;}routing[field.key]={output:nextOutput,channels:nextWidth};grid.classList.add("busy");try{const state=await window.playback.audio.setGlobalBusRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=`${field.label} global output updated.`;}catch(error){showError(error);$("#settingsStatus").textContent="Output selection could not be saved.";}renderOutputMatrix();};
       for(let output=1;output<=activeOutputs;output++){
         const cell=document.createElement("button"),selected=output===field.value||field.width===2&&output===field.value+1;
         cell.className=selected?output===field.value?"assigned start":"assigned linked":"";cell.textContent=selected?"✓":"";cell.title=selected?`Click to remove ${field.label} from this output`:`Assign ${field.label} to output ${field.width===2?`${output}–${output+1}`:output}`;cell.disabled=field.width===2&&output===activeOutputs;
@@ -442,7 +441,7 @@ function setupDeviceSelectors() {
           const routing=makeRouting();
           setRoute(routing,field,selected?0:output);
           grid.classList.add("busy");$("#settingsStatus").textContent=selected?`Removing ${field.label} from output ${field.value}…`:`Routing ${field.label} to output ${output}…`;
-          try{const state=await window.playback.audio.setRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=selected?`${field.label} is now unassigned.`:`${field.label} is now routed to output ${output}. Shared outputs are allowed.`;}catch(error){showError(error);$("#settingsStatus").textContent="That routing selection could not be saved.";}renderOutputMatrix();
+          try{const state=await window.playback.audio.setGlobalBusRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=selected?`${field.label} is now globally unassigned.`:`${field.label} is now globally routed to output ${output}.`;}catch(error){showError(error);$("#settingsStatus").textContent="That routing selection could not be saved.";}renderOutputMatrix();
         };
         grid.append(cell);
       }
