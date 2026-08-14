@@ -106,6 +106,7 @@ const data = await window.playback.bootstrap();
 let activeSongIndex = data.activeSongIndex ?? 0;
 let song = data.manifest.songs[activeSongIndex];
 let liveState = data.performance;
+let audioHealth:any=null,lastAudioHealthCallbacks=-1,lastAudioHealthAt=0,audioHealthStalled=false;
 let editMode = false;
 let prepModeActive = false;
 let prepState: any = null;
@@ -161,6 +162,7 @@ setupClickSoundSettings();
 setupRemoteControl();
 setupReaperImport();
 setupPerformance();
+window.playback.audio.onHealth((health:any)=>{const now=Date.now();audioHealthStalled=lastAudioHealthAt>0&&now-lastAudioHealthAt<2500&&health.callbacks<=lastAudioHealthCallbacks;lastAudioHealthCallbacks=health.callbacks;lastAudioHealthAt=now;audioHealth=health;renderPerformanceReadiness(liveState.readiness);const status=document.querySelector<HTMLElement>("#settingsEngineStatus");if(status)status.textContent=audioHealthSummary();});
 setupEditorControls();
 setupPrep();
 renderPerformanceTimeline();
@@ -1303,6 +1305,9 @@ function renderPerformanceReadiness(report: any) {
   const badge = $("#ready"), blocked = report.checks.filter((item: any) => item.level === "blocked").length, warnings = report.checks.filter((item: any) => item.level === "warning").length;
   badge.className = `ready ${report.status === "Blocked" ? "blocked" : report.status === "Ready with warnings" ? "warning" : ""}`;
   badge.textContent = report.status === "Blocked" ? `PERFORMANCE LOCKED · ${blocked}` : report.status === "Ready with warnings" ? `READY · ${warnings} WARNING${warnings === 1 ? "" : "S"}` : "PERFORMANCE READY";
+  const audioProblem=audioHealth&&!audioHealthIsHealthy();
+  if(report.status!=="Blocked"&&audioProblem)badge.textContent="READY · AUDIO CHECK";else if(report.status!=="Blocked"&&report.status!=="Ready with warnings"&&audioHealth)badge.textContent="PERFORMANCE READY · AUDIO OK";
+  badge.classList.toggle("audio-warning",Boolean(audioProblem));badge.title=audioHealth?audioHealthSummary():"Audio health is starting";
   $("#performanceReadinessTitle").textContent = report.status.toUpperCase();
   const checks = $("#performanceReadinessChecks"); checks.replaceChildren();
   for (const item of report.checks) { const row = document.createElement("section"); row.className = `performance-readiness-check ${item.level}`; row.innerHTML = `<i></i><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></span>`; checks.append(row); }
@@ -1313,6 +1318,9 @@ function renderPerformanceReadiness(report: any) {
   for (const control of document.querySelectorAll<HTMLInputElement | HTMLButtonElement>("#liveControls button, #liveControls input, #performanceMixer button, #performanceMixer input, #play, #pause, #pad, #slidesMidi, #surfaceMidi")) if (control.id !== "clearFault"&&control.id!=="mixerCollapse") control.disabled = locked;
   $("#performanceWorkspace").classList.toggle("performance-locked", locked);
 }
+
+function audioHealthIsHealthy(){return Boolean(audioHealth)&&audioHealth.sampleRate===48000&&audioHealth.blockFrames===512&&audioHealth.xruns===0&&audioHealth.deadlineMisses===0&&!audioHealth.deviceError&&!audioHealthStalled;}
+function audioHealthSummary(){if(!audioHealth)return liveState.fault?`FAULT · ${liveState.fault}`:liveState.readiness?.ready?"ARMED · CHECKING AUDIO":"NOT READY";if(audioHealthIsHealthy())return"AUDIO OK · 48 kHz · 512";const issues:string[]=[];if(audioHealth.sampleRate!==48000)issues.push(`${audioHealth.sampleRate||0} Hz`);if(audioHealth.blockFrames!==512)issues.push(`${audioHealth.blockFrames||0} samples`);if(audioHealth.xruns)issues.push(`${audioHealth.xruns} dropout${audioHealth.xruns===1?"":"s"}`);if(audioHealth.deadlineMisses)issues.push(`${audioHealth.deadlineMisses} overrun${audioHealth.deadlineMisses===1?"":"s"}`);if(audioHealthStalled)issues.push("clock stopped");if(audioHealth.deviceError)issues.push("device error");return`AUDIO CHECK · ${issues.join(" · ")||"unknown"}`;}
 
 async function liveCommand(command: any) { try { const state=await window.playback.performance.command(command);if(state.songIndex!==activeSongIndex){await synchronizePerformanceSong(state.songIndex,state);return;}liveState=state;renderLiveState(); } catch (error) { showError(error); } }
 function navigateSection(offset: number) { if (!liveState.panicActive) { void liveCommand({ action: offset < 0 ? "previous-section" : "next-section" }); return; } const anchor = liveState.recoveryRegionId ?? liveState.currentRegionId; const index = song.regions.findIndex((item: any) => item.id === anchor); const target = song.regions[Math.max(0, Math.min(song.regions.length - 1, index + offset))]; if (target) void liveCommand({ action: "recover", regionId: target.id }); }

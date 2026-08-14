@@ -187,6 +187,24 @@ private:
     std::unique_ptr<juce::MidiInput> input;juce::String name;std::mutex mutex;std::vector<Event> events;
 };
 
+class MonitoredAudioPlayer final : public juce::AudioIODeviceCallback {
+public:
+    void setSource(juce::AudioSource* source){player.setSource(source);}
+    void audioDeviceIOCallbackWithContext(const float* const* inputs,int inputCount,float* const* outputs,int outputCount,int frames,const juce::AudioIODeviceCallbackContext& context)override{
+        const auto start=Clock::now();player.audioDeviceIOCallbackWithContext(inputs,inputCount,outputs,outputCount,frames,context);
+        callbacks.fetch_add(1,std::memory_order_relaxed);
+        const auto elapsed=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-start).count());
+        auto maximum=maxCallbackNs.load(std::memory_order_relaxed);while(elapsed>maximum&&!maxCallbackNs.compare_exchange_weak(maximum,elapsed,std::memory_order_relaxed)){}
+        const auto rate=sampleRate.load(std::memory_order_relaxed);const auto deadline=rate>0?static_cast<std::uint64_t>(static_cast<double>(frames)/rate*1.0e9):std::uint64_t{};if(deadline&&elapsed>deadline)deadlineMisses.fetch_add(1,std::memory_order_relaxed);
+    }
+    void audioDeviceAboutToStart(juce::AudioIODevice* device)override{sampleRate.store(device?device->getCurrentSampleRate():0,std::memory_order_relaxed);blockFrames.store(device?device->getCurrentBufferSizeSamples():0,std::memory_order_relaxed);player.audioDeviceAboutToStart(device);}
+    void audioDeviceStopped()override{player.audioDeviceStopped();}
+    void audioDeviceError(const juce::String& message)override{lastError=message;player.audioDeviceError(message);}
+    std::uint64_t callbackCount()const{return callbacks.load(std::memory_order_relaxed);}std::uint64_t deadlineMissCount()const{return deadlineMisses.load(std::memory_order_relaxed);}std::uint64_t maximumCallbackNs()const{return maxCallbackNs.load(std::memory_order_relaxed);}double currentSampleRate()const{return sampleRate.load(std::memory_order_relaxed);}int currentBlockFrames()const{return blockFrames.load(std::memory_order_relaxed);}juce::String error()const{return lastError;}
+private:
+    juce::AudioSourcePlayer player;std::atomic<std::uint64_t> callbacks{},deadlineMisses{},maxCallbackNs{};std::atomic<double> sampleRate{};std::atomic<int> blockFrames{};juce::String lastError;
+};
+
 class ArmedSetEngine {
 public:
     ArmedSetEngine() {
@@ -196,7 +214,7 @@ public:
     juce::String openDefaultDevice() {
         const auto start = Clock::now();
         juce::String error;
-        if(audioOverrideSet){error=deviceManager.initialise(0,0,nullptr,true);if(error.isEmpty()){deviceManager.setCurrentAudioDeviceType(audioOverrideType,true);juce::AudioDeviceManager::AudioDeviceSetup setup;deviceManager.getAudioDeviceSetup(setup);setup.outputDeviceName=audioOverrideName;setup.inputDeviceName={};setup.useDefaultInputChannels=false;setup.useDefaultOutputChannels=false;if(configuredOutputCount>0){setup.outputChannels.clear();setup.outputChannels.setRange(0,configuredOutputCount,true);error=deviceManager.setAudioDeviceSetup(setup,true);}else for(const auto channels:{32,16,8,6,2}){setup.outputChannels.clear();setup.outputChannels.setRange(0,channels,true);error=deviceManager.setAudioDeviceSetup(setup,true);if(error.isEmpty())break;}}}
+        if(audioOverrideSet){error=deviceManager.initialise(0,0,nullptr,true);if(error.isEmpty()){deviceManager.setCurrentAudioDeviceType(audioOverrideType,true);juce::AudioDeviceManager::AudioDeviceSetup setup;deviceManager.getAudioDeviceSetup(setup);const auto isDante=audioOverrideType.equalsIgnoreCase("ASIO")&&audioOverrideName.containsIgnoreCase("Dante Virtual Soundcard");setup.outputDeviceName=audioOverrideName;setup.inputDeviceName=isDante?audioOverrideName:juce::String{};setup.useDefaultInputChannels=false;setup.useDefaultOutputChannels=false;if(isDante){setup.sampleRate=48000;setup.bufferSize=512;setup.inputChannels.clear();setup.inputChannels.setRange(0,32,true);}if(configuredOutputCount>0){setup.outputChannels.clear();setup.outputChannels.setRange(0,configuredOutputCount,true);error=deviceManager.setAudioDeviceSetup(setup,true);}else for(const auto channels:{32,16,8,6,2}){setup.outputChannels.clear();setup.outputChannels.setRange(0,channels,true);error=deviceManager.setAudioDeviceSetup(setup,true);if(error.isEmpty())break;}}}
         else {for(const auto channels:{32,16,8,6,2}){deviceManager.closeAudioDevice();error=deviceManager.initialiseWithDefaultDevices(0,channels);if(error.isEmpty())break;}}
         if(error.isNotEmpty())stereoFallback=true;
         if (error.isNotEmpty()) return error;
@@ -352,6 +370,7 @@ public:
     int getMidiCursorPosition() const { return midiScheduled.cursorPosition(); }
     void setSlidesMidiEnabled(bool enabled) { midiScheduled.setSendEnabled(enabled); }
     int getOutputChannelCount()const{return outputChannelCount;}
+    std::uint64_t getAudioCallbacks()const{return player.callbackCount();}std::uint64_t getAudioDeadlineMisses()const{return player.deadlineMissCount();}std::uint64_t getMaximumCallbackNs()const{return player.maximumCallbackNs();}int getDeviceXruns()const{if(auto* device=deviceManager.getCurrentAudioDevice())return std::max(0,device->getXRunCount());return 0;}double getDeviceSampleRate()const{return player.currentSampleRate();}int getDeviceBlockFrames()const{return player.currentBlockFrames();}juce::String getDeviceError()const{return player.error();}
     bool routingReady()const{return routeReady;}
     bool isStereoFallback()const{return stereoFallback;}
     bool isIemReady()const{return iemReady;}
@@ -394,7 +413,7 @@ private:
     juce::MixerAudioSource mixer, cueMixer;
     GainRampAudioSource masterGain { mixer };
     TransportGate gate { masterGain };
-    juce::AudioSourcePlayer player;
+    MonitoredAudioPlayer player;
     juce::TimeSliceThread readAheadThread { "Playback read-ahead" };
     std::vector<std::unique_ptr<juce::AudioFormatReaderSource>> readers;
     std::vector<std::unique_ptr<juce::AudioTransportSource>> transports;
@@ -469,7 +488,7 @@ int main(int argc, char* argv[]) {
         else if (command=="pause") std::cout << "PAUSE command_ms=" << engine.pause() << '\n';
         else if (command=="stop") std::cout << "STOP command_ms=" << engine.stop() << '\n';
         else if (command=="seek") { double s=0; std::cin>>s; std::cout << "SEEK command_ms=" << engine.seek(s) << '\n'; }
-        else if (command=="status") {engine.synchronizeTransportEnd();std::cout << "STATE state=" << engine.stateName() << " position_seconds=" << engine.positionSeconds() << " start_latency_ms=" << engine.startLatencyMs() << " music_gain_target=" << engine.musicGainTarget() << " pad_gain_target=" << engine.padGainTarget() << " cue_open=" << (engine.cueIsOpen()?1:0) << " recovery_cue_triggers=" << engine.recoveryCueTriggers() << " midi_dispatched=" << engine.getMidiDispatchedEventCount() << " midi_flushes=" << engine.getMidiFlushCount() << " midi_cursor=" << engine.getMidiCursorPosition() << '\n';const auto peaks=engine.mixerPeaks();std::cout<<"METERS master="<<engine.masterPeak()<<" channels=";for(size_t index=0;index<peaks.size();++index){if(index)std::cout<<',';std::cout<<peaks[index];}std::cout<<'\n';for(const auto& event:engine.takeMidiInputEvents())std::cout<<"MIDI_IN status="<<event.status<<" data1="<<event.data1<<" data2="<<event.data2<<'\n';}
+        else if (command=="status") {engine.synchronizeTransportEnd();std::cout << "STATE state=" << engine.stateName() << " position_seconds=" << engine.positionSeconds() << " start_latency_ms=" << engine.startLatencyMs() << " music_gain_target=" << engine.musicGainTarget() << " pad_gain_target=" << engine.padGainTarget() << " cue_open=" << (engine.cueIsOpen()?1:0) << " recovery_cue_triggers=" << engine.recoveryCueTriggers() << " midi_dispatched=" << engine.getMidiDispatchedEventCount() << " midi_flushes=" << engine.getMidiFlushCount() << " midi_cursor=" << engine.getMidiCursorPosition() << '\n';std::cout<<"HEALTH sample_rate="<<engine.getDeviceSampleRate()<<" block_frames="<<engine.getDeviceBlockFrames()<<" callbacks="<<engine.getAudioCallbacks()<<" xruns="<<engine.getDeviceXruns()<<" deadline_misses="<<engine.getAudioDeadlineMisses()<<" max_callback_ns="<<engine.getMaximumCallbackNs()<<" device_error="<<(engine.getDeviceError().isEmpty()?0:1)<<'\n';const auto peaks=engine.mixerPeaks();std::cout<<"METERS master="<<engine.masterPeak()<<" channels=";for(size_t index=0;index<peaks.size();++index){if(index)std::cout<<',';std::cout<<peaks[index];}std::cout<<'\n';for(const auto& event:engine.takeMidiInputEvents())std::cout<<"MIDI_IN status="<<event.status<<" data1="<<event.data1<<" data2="<<event.data2<<'\n';}
         else if (command=="pad_on") { engine.setPad(true); std::cout << "PAD state=on\n"; }
         else if (command=="pad_off") { engine.setPad(false); std::cout << "PAD state=off\n"; }
         else if (command=="music_on") { engine.setMusic(true); std::cout << "MUSIC state=on\n"; }

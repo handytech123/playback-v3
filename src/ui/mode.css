@@ -529,3 +529,4 @@ body:not(.expanded-editor).edit-mode .editor-grid{height:calc(100vh - 455px);min
 }
 .stem-label-gutter:has(label.stem-console){width:305px;flex-basis:305px}
 .stem-label-gutter label.stem-console{grid-template-columns:minmax(122px,1fr) 105px 30px}
+.ready.audio-warning{color:#ffc76b!important;border-color:#715b32!important;background:#211b0f!important}

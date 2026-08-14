@@ -50,3 +50,5 @@ Build the native probe with CMake/MSVC, then launch the desktop surface with
 `npm run desktop`. Performance Mode reads only the confirmed local package; it
 does not scan the library, read the workbook, invoke the analyzer, or access
 Dropbox.
+
+For the locked Dante production profile and the short operator recovery sequence, see [Sunday audio recovery](docs/SUNDAY_AUDIO_RECOVERY.md).

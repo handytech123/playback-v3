@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOpti
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { NativeEngineClient, type NativeAudioDeviceSelection, type NativeAudioRouting, type NativeMidiInputEvent, type NativeMixerMeters, type NativeReadyState, type NativeTransportState } from "../live/native-engine-client.js";
+import { NativeEngineClient, type NativeAudioDeviceSelection, type NativeAudioHealth, type NativeAudioRouting, type NativeMidiInputEvent, type NativeMixerMeters, type NativeReadyState, type NativeTransportState } from "../live/native-engine-client.js";
 import { MapEditorHistory, type MapCommand } from "../edit/map-editor.js";
 import { currentSongMapPath, loadSongMap, mapExists, saveSongMap } from "../edit/map-persistence.js";
 import { normalizeRegions, type OriginalSongMap } from "../edit/song-map.js";
@@ -113,6 +113,7 @@ async function armNativeSong(songIndex:number,sourceManifestPath=manifestPath,ro
   engine.on("fault",(error:Error)=>{performance?.reportFault(error.message);sendToRenderer("performance:state",performance?.snapshot);controlBus?.publishState();});
   engine.on("midi-input",(event:NativeMidiInputEvent)=>{void midiInputRouter?.handle(event);sendToRenderer("control:midi-input",event);});
   engine.on("meters",(meters:NativeMixerMeters)=>sendToRenderer("mixer:meters",meters));
+  let lastHealthSent=0,lastHealthSignature="";engine.on("health",(health:NativeAudioHealth)=>{const signature=`${health.sampleRate}:${health.blockFrames}:${health.xruns}:${health.deadlineMisses}:${health.deviceError}`,now=Date.now();if(signature!==lastHealthSignature||now-lastHealthSent>=1000){lastHealthSignature=signature;lastHealthSent=now;sendToRenderer("audio:health",health);}});
   const ready=await engine.start(enginePath,sourceManifestPath,songIndex,selectedMidiOutput,selectedAudioDevice,selectedMidiInput,routing);
   statusTimer=setInterval(()=>engine.requestStatus(),33);return ready;
 }
