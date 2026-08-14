@@ -31,7 +31,7 @@ export async function writeCountedCue(input: { sourcePath: string; destinationPa
   await run(input.ffmpegPath ?? "ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", input.sourcePath,
     ...numberPaths.flatMap((path) => ["-i", path]),
-    "-filter_complex", filters.join(";"), "-map", "[out]", "-map_metadata", "-1", "-vn", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", input.destinationPath,
+    "-filter_complex", filters.join(";"), "-map", "[out]", "-map_metadata", "-1", "-vn", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s24le", input.destinationPath,
   ], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
   if ((await stat(input.destinationPath)).size === 0) throw new Error(`Prepared counted cue is empty: ${input.sourcePath}`);
 }

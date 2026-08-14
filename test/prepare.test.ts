@@ -41,7 +41,7 @@ test("Confirm Set copies, verifies, and atomically publishes a ready package", a
   });
   assert.equal(result.readiness.ready, true);
   assert.equal(result.copiedBytes, bytes.length);
-  assert.deepEqual(await readFile(result.manifest.songs[0]!.stems[0]!.sourcePath), bytes);
+  assertPcm24At48k(await readFile(result.manifest.songs[0]!.stems[0]!.sourcePath));
   assert.notEqual(result.manifest.songs[0]!.liveAssets?.cues[0]?.audioPath, result.manifest.songs[0]!.liveAssets?.repeatCuePath);
   assert.match(result.manifest.songs[0]!.liveAssets?.repeatCuePath ?? "", /repeat-command\.wav$/);
 });
@@ -109,7 +109,14 @@ test("Confirm Set converts an M4A stem to PCM WAV before publishing", { skip: !e
   assert.match(preparedPath, /music\.wav$/i);
   assert.equal(preparedBytes.toString("ascii", 0, 4), "RIFF");
   assert.equal(preparedBytes.toString("ascii", 8, 12), "WAVE");
+  assertPcm24At48k(preparedBytes);
 });
+
+function assertPcm24At48k(wav:Buffer):void {
+  let offset=12;
+  while(offset+24<=wav.length){const id=wav.toString("ascii",offset,offset+4),size=wav.readUInt32LE(offset+4),data=offset+8;if(id==="fmt "){assert.equal(wav.readUInt32LE(data+4),48000);assert.equal(wav.readUInt16LE(data+14),24);return;}offset=data+size+(size&1);}
+  assert.fail("PCM WAV has no fmt chunk");
+}
 
 function playableWav(): Buffer {
   const samples = 480, data = Buffer.alloc(samples * 2), wav = Buffer.alloc(44 + data.length);

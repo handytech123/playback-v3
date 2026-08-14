@@ -7,6 +7,11 @@ The purpose of this project is not to rediscover the workflow. C2 already proved
 Start here:
 
 - [V3 Architecture](docs/V3_ARCHITECTURE.md)
+- [Playback Audio Engine V3 — Phase 0 Audit](docs/PLAYBACK_AUDIO_ENGINE_V3_PHASE0_AUDIT.md)
+- [Playback Audio Engine V3 — Phase 1 Core](docs/PLAYBACK_AUDIO_ENGINE_V3_PHASE1_CORE.md)
+- [Playback Audio Engine V3 — Phase 2 Streaming](docs/PLAYBACK_AUDIO_ENGINE_V3_PHASE2_STREAMING.md)
+- [Playback Audio Engine V3 — Phase 3 Mixer and Router](docs/PLAYBACK_AUDIO_ENGINE_V3_PHASE3_MIXER_ROUTER.md)
+- [Playback Audio Engine V3 — Phases 4–8 and Church Test](docs/PLAYBACK_AUDIO_ENGINE_V3_PHASE4_TO_8.md)
 - [Product Research Notes](docs/PRODUCT_RESEARCH_NOTES.md)
 - [Control Architecture](docs/CONTROL_ARCHITECTURE.md)
 
