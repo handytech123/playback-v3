@@ -15,7 +15,7 @@ export interface NativeTransportState { readonly state: "playing" | "paused"; re
 export interface NativeSongSelectionState extends NativeReadyState { readonly index: number; }
 export interface NativeMidiInputEvent { readonly status: number; readonly data1: number; readonly data2: number; }
 export interface NativeMixerMeters { readonly master: number; readonly channels: readonly number[]; }
-export interface NativeAudioHealth { readonly sampleRate:number; readonly blockFrames:number; readonly callbacks:number; readonly xruns:number; readonly deadlineMisses:number; readonly maximumCallbackNanoseconds:number; readonly deviceError:boolean; }
+export interface NativeAudioHealth { readonly sampleRate:number; readonly blockFrames:number; readonly callbacks:number; readonly xruns:number; readonly deadlineMisses:number; readonly maximumCallbackNanoseconds:number; readonly deviceError:boolean; readonly iemPeak:number; readonly iemClips:number; }
 
 export function nativeRoutingCommand(routing:NativeAudioRouting):string {
   const values=["routing",String(routing.stems.length)];
@@ -58,7 +58,7 @@ export function parseNativeMeters(line: string): NativeMixerMeters | null {
 
 export function parseNativeHealth(line:string):NativeAudioHealth|null{
   if(!line.startsWith("HEALTH "))return null;const fields=fieldsFromLine(line);
-  return{sampleRate:numberField(fields,"sample_rate"),blockFrames:numberField(fields,"block_frames"),callbacks:numberField(fields,"callbacks"),xruns:numberField(fields,"xruns"),deadlineMisses:numberField(fields,"deadline_misses"),maximumCallbackNanoseconds:numberField(fields,"max_callback_ns"),deviceError:fields.device_error==="1"};
+  return{sampleRate:numberField(fields,"sample_rate"),blockFrames:numberField(fields,"block_frames"),callbacks:numberField(fields,"callbacks"),xruns:numberField(fields,"xruns"),deadlineMisses:numberField(fields,"deadline_misses"),maximumCallbackNanoseconds:numberField(fields,"max_callback_ns"),deviceError:fields.device_error==="1",iemPeak:fields.iem_peak?numberField(fields,"iem_peak"):0,iemClips:fields.iem_clips?numberField(fields,"iem_clips"):0};
 }
 
 export class NativeEngineClient extends EventEmitter {

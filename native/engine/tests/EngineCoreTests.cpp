@@ -4,6 +4,7 @@
 #include "PlaybackSources.h"
 #include "SampleRateConverter.h"
 #include "StreamingSource.h"
+#include "../../src/IemMixPolicy.h"
 
 #include <algorithm>
 #include <array>
@@ -359,6 +360,28 @@ void testMixerSoloMutePanAndMeters() {
     require(meters.masterPeak == 0.25, "master meter does not match routed output");
 }
 
+void testAutomaticIemPolicyAndIsolation() {
+    require(playback::iem::stemSendEnabled(false), "unmuted stem did not enable its IEM send");
+    require(!playback::iem::stemSendEnabled(true), "muted stem leaked into its IEM send");
+    require(playback::iem::routeGain(2, 1, playback::iem::stemHeadroomGain) == 0.0625f, "stereo-to-mono IEM headroom is wrong");
+    auto liveStem = std::make_shared<ConstantSource>(1.0, 1.0);
+    auto mutedStem = std::make_shared<ConstantSource>(8.0, 8.0);
+    auto click = std::make_shared<ConstantSource>(0.5, 0.5);
+    MixerRouterGraph graph(
+        { { liveStem, { { BusId::acoustic }, { BusId::iem, playback::iem::stemHeadroomGain } } },
+          { mutedStem, { { BusId::electric }, { BusId::iem, playback::iem::stemHeadroomGain } }, 1.0, true, false },
+          { click, { { BusId::click } } } },
+        { { BusId::click, { { 0, 1 } } }, { BusId::iem, { { 2, 1 } } }, { BusId::acoustic, { { 5, 1 } } }, { BusId::electric, { { 6, 1 } } } },
+        8, 32);
+    EngineCore engine(48000.0, 8, 32); engine.graphs().publish(&graph); engine.commands().push({ CommandType::play, 0 });
+    AudioBlock64 output(8, 32); engine.process(output, 32);
+    require(output.channel(0)[0] == 0.5, "independent click output was changed by IEM policy");
+    require(output.channel(2)[0] == playback::iem::stemHeadroomGain, "IEM did not contain exactly the unmuted stem");
+    require(output.channel(5)[0] == 1.0, "normal stem output was attenuated by IEM headroom");
+    require(output.channel(6)[0] == 0.0, "muted stem leaked to its normal output");
+    for (const auto channel : { 1u, 3u, 4u, 7u }) require(output.channel(channel)[0] == 0.0, "signal leaked into an unassigned output");
+}
+
 void testAtomicRoutingGraphSwap() {
     auto tone = std::make_shared<ConstantSource>(1.0, 1.0);
     MixerRouterGraph first({ { tone, { { BusId::other } } } }, { { BusId::other, { { 0, 1 } } } }, 4, 16);
@@ -544,6 +567,7 @@ int main() {
         &testStreamingCallbackDoesNotAllocate,
         &testNamedBusAndMultichannelRouting,
         &testMixerSoloMutePanAndMeters,
+        &testAutomaticIemPolicyAndIsolation,
         &testAtomicRoutingGraphSwap,
         &testMixerRoutingValidationAndNoAllocation,
         &testSampleRateExactBypass,

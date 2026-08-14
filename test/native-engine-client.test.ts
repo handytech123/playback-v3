@@ -16,7 +16,7 @@ test("parses native DAW meter packets and IEM readiness",()=>{
 });
 
 test("parses quiet production audio health telemetry",()=>{
-  assert.deepEqual(parseNativeHealth("HEALTH sample_rate=48000 block_frames=512 callbacks=2813 xruns=0 deadline_misses=0 max_callback_ns=1090500 device_error=0"),{sampleRate:48000,blockFrames:512,callbacks:2813,xruns:0,deadlineMisses:0,maximumCallbackNanoseconds:1090500,deviceError:false});
+  assert.deepEqual(parseNativeHealth("HEALTH sample_rate=48000 block_frames=512 callbacks=2813 xruns=0 deadline_misses=0 max_callback_ns=1090500 device_error=0 iem_peak=0.42 iem_clips=0"),{sampleRate:48000,blockFrames:512,callbacks:2813,xruns:0,deadlineMisses:0,maximumCallbackNanoseconds:1090500,deviceError:false,iemPeak:.42,iemClips:0});
 });
 
 test("serializes an atomic one-based native routing update",()=>{
