@@ -135,7 +135,7 @@ export function normalizeStemMix(value: readonly StemMixSetting[] | undefined, s
       gain: Number.isFinite(gain) ? Math.max(0, Math.min(1.25, gain)) : 1,
       muted: Boolean(source?.muted),
       solo: Boolean(source?.solo),
-      iem: Boolean(source?.iem),
+      iem: !Boolean(source?.muted),
     };
   });
 }
