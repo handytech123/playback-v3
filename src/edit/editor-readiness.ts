@@ -134,7 +134,7 @@ async function missing(paths: readonly string[]) {
 
 async function cueAvailable(directory: string, label: string) {
   const normalized = normalizeCueFileLabel(label);
-  const aliases: Record<string, string> = { START: "CountIn.wav" };
+  const aliases: Record<string, string> = { START: "CountIn.wav", "A CAPELLA": "ACAPPELLA.wav", ACAPELLA: "ACAPPELLA.wav" };
   const direct = [
     aliases[normalized.toUpperCase()] ?? `${normalized.toUpperCase()}.wav`,
     `${normalized.toUpperCase().replace(/\s+/g, "")}.wav`,
@@ -152,6 +152,7 @@ async function cueAvailable(directory: string, label: string) {
 function normalizeCueFileLabel(label: string) {
   return label
     .trim()
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/([A-Za-z])([0-9])$/, "$1 $2")
     .replace(/^Turn\s*Arround/i, "Turn Around")
     .replace(/^Turnaround/i, "Turn Around")

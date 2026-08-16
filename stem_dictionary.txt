@@ -22,15 +22,15 @@
 #   01 PB_CLICK    - Dynamic Click
 #   02 PB_CUE      - Dynamic Cue
 #   03 PB_IEM      - In-ear monitor feed
-#   04 PB_ACOUSTIC - Acoustic guitars
-#   05 PB_ELECTRIC - Electric guitars
+#   04 PB_PAD      - Dynamic Pad
+#   05 PB_DRUMS    - Drums / percussion / loops
 #   06 PB_BASS     - Bass
-#   07 PB_KEYS     - Piano / keys / organ / Rhodes / synth
-#   08 PB_STRINGS  - Strings / orchestra / horns / brass
-#   09 PB_DRUMS    - Drums / percussion / loops
-#   10 PB_VOCALS   - Vocals / choir / BGVs
-#   11 PB_OTHER    - Other / misc / FX / unknown musical stems
-#   12 PB_PAD      - Dynamic Pad
+#   07 PB_ACOUSTIC - Acoustic guitars
+#   08 PB_ELECTRIC - Electric guitars
+#   09 PB_KEYS     - Piano / keys / organ / Rhodes / synth
+#   10 PB_ORCHESTRA - Strings / orchestra / horns / brass
+#   11 PB_VOCALS   - Vocals / choir / BGVs
+#   12 PB_OTHER    - Other / misc / FX / unknown musical stems
 #
 # Do NOT create separate piano or percussion buses.
 # Piano belongs to keys. Percussion and loops belong to drums.

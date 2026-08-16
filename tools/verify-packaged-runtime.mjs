@@ -5,7 +5,7 @@ const required = [
   ["FFmpeg", "vendor/runtime/ffmpeg.exe", 1_000_000],
   ["FFmpeg license", "vendor/runtime/FFMPEG-LICENSE.txt", 1],
   ["Rubber Band", "vendor/runtime/rubberband.exe", 100_000],
-  ["native Playback engine", "native/build/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe", 1_000_000],
+  ["native Playback engine", "native/build-local/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe", 1_000_000],
 ];
 
 const missing = [];

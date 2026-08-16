@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nativeRoutingCommand,parseNativeHealth,parseNativeLine,parseNativeMeters } from "../src/live/native-engine-client.js";
+import { nativeRoutingCommand,parseNativeHealth,parseNativeLine,parseNativeMeters,NativeEngineClient } from "../src/live/native-engine-client.js";
 
 test("parses native ready measurements", () => {
   assert.deepEqual(parseNativeLine("READY device_open_ms=143.2 arm_ms=125.7 stems=11"), { deviceOpenMs: 143.2, armMs: 125.7, stems: 11 });
@@ -21,4 +21,14 @@ test("parses quiet production audio health telemetry",()=>{
 
 test("serializes an atomic one-based native routing update",()=>{
   assert.equal(nativeRoutingCommand({stems:[4,10],stemChannels:[1,1],click:1,clickChannels:1,cue:2,cueChannels:1,pad:12,padChannels:1,iem:3,iemChannels:1}),"routing 2 4 1 10 1 1 1 2 1 12 1 3 1");
+});
+
+test("serializes named stem buses separately from the global output matrix",()=>{
+  assert.equal(nativeRoutingCommand({stems:[7,9],stemChannels:[1,1],stemBuses:["acoustic","keys"],busRoutes:[{bus:"acoustic",output:7,channels:1},{bus:"keys",output:9,channels:1}],click:1,clickChannels:1,cue:2,cueChannels:1,pad:4,padChannels:1,iem:3,iemChannels:1}),"bus_routing 2 acoustic keys 2 acoustic 7 1 keys 9 1 1 1 2 1 4 1 3 1");
+});
+
+test("rejects unsafe A/B transition requests before reaching native audio",()=>{
+  const client=new NativeEngineClient();
+  assert.throws(()=>client.beginSongTransition(1,"crossfade",0,true),/invalid/);
+  assert.throws(()=>client.beginSongTransition(-1,"overlap",2,false),/invalid/);
 });

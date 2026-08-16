@@ -28,7 +28,7 @@ Home Dante validation passed on Dante Virtual Soundcard (x64), 48 kHz, 256 frame
 2. Close Playback V3 so it releases the ASIO driver.
 3. Run the test script silently; require zero device xruns and source underruns.
 4. Lower console gains, notify everyone, then run the explicitly confirmed audible test.
-5. Listen to outputs 1–12: click, cue, IEM, pad, drums, bass, acoustic, electric, keys, strings, vocals, other.
+5. Listen to outputs 1–12: click, cue, IEM, pad, drums, bass, acoustic, electric, keys, orchestra, vocals, other.
 6. Check Start, Stop, Seek, song end, pad loop, click/cue timing, and a key-changed song.
 7. Reopen Playback V3. Do not switch the default engine if routing, timing, recovery, or audio quality is wrong.
 

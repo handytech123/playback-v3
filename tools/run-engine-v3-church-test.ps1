@@ -11,7 +11,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $workspace = Split-Path -Parent $PSScriptRoot
-$harness = Join-Path $workspace "native\build\PlaybackEngineV3Test_artefacts\Release\PlaybackEngineV3Test.exe"
+$harness = Join-Path $workspace "native\build-local\PlaybackEngineV3Test_artefacts\Release\PlaybackEngineV3Test.exe"
 if (-not (Test-Path -LiteralPath $harness -PathType Leaf)) { throw "Build PlaybackEngineV3Test first: $harness" }
 if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { throw "Confirmed-set manifest not found: $ManifestPath" }
 if ($Audible -and -not $ConfirmAudible) { throw "Audible output is locked. Add -ConfirmAudible only after console gains and routing are safe." }

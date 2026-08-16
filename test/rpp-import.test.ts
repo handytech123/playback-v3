@@ -80,3 +80,23 @@ test("preserves Reaper region labels instead of normalizing unfamiliar sections 
  MARKER 2 5.255474452554745 Intro 0
  MARKER 3 26.277372262773724 Refrain 0
 >`;await writeFile(path,content);const preview=await importReaperProject(path,songId("blessed-assurance"));assert.deepEqual(preview.arrangement.regions.map(region=>region.name),["Count Off","Intro","Refrain"]);assert.deepEqual(preview.arrangement.cueMarkers.map(cue=>cue.phrase),["Count Off","Intro","Refrain"]);assert.deepEqual(preview.arrangement.regions[0]?.startPosition,{measure:1,beat:1,tick:0});assert.deepEqual(preview.arrangement.regions[1]?.startPosition,{measure:3,beat:1,tick:0});});
+
+test("recognizes a numbered ProPresenter MIDI item on an unnamed Reaper track",async()=>{const root=await mkdtemp(join(tmpdir(),"rpp-numbered-midi-")),path=join(root,"Abridged.rpp"),content=`<REAPER_PROJECT 0.1 "7.0/x64" 1
+ TEMPO 120 4 4 0
+ MARKER 1 0 Intro 1
+ MARKER 1 4 "" 1
+ <TRACK {MIDI}
+  NAME ""
+  <ITEM
+   POSITION 0
+   LENGTH 4
+   NAME 15-MIDI
+   <SOURCE MIDI
+    HASDATA 1 960 QN
+    E 0 90 11 01
+    E 120 90 12 02
+    E 120 90 13 03
+   >
+  >
+ >
+>`;await writeFile(path,content);const preview=await importReaperProject(path,songId("abridged"));assert.equal(preview.arrangement.slidesTrackName,"15-MIDI");assert.deepEqual(preview.arrangement.proPresenterMidi.map(event=>event.data1),[17,18,19]);assert.doesNotMatch(preview.arrangement.warnings.join(" "),/No Slides track/);});

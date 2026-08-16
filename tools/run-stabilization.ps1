@@ -5,11 +5,11 @@ Set-Location -LiteralPath $root
 $started = Get-Date
 npm.cmd test
 npm.cmd run native:build
-ctest --test-dir native/build -C Release --output-on-failure
+ctest --test-dir native/build-local -C Release --output-on-failure
 
-$testExecutable = Join-Path $root "native\build\Release\PlaybackEngineCoreTests.exe"
+$testExecutable = Join-Path $root "native\build-local\Release\PlaybackEngineCoreTests.exe"
 if (-not (Test-Path -LiteralPath $testExecutable)) {
-  $testExecutable = Join-Path $root "native\build\PlaybackEngineCoreTests.exe"
+  $testExecutable = Join-Path $root "native\build-local\PlaybackEngineCoreTests.exe"
 }
 if (-not (Test-Path -LiteralPath $testExecutable)) { throw "Native stabilization test executable is missing" }
 

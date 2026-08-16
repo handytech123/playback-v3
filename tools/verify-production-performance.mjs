@@ -9,7 +9,7 @@ import { NativeEngineClient } from "../dist/src/live/native-engine-client.js";
 
 const root = path.resolve(".");
 const manifestPath = path.join(root, ".playback-cache", "arrangements", "reaper-72091bdc9061", "performance", "confirmed-set.json");
-const enginePath = path.join(root, "native", "build", "PlaybackEngineProbe_artefacts", "Release", "PlaybackEngineProbe.exe");
+const enginePath = path.join(root, "native", "build-local", "PlaybackEngineProbe_artefacts", "Release", "PlaybackEngineProbe.exe");
 const settingsPath = path.join(root, ".playback-data", "device-settings.json");
 const outputRoot = path.join(root, "artifacts", "production-performance");
 const captureScript = path.join(root, "tools", "capture-process-window.ps1");

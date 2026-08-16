@@ -10,14 +10,23 @@ export interface NativeReadyState {
   readonly stereoFallback?: boolean; readonly nextReady?: boolean; readonly nextIndex?: number;
 }
 export interface NativeAudioDeviceSelection { readonly type: string; readonly name: string; readonly outputChannels?: number; readonly maxOutputChannels?: number; }
-export interface NativeAudioRouting { readonly stems: readonly number[]; readonly stemChannels: readonly (1|2)[]; readonly click: number; readonly clickChannels:1|2; readonly cue: number; readonly cueChannels:1|2; readonly pad: number; readonly padChannels:1|2; readonly iem: number; readonly iemChannels:1|2; }
+export type NativeStemBus="drums"|"bass"|"acoustic"|"electric"|"keys"|"strings"|"vocals"|"other"|"pad";
+export interface NativeBusOutputRoute { readonly bus:NativeStemBus;readonly output:number;readonly channels:1|2; }
+export interface NativeAudioRouting { readonly stems: readonly number[]; readonly stemChannels: readonly (1|2)[]; readonly stemBuses?:readonly NativeStemBus[];readonly busRoutes?:readonly NativeBusOutputRoute[];readonly click: number; readonly clickChannels:1|2; readonly cue: number; readonly cueChannels:1|2; readonly pad: number; readonly padChannels:1|2; readonly iem: number; readonly iemChannels:1|2; }
 export interface NativeTransportState { readonly state: "playing" | "paused"; readonly positionSeconds: number; readonly startLatencyMs?: number; }
 export interface NativeSongSelectionState extends NativeReadyState { readonly index: number; }
+export interface NativeTransitionState extends NativeSongSelectionState { readonly elapsedSeconds: number; readonly deck: "A"|"B"; }
 export interface NativeMidiInputEvent { readonly status: number; readonly data1: number; readonly data2: number; }
 export interface NativeMixerMeters { readonly master: number; readonly channels: readonly number[]; }
 export interface NativeAudioHealth { readonly sampleRate:number; readonly blockFrames:number; readonly callbacks:number; readonly xruns:number; readonly deadlineMisses:number; readonly maximumCallbackNanoseconds:number; readonly deviceError:boolean; readonly iemPeak:number; readonly iemClips:number; }
 
 export function nativeRoutingCommand(routing:NativeAudioRouting):string {
+  if(routing.stemBuses&&routing.busRoutes){
+    const values=["bus_routing",String(routing.stemBuses.length),...routing.stemBuses,String(routing.busRoutes.length)];
+    for(const route of routing.busRoutes)values.push(route.bus,String(route.output),String(route.channels));
+    values.push(String(routing.click),String(routing.clickChannels),String(routing.cue),String(routing.cueChannels),String(routing.pad),String(routing.padChannels),String(routing.iem),String(routing.iemChannels));
+    return values.join(" ");
+  }
   const values=["routing",String(routing.stems.length)];
   for(let index=0;index<routing.stems.length;index++)values.push(String(routing.stems[index]),String(routing.stemChannels[index]));
   values.push(String(routing.click),String(routing.clickChannels),String(routing.cue),String(routing.cueChannels),String(routing.pad),String(routing.padChannels),String(routing.iem),String(routing.iemChannels));
@@ -73,7 +82,7 @@ export class NativeEngineClient extends EventEmitter {
     if (midiOutputName === null) args.push("--disable-midi"); else if (midiOutputName) args.push("--midi-output", midiOutputName);
     if (midiInputName === null) args.push("--disable-midi-input"); else if (midiInputName) args.push("--midi-input", midiInputName);
     if (audioDevice) { args.push("--audio-device-type", audioDevice.type, "--audio-device-name", audioDevice.name); if(audioDevice.outputChannels)args.push("--output-count",String(audioDevice.outputChannels)); }
-    if(routing){for(let index=0;index<routing.stems.length;index++)args.push("--stem-output",String(routing.stems[index]),"--stem-channels",String(routing.stemChannels[index]));args.push("--click-output",String(routing.click),"--click-channels",String(routing.clickChannels),"--cue-output",String(routing.cue),"--cue-channels",String(routing.cueChannels),"--pad-output",String(routing.pad),"--pad-channels",String(routing.padChannels),"--iem-output",String(routing.iem),"--iem-channels",String(routing.iemChannels));}
+    if(routing){if(routing.stemBuses&&routing.busRoutes){for(const bus of routing.stemBuses)args.push("--stem-bus",bus);for(const route of routing.busRoutes)args.push("--bus-route",route.bus,String(route.output),String(route.channels));}else for(let index=0;index<routing.stems.length;index++)args.push("--stem-output",String(routing.stems[index]),"--stem-channels",String(routing.stemChannels[index]));args.push("--click-output",String(routing.click),"--click-channels",String(routing.clickChannels),"--cue-output",String(routing.cue),"--cue-channels",String(routing.cueChannels),"--pad-output",String(routing.pad),"--pad-channels",String(routing.padChannels),"--iem-output",String(routing.iem),"--iem-channels",String(routing.iemChannels));}
     const child = spawn(executablePath, args, { stdio: ["pipe", "pipe", "pipe"] });
     this.process = child;
     child.once("exit", (code) => { if (this.process === child) this.process = null; if (!this.expectedExits.has(child)) this.emit("fault", new Error(`Native audio engine stopped unexpectedly (${code ?? "no exit code"})`)); });
@@ -110,7 +119,7 @@ export class NativeEngineClient extends EventEmitter {
   setMixerChannel(index: number, gain: number, muted: boolean, solo: boolean, iem: boolean): void { if (!Number.isInteger(index) || index < 0) throw new Error("Mixer channel index must be non-negative"); validateGain(gain); this.send(`mixer_channel ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
   setMasterGain(gain: number): void { validateGain(gain); this.send(`master_gain ${gain}`); }
   setRouting(routing:NativeAudioRouting):Promise<void>{
-    if(routing.stems.length!==routing.stemChannels.length)throw new Error("Every stem route requires a channel width");
+    if(routing.stems.length!==routing.stemChannels.length||routing.stemBuses&&routing.stemBuses.length!==routing.stems.length)throw new Error("Every stem route requires one bus and channel width");
     return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{this.off("native-line",onLine);reject(new Error("Native routing update timed out"));},3000),onLine=(line:string):void=>{if(line.startsWith("ROUTING_FAILED")){clearTimeout(timeout);this.off("native-line",onLine);reject(new Error(line));}else if(line.startsWith("ROUTING_UPDATED")){clearTimeout(timeout);this.off("native-line",onLine);resolve();}};this.on("native-line",onLine);this.send(nativeRoutingCommand(routing));});
   }
   selectSong(index: number): Promise<NativeSongSelectionState> {
@@ -123,6 +132,10 @@ export class NativeEngineClient extends EventEmitter {
       };
       this.on("native-line", onLine); this.send(`select_song ${index}`);
     });
+  }
+  beginSongTransition(index:number,type:"crossfade"|"overlap",durationSeconds:number,continuePad:boolean):Promise<NativeTransitionState>{
+    if(!Number.isInteger(index)||index<0||!Number.isFinite(durationSeconds)||durationSeconds<=0||durationSeconds>5)throw new Error("Native song transition is invalid");
+    return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{this.off("native-line",onLine);reject(new Error("Native A/B transition timed out"));},Math.ceil(durationSeconds*1000)+10000),onLine=(line:string):void=>{if(line.startsWith("TRANSITION_FAILED ")){clearTimeout(timeout);this.off("native-line",onLine);reject(new Error(line));}else if(line.startsWith("TRANSITION_COMPLETE ")){clearTimeout(timeout);this.off("native-line",onLine);const fields=fieldsFromLine(line),deck=fields.deck;if(deck!=="A"&&deck!=="B")return reject(new Error("Native transition returned an invalid deck"));resolve({index:numberField(fields,"index"),elapsedSeconds:numberField(fields,"elapsed_seconds"),deck,deviceOpenMs:numberField(fields,"device_open_ms"),armMs:numberField(fields,"arm_ms"),stems:numberField(fields,"stems"),clickEvents:numberField(fields,"click_events"),cueEvents:numberField(fields,"cue_events"),padKey:fields.pad_key??"",midiEvents:numberField(fields,"midi_events"),midiEnabled:fields.midi_enabled==="1",outputChannels:numberField(fields,"output_channels"),routingReady:fields.routing_ready==="1",iemReady:fields.iem_ready==="1",stereoFallback:fields.stereo_fallback==="1",nextReady:fields.next_ready==="1",nextIndex:numberField(fields,"next_index")});}};this.on("native-line",onLine);this.send(`transition_song ${index} ${type} ${durationSeconds} ${continuePad?1:0}`);});
   }
   selectManifest(manifestPath:string,index:number):Promise<NativeSongSelectionState>{
     if(!manifestPath||!Number.isInteger(index)||index<0)throw new Error("Manifest song selection is invalid");

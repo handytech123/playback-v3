@@ -1,4 +1,4 @@
-import type { NativeAudioRouting } from "../live/native-engine-client.js";
+import type { NativeAudioRouting,NativeStemBus } from "../live/native-engine-client.js";
 import { classifyStemOutput, PLAYBACK_OUTPUTS } from "./output-layout.js";
 
 export type GlobalBusKey = "click"|"cue"|"iem"|"acoustic"|"electric"|"bass"|"keys"|"strings"|"drums"|"vocals"|"other"|"pad";
@@ -18,9 +18,10 @@ export function normalizeGlobalBusRouting(value:unknown):GlobalBusRouting {
 }
 
 export function deriveAudioRouting(busRouting:GlobalBusRouting,stemLabels:readonly string[]):NativeAudioRouting {
-  const stemRoutes=stemLabels.map(label=>busRouting[classifyStemOutput(label) as GlobalBusKey]??busRouting.other);
+  const stemBuses=stemLabels.map(label=>classifyStemOutput(label) as NativeStemBus),stemRoutes=stemBuses.map(bus=>busRouting[bus]??busRouting.other);
   return {
     stems:stemRoutes.map(route=>route.output),stemChannels:stemRoutes.map(route=>route.channels),
+    stemBuses,busRoutes:(["drums","bass","acoustic","electric","keys","strings","vocals","other","pad"] as NativeStemBus[]).map(bus=>({bus,...busRouting[bus]})),
     click:busRouting.click.output,clickChannels:busRouting.click.channels,
     cue:busRouting.cue.output,cueChannels:busRouting.cue.channels,
     pad:busRouting.pad.output,padChannels:busRouting.pad.channels,

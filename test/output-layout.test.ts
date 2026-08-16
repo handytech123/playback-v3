@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyStemOutput, DEFAULT_INSTRUMENT_OUTPUTS, PLAYBACK_OUTPUTS } from "../src/audio/output-layout.js";
 
-test("defines the fixed 12-channel mono Playback output contract",()=>{
+test("defines the production Playback bus contract",()=>{
   assert.deepEqual(PLAYBACK_OUTPUTS.map(({output,danteLabel})=>[output,danteLabel]),[
-    [1,"PB_CLICK"],[2,"PB_CUE"],[3,"PB_IEM"],[4,"PB_ACOUSTIC"],[5,"PB_ELECTRIC"],[6,"PB_BASS"],
-    [7,"PB_KEYS"],[8,"PB_STRINGS"],[9,"PB_DRUMS"],[10,"PB_VOCALS"],[11,"PB_OTHER"],[12,"PB_PAD"],
+    [1,"PB_CLICK"],[2,"PB_CUE"],[3,"PB_IEM"],[4,"PB_PAD"],[5,"PB_DRUMS"],[6,"PB_BASS"],
+    [7,"PB_ACOUSTIC"],[8,"PB_ELECTRIC"],[9,"PB_KEYS"],[10,"PB_ORCHESTRA"],[11,"PB_VOCALS"],[12,"PB_OTHER"],
   ]);
-  assert.deepEqual(DEFAULT_INSTRUMENT_OUTPUTS,{acoustic:4,electric:5,bass:6,keys:7,strings:8,drums:9,vocals:10,other:11});
+  assert.deepEqual(DEFAULT_INSTRUMENT_OUTPUTS,{drums:5,bass:6,acoustic:7,electric:8,keys:9,strings:10,vocals:11,other:12});
   assert.equal(PLAYBACK_OUTPUTS.every(output=>output.format==="mono"),true);
 });
 

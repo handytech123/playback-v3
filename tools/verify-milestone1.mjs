@@ -7,7 +7,7 @@ import { NativeEngineClient } from "../dist/src/live/native-engine-client.js";
 const root=path.resolve(".");
 const setRoot=path.join(root,".playback-cache","milestone-1-cornerstone-performance-v3");
 const manifestPath=path.join(setRoot,"confirmed-set.json");
-const enginePath=path.join(root,"native","build","PlaybackEngineProbe_artefacts","Release","PlaybackEngineProbe.exe");
+const enginePath=path.join(root,"native","build-local","PlaybackEngineProbe_artefacts","Release","PlaybackEngineProbe.exe");
 const manifest=JSON.parse(await readFile(manifestPath,"utf8")); const report=validateConfirmedSet(manifest);
 if(!report.ready)throw new Error(`Readiness failed: ${report.issues.map((issue)=>issue.message).join("; ")}`);
 const song=manifest.songs[0]; if(song.song.id!=="songselect:6158927"||song.song.title!=="Cornerstone"||song.selectedKey!=="C"||song.selectedBpm!==72)throw new Error("Production master facts are incorrect");

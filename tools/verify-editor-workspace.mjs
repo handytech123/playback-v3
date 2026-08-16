@@ -42,7 +42,7 @@ if (!savedDraft || validateArrangementDraft(savedDraft).length) throw new Error(
 const waveformDirectory = path.join(root, ".playback-cache", "editor-waveforms");
 const waveformBundles = await Promise.all((await readdir(waveformDirectory)).filter((name) => name.endsWith(".json")).map(async (name) => JSON.parse(await readFile(path.join(waveformDirectory, name), "utf8"))));
 if (!waveformBundles.some((bundle) => bundle.stems.length === 9) || !waveformBundles.some((bundle) => bundle.stems.length === 13)) throw new Error("Summary/stacked waveform caches do not cover Original and Reaper arrangements");
-const enginePath = path.join(root, "native", "build", "PlaybackEngineProbe_artefacts", "Release", "PlaybackEngineProbe.exe");
+const enginePath = path.join(root, "native", "build-local", "PlaybackEngineProbe_artefacts", "Release", "PlaybackEngineProbe.exe");
 const engine = new NativeEngineClient();
 const status = () => new Promise((resolveStatus, reject) => {
   const timeout = setTimeout(() => reject(new Error("Native status timeout")), 2000);

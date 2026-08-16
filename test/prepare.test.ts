@@ -7,11 +7,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { confirmSet } from "../src/confirmed-set/prepare.js";
+import { confirmSet, resolveSetlistPositionMidi } from "../src/confirmed-set/prepare.js";
 import { songId, type PreparedSong } from "../src/domain/song.js";
 
 const run = promisify(execFile);
 const bundledFfmpeg = join(process.cwd(), "vendor", "runtime", "ffmpeg.exe");
+
+test("confirmed-set position rewrites only note 18 note-ons for each occurrence", () => {
+  const base: PreparedSong = {
+    song: { id: songId("midi"), title: "MIDI", artist: "A", vendor: "V", originalKey: "C", originalBpm: 120, originalTimeSignature: { numerator: 4, denominator: 4 } },
+    selectedKey: "C", selectedBpm: 120, timeSignature: { numerator: 4, denominator: 4 }, durationSeconds: 2, stems: [], regions: [], cues: [], cacheFingerprint: "midi",
+    control: { sourceType: "reaper-import", sourceSha256: "x", midiOutputName: null, proPresenterMidi: [
+      { atSeconds: 0, status: 0x90, data1: 17, data2: 7 },
+      { atSeconds: .1, status: 0x90, data1: 18, data2: 99 },
+      { atSeconds: .2, status: 0x80, data1: 18, data2: 0 },
+      { atSeconds: .3, status: 0x90, data1: 19, data2: 12 },
+    ] },
+  };
+  const first = resolveSetlistPositionMidi(base, 0).control!.proPresenterMidi;
+  const fourth = resolveSetlistPositionMidi(base, 3).control!.proPresenterMidi;
+  assert.deepEqual(first.map(event => event.data2), [7, 1, 0, 12]);
+  assert.deepEqual(fourth.map(event => event.data2), [7, 4, 0, 12]);
+  assert.equal(base.control!.proPresenterMidi[1]!.data2, 99);
+});
 
 test("Confirm Set copies, verifies, and atomically publishes a ready package", async () => {
   const root = await mkdtemp(join(tmpdir(), "playback-v3-"));

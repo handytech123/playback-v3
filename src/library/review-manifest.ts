@@ -11,6 +11,7 @@ import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.
 import { isReferenceAudio } from "./audio-role.js";
 import { parseTimeSignature, type MasterSongRow } from "./normalize-song.js";
 import { loadPlaybackAnalyzerPackage, mapAnalyzerTimelineFacts, mapAnalyzerTimelinePackage, type AnalyzerArrangementFact } from "./analyzer-package.js";
+import { importReaperProject } from "../reaper/rpp-import.js";
 
 export const ANALYZER_SONG_MAP_VERSION = 14;
 const REVIEW_STEM_CACHE_VERSION = 3;
@@ -43,12 +44,25 @@ export async function prepareCandidateReview(input: {
   const manifestPath = join(reviewRoot, "confirmed-set.json");
   await mkdir(reviewRoot, { recursive: true });
 
+  const cueLabels = Array.from(new Set((analyzerPackage.cues ?? []).map(cue => String(cue.phrase ?? "")).filter(Boolean)));
+  const cueSources = await Promise.all(cueLabels.map(label => resolveCueAudio(input.cueFolder, label).catch(() => null)));
+  const reusableAudioFingerprint = await fingerprintFiles([
+    input.clickRegularPath,
+    input.clickAccentPath,
+    join(input.cueFolder, "REPEAT.wav"),
+    join(input.padFolder, `Pad_${padFileKey(selectedKey)}.wav`),
+    ...cueSources.filter((value): value is string => Boolean(value)),
+  ]);
+  const arrangementRppFingerprint = await fingerprintFiles((analyzerPackage.arrangements ?? []).flatMap(arrangement => typeof arrangement.sourcePath === "string" && /\.rpp$/i.test(arrangement.sourcePath) ? [safeAnalyzerAudioPath(sourceFolder, arrangement.sourcePath)] : []));
+
   const sourceFingerprint = createHash("sha256").update(JSON.stringify({
     songMapVersion: ANALYZER_SONG_MAP_VERSION,
     master: { key: input.master.key, bpm: input.master.bpm, timeSignature: input.master.timeSignature, folderPath: input.master.folderPath },
     analyzerPackage,
     clickRegularPath: input.clickRegularPath,
     clickAccentPath: input.clickAccentPath,
+    reusableAudioFingerprint,
+    arrangementRppFingerprint,
     reviewStemCacheVersion: REVIEW_STEM_CACHE_VERSION,
     analyzerControlVersion: 1,
   })).digest("hex");
@@ -123,6 +137,10 @@ export async function prepareCandidateReview(input: {
     if (!arrangementTimeline) continue;
     const arrangementCueMarkers = arrangementTimeline.cues.map(cue => ({ ...(cue.position ? { position: cue.position } : {}), atSeconds: cue.atSeconds, label: cue.phrase, targetRegionId: cue.targetRegionId }));
     const safeArrangementId = safeId(String(arrangement.id ?? arrangement.name ?? arrangement.sourcePath ?? `arrangement-${arrangementSongs.length + 1}`));
+    let arrangementMidi = analyzerArrangementSlidesMidi(arrangement), arrangementSourceSha256 = createHash("sha256").update(String(arrangement.sourcePath ?? safeArrangementId)).digest("hex");
+    if (!arrangementMidi.length && typeof arrangement.sourcePath === "string" && /\.rpp$/i.test(arrangement.sourcePath)) {
+      try { const imported = await importReaperProject(safeAnalyzerAudioPath(sourceFolder, arrangement.sourcePath), originalSongFacts.id); arrangementMidi = [...imported.arrangement.proPresenterMidi]; arrangementSourceSha256 = imported.arrangement.sourceSha256; } catch {}
+    }
     arrangementSongs.push({
       ...arrangementBaseSong,
       selectedBpm: arrangementBpm,
@@ -138,8 +156,8 @@ export async function prepareCandidateReview(input: {
         id: safeArrangementId,
         name: String(arrangement.name ?? arrangement.sourcePath ?? `Arrangement ${arrangementSongs.length + 1}`),
         sourceType: "reaper-import",
-        sourceSha256: createHash("sha256").update(String(arrangement.sourcePath ?? safeArrangementId)).digest("hex"),
-        proPresenterMidi: analyzerArrangementSlidesMidi(arrangement),
+        sourceSha256: arrangementSourceSha256,
+        proPresenterMidi: arrangementMidi,
         midiOutputName: null,
       },
     });
@@ -317,10 +335,10 @@ export function correctedReviewCueAt(regionStart: number, warningSeconds: number
 }
 
 export function cueAudioLookupNames(label: string) {
-  const spaced = label.replace(/([A-Za-z])([0-9])$/, "$1 $2").replace(/^Turnaround/i, "Turn Around").replace(/^Turn Arround/i, "Turn Around").replace(/-/g, " ");
+  const spaced = label.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Za-z])([0-9])$/, "$1 $2").replace(/^Turnaround/i, "Turn Around").replace(/^Turn Arround/i, "Turn Around").replace(/-/g, " ");
   const normalized = spaced.toUpperCase();
   const base = spaced.replace(/\s+\d+$/,"").toUpperCase();
-  const aliases: Record<string, string> = { START: "CountIn.wav", "COUNT OFF": "CountIn.wav", BUILD: "BUILDITUP.wav" };
+  const aliases: Record<string, string> = { START: "CountIn.wav", "COUNT OFF": "CountIn.wav", BUILD: "BUILDITUP.wav", "A CAPELLA": "ACAPPELLA.wav", ACAPELLA: "ACAPPELLA.wav" };
   return Array.from(new Set([
     aliases[normalized] ?? `${normalized}.wav`,
     `${normalized.replace(/\s+/g, "")}.wav`,
@@ -337,4 +355,13 @@ async function resolveCueAudio(directory: string, label: string) {
     } catch {}
   }
   throw new Error(`No cue audio is available for analyzer region: ${label}`);
+}
+
+async function fingerprintFiles(paths: readonly string[]) {
+  const values=[];
+  for(const path of Array.from(new Set(paths)).sort()){
+    try{values.push([path,createHash("sha256").update(await readFile(path)).digest("hex")]);}
+    catch{values.push([path,"missing"]);}
+  }
+  return createHash("sha256").update(JSON.stringify(values)).digest("hex");
 }

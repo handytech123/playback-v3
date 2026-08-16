@@ -49,6 +49,7 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
     const songTitle = prepared.song.title;
     const requiresMusicalLocations = Number((manifest as any).review?.songMapVersion ?? 0) >= 8;
     if (!prepared.cacheFingerprint) issues.push({ songTitle, message: "Prepared cache fingerprint is missing" });
+    if(prepared.loudnessNormalization){const level=prepared.loudnessNormalization;if(level.version!==1||!Number.isFinite(level.measuredLufs)||!Number.isFinite(level.measuredTruePeakDbtp)||!Number.isFinite(level.appliedGainDb)||level.appliedGainDb < -6||level.appliedGainDb > 6)issues.push({songTitle,message:"Song loudness normalization is invalid"});}
     if (prepared.stems.length === 0) issues.push({ songTitle, message: "No playable music stems" });
     if (prepared.durationSeconds <= 0) issues.push({ songTitle, message: "Song duration must be positive" });
     if (prepared.selectedBpm <= 0) issues.push({ songTitle, message: "Selected BPM must be positive" });

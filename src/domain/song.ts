@@ -66,6 +66,7 @@ export interface PreparedSong {
   readonly durationSeconds: number;
   readonly stems: readonly AudioStem[];
   readonly stemMix?: readonly StemMixSetting[];
+  readonly loudnessNormalization?: import("../audio/song-loudness.js").SongLoudnessNormalization;
   readonly regions: readonly Region[];
   readonly cues: readonly Cue[];
   readonly cacheFingerprint: string;

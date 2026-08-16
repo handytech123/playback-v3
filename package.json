@@ -1,6 +1,6 @@
 {
   "name": "playback-v3",
-  "version": "0.1.25",
+  "version": "0.1.39",
   "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
@@ -33,6 +33,7 @@
     "verify:prep-workflow": "npm run build && npm run ui:build && node tools/verify-prep-workflow.mjs",
     "verify:control": "npm run build && npm run ui:build && node tools/verify-control-milestone.mjs",
     "verify:hardware-control": "npm run build && npm run ui:build && node tools/verify-hardware-control-milestone.mjs && node tools/verify-control-milestone.mjs",
+    "verify:dual-deck": "node tools/verify-dual-deck-native.mjs",
     "copy:cornerstone-midi-to-original": "node tools/copy-cornerstone-midi-to-original.mjs",
     "render:cornerstone-arrangement": "npm run build && node tools/render-cornerstone-arrangement.mjs",
     "confirm:cornerstone-arrangement": "npm run build && node tools/confirm-cornerstone-arrangement.mjs",
@@ -64,7 +65,7 @@
     ],
     "extraResources": [
       {
-        "from": "native/build/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe",
+        "from": "native/build-local/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe",
         "to": "native/PlaybackEngineProbe.exe"
       },
       {

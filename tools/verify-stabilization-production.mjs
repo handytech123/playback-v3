@@ -4,10 +4,10 @@ import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { NativeEngineClient } from "../dist/src/live/native-engine-client.js";
 
-const root=path.resolve("."),manifestPath=path.join(root,".playback-cache","engine-v3-silent-test","confirmed-set.json"),enginePath=path.join(root,"native","build","PlaybackEngineProbe_artefacts","Release","PlaybackEngineProbe.exe");
+const root=path.resolve("."),manifestPath=path.join(root,".playback-cache","engine-v3-silent-test","confirmed-set.json"),enginePath=path.join(root,"native","build-local","PlaybackEngineProbe_artefacts","Release","PlaybackEngineProbe.exe");
 const manifest=JSON.parse(await readFile(manifestPath,"utf8"));
-const outputByRole={acoustic:4,electric:5,bass:6,keys:7,strings:8,drums:9,vocals:10,music:11,other:11};
-const routingFor=(song)=>({stems:song.stems.map(stem=>outputByRole[String(stem.role).toLowerCase()]??11),stemChannels:song.stems.map(()=>1),click:1,clickChannels:1,cue:2,cueChannels:1,pad:12,padChannels:1,iem:3,iemChannels:1});
+const outputByRole={drums:5,bass:6,acoustic:7,electric:8,keys:9,strings:10,vocals:11,music:12,other:12,misc:12};
+const routingFor=(song)=>({stems:song.stems.map(stem=>outputByRole[String(stem.role).toLowerCase()]??12),stemChannels:song.stems.map(()=>1),click:1,clickChannels:1,cue:2,cueChannels:1,pad:4,padChannels:1,iem:3,iemChannels:1});
 const engine=new NativeEngineClient(),loads=[],commandLatencies=[],healthSamples=[];
 const status=()=>new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error("Native status timeout")),2500),onTransport=(transport)=>{clearTimeout(timeout);engine.off("transport",onTransport);resolve(transport);};engine.on("transport",onTransport);engine.requestStatus();});
 const health=()=>new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error("Native health timeout")),2500),onHealth=(value)=>{clearTimeout(timeout);engine.off("health",onHealth);resolve(value);};engine.on("health",onHealth);engine.requestStatus();});
@@ -27,4 +27,3 @@ try{
   const report={schemaVersion:1,generatedAt:new Date().toISOString(),result:"pass",device:"Dante Virtual Soundcard (x64)",sampleRate:finalHealth.sampleRate,blockFrames:finalHealth.blockFrames,xruns:finalHealth.xruns,deadlineMisses:finalHealth.deadlineMisses,iemClips:finalHealth.iemClips,commandLatencyMs:{median:percentile(commandLatencies,.5),p95:percentile(commandLatencies,.95),maximum:commandLatencies.at(-1)},songLoadLatencyMs:{median:percentile(sortedLoads,.5),maximum:sortedLoads.at(-1),songs:loads},rapidTransportCommands:200,clockRunSeconds:10};
   await mkdir(path.join(root,"artifacts"),{recursive:true});await writeFile(path.join(root,"artifacts","stabilization-production-report.json"),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 }finally{await engine.closeAndWait();}
-

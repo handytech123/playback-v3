@@ -54,7 +54,7 @@ root.innerHTML = `
       </div>
       <div class="editor-view-row">
         <div class="view-toggle"><button id="summaryView" class="active">SUMMARY</button><button id="stemsView">EXPANDED STEMS</button></div>
-        <label class="zoom-control">ZOOM <input id="editorZoom" type="range" min="1" max="6" step=".25" value="1"></label>
+        <label class="zoom-control">ZOOM <input id="editorZoom" type="range" min="1" max="12" step=".5" value="1"><output id="editorZoomValue">1x</output></label>
         <div id="editorSnap" class="transport-snap" hidden><span>SNAP</span><button data-snap="beat">BEAT</button><button data-snap="measure">MEASURE</button></div>
       </div>
     </div>
@@ -149,7 +149,7 @@ const mixerCommandTimers = new Map<number,number>();
 const performanceMixerCommandTimers = new Map<string,number>();
 const editorMixerCommandTimers = new Map<number,number>();
 const storedEditorZoom = Number(localStorage.getItem("playback.editor.zoom"));
-if (storedEditorZoom >= 1 && storedEditorZoom <= 6) ($("#editorZoom") as HTMLInputElement).value = String(storedEditorZoom);
+if (storedEditorZoom >= 1 && storedEditorZoom <= 12) ($("#editorZoom") as HTMLInputElement).value = String(storedEditorZoom);
 document.body.classList.add("edit-mode");
 document.addEventListener("click", () => {
   const menu = document.querySelector<HTMLElement>("#editorArrangementVersionMenu");
@@ -195,7 +195,7 @@ function setupNavigation() {
 function renderPerformanceSet() {
   $("#performanceSetName").textContent = data.manifest.name;
   $("#performanceSongTitle").textContent = song.song.title;
-  $("#performanceArrangement").textContent = `${song.arrangement?.name ?? "Original Song"} · ${song.selectedKey} · ${song.selectedBpm} BPM`;
+  $("#performanceArrangement").textContent = `${song.arrangement?.name ?? "Original Song"} · ${song.selectedKey} · ${song.selectedBpm} BPM${normalizationLabel(song)}`;
   $("#fullSetDuration").textContent=formatSetDuration(fullSetDurationSeconds());
   $("#fullSetSongs").textContent=`${data.manifest.songs.length} SONG${data.manifest.songs.length===1?"":"S"}`;
   renderSetStrip($("#performanceSetSongs"));
@@ -208,6 +208,7 @@ function fullSetDurationSeconds(){
 }
 
 function formatSetDuration(seconds:number){const whole=Math.round(seconds),hours=Math.floor(whole/3600),minutes=Math.floor(whole%3600/60),remaining=whole%60;return hours?`${hours}:${String(minutes).padStart(2,"0")}:${String(remaining).padStart(2,"0")}`:`${minutes}:${String(remaining).padStart(2,"0")}`;}
+function normalizationLabel(value:any){const db=Number(value?.loudnessNormalization?.appliedGainDb);return Number.isFinite(db)?` · AUTO ${db>=0?"+":""}${db.toFixed(1)} dB`:"";}
 
 function renderPerformanceSongChrome(){
   $("#title").textContent=`${song.song.title} — ${song.song.artist}`;
@@ -259,7 +260,7 @@ function renderSetStrip(strip:HTMLElement){
     const setSong=data.manifest.songs[index];
     if(setSong){
       const button=document.createElement("button");button.className=`set-song-card ${index===activeIndex?"active":""}`;
-      button.innerHTML=`<span>${String(index+1).padStart(2,"0")}</span><strong>${escapeHtml(setSong.song.title)}</strong><small>${escapeHtml(setSong.selectedKey)} · ${setSong.selectedBpm} BPM</small>`;
+      button.innerHTML=`<span>${String(index+1).padStart(2,"0")}</span><strong>${escapeHtml(setSong.song.title)}</strong><small>${escapeHtml(setSong.selectedKey)} · ${setSong.selectedBpm} BPM${escapeHtml(normalizationLabel(setSong))}</small>`;
       button.title=index===activeIndex?`${setSong.song.title} is selected`:`Load ${setSong.song.title}`;
       button.onclick=async()=>{if(index===activeIndex)return;button.disabled=true;try{await selectPerformanceSong(index);}finally{button.disabled=false;}};
       strip.append(button);
@@ -421,6 +422,12 @@ function setupDeviceSelectors() {
   outputCount.onchange=async()=>{if(!audio.value)return;outputCount.disabled=true;route.textContent="OPENING AUDIO DEVICE";try{const device={...JSON.parse(audio.value),outputChannels:Number(outputCount.value)};const state=await window.playback.audio.setDevice(device);data.audio={...data.audio,...state,selectedDevice:device};setRouteStatus(state.routingReady,state.outputChannels);renderOutputMatrix();renderDawMixer();}catch(error){route.className="route-status fault";route.textContent="AUDIO FAULT";showError(error);}finally{outputCount.disabled=false;}};
   const renderOutputMatrix=()=>{
     const matrix=$("#outputMatrix");matrix.replaceChildren();
+    let lockButton=document.querySelector<HTMLButtonElement>("#routingMatrixLock");
+    if(!lockButton){lockButton=document.createElement("button");lockButton.id="routingMatrixLock";lockButton.type="button";lockButton.className="settings-wide";matrix.before(lockButton);}
+    const locked=data.audio.globalBusRoutingLocked!==false;
+    lockButton.textContent=locked?"🔒 MATRIX LOCKED · CLICK TO UNLOCK":"🔓 MATRIX UNLOCKED · CLICK TO LOCK";
+    lockButton.classList.toggle("active",locked);
+    lockButton.onclick=async()=>{if(locked&&!confirm("Unlock the production output matrix? Routing changes affect every song."))return;lockButton!.disabled=true;try{const state=await window.playback.audio.setGlobalBusRoutingLock(!locked);data.audio={...data.audio,...state};$("#settingsStatus").textContent=state.globalBusRoutingLocked?"Output matrix locked.":"Output matrix unlocked. Routing can now be edited.";}catch(error){showError(error);}finally{lockButton!.disabled=false;renderOutputMatrix();}};
     const activeOutputs=Math.max(2,Number(data.audio.selectedDevice?.outputChannels??data.audio.outputChannels??2));
     const danteActive=/dante/i.test(`${data.audio.selectedDevice?.type??""} ${data.audio.selectedDevice?.name??""}`),stereo=activeOutputs===2;
     $("#outputMatrixHeading").textContent=stereo?"Choose Left, Right, or Both for every track and live bus":danteActive?`Assign stems and live buses to Dante outputs 1–${activeOutputs}`:`Assign stems and live buses to device outputs 1–${activeOutputs}`;
@@ -433,11 +440,11 @@ function setupDeviceSelectors() {
     for(const field of fields){
       const heading=document.createElement("span");heading.innerHTML=`<strong>${escapeHtml(field.label)}</strong><button class="route-mode">${field.width===2?(stereo?"BOTH":"STEREO"):(stereo&&field.value===2?"RIGHT":stereo?"LEFT":"MONO")}</button>`;grid.append(heading);
       const mode=heading.querySelector<HTMLButtonElement>(".route-mode");
-      if(mode)mode.disabled=!stereo;
+      if(mode)mode.disabled=locked||!stereo;
       if(mode)mode.onclick=async()=>{if(!stereo)return;const routing:any=makeRouting();let nextWidth:1|2,nextOutput:number;if(field.width===2){nextWidth=1;nextOutput=1;}else if(field.value===1){nextWidth=1;nextOutput=2;}else{nextWidth=2;nextOutput=1;}routing[field.key]={output:nextOutput,channels:nextWidth};grid.classList.add("busy");try{const state=await window.playback.audio.setGlobalBusRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=`${field.label} global output updated.`;}catch(error){showError(error);$("#settingsStatus").textContent="Output selection could not be saved.";}renderOutputMatrix();};
       for(let output=1;output<=activeOutputs;output++){
         const cell=document.createElement("button"),selected=output===field.value||field.width===2&&output===field.value+1;
-        cell.className=selected?output===field.value?"assigned start":"assigned linked":"";cell.textContent=selected?"✓":"";cell.title=selected?`Click to remove ${field.label} from this output`:`Assign ${field.label} to output ${field.width===2?`${output}–${output+1}`:output}`;cell.disabled=field.width===2&&output===activeOutputs;
+        cell.className=selected?output===field.value?"assigned start":"assigned linked":"";cell.textContent=selected?"✓":"";cell.title=locked?"Unlock the matrix to change routing":selected?`Click to remove ${field.label} from this output`:`Assign ${field.label} to output ${field.width===2?`${output}–${output+1}`:output}`;cell.disabled=locked||field.width===2&&output===activeOutputs;
         cell.onclick=async()=>{
           const routing=makeRouting();
           setRoute(routing,field,selected?0:output);
@@ -678,7 +685,7 @@ function setupEditorControls() {
   $("#editorSetlistName").onchange = (event) => void prepCommand({ action: "rename", name: (event.currentTarget as HTMLInputElement).value });
   $("#summaryView").onclick = () => { expandedStems = false; renderEditorViewMode(); };
   $("#stemsView").onclick = () => { expandedStems = true; renderEditorViewMode(); };
-  $("#editorZoom").oninput = () => { localStorage.setItem("playback.editor.zoom", ($("#editorZoom") as HTMLInputElement).value); renderEditorTimeline(); };
+  $("#editorZoom").oninput = () => { localStorage.setItem("playback.editor.zoom", ($("#editorZoom") as HTMLInputElement).value); renderEditorTimelineAtTransport(); };
   $("#widthDown").onclick = () => stepEditorWidth(-0.25); $("#widthUp").onclick = () => stepEditorWidth(0.25);
   $("#heightDown").onclick = () => stepStemHeight(-12); $("#heightUp").onclick = () => stepStemHeight(12);
   setupEditorSummaryMixerResize();
@@ -985,13 +992,18 @@ function renderSelectedInspector() {
   cuePosition.disabled = !cue;
   $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatMusicalLocation(cue.position,cue.atSeconds)} → ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
   const midi = $("#midiEvents"); midi.replaceChildren();
-  const events = workspace.draft.midi.filter((event: any) => event.atSeconds >= section.startSeconds && event.atSeconds < section.endSeconds);
+  const events = workspace.draft.midi.filter((event: any) => event.atSeconds >= section.startSeconds && event.atSeconds < section.endSeconds && (event.status & 240) === 144 && event.data2 > 0);
   if (!events.length) midi.textContent = "No Slides MIDI in this region.";
   for (const event of events) {
-    const label = document.createElement("label"); label.className = "midi-event";
+    const label = document.createElement("div"); label.className = `midi-event ${event.data1 === 18 ? "automatic" : ""}`;
     const kind = midiKind(event.status, event.data2);
-    label.innerHTML = `<input type="checkbox" ${event.enabled ? "checked" : ""}><span><strong>${kind}</strong><small>${formatMusicalLocation(event.position,event.atSeconds)} · CH ${(event.status & 15) + 1} · ${event.data1}/${event.data2}</small></span>`;
-    (label.querySelector("input") as HTMLInputElement).onchange = (change) => void arrange({ type: "set-midi-enabled", eventId: event.id, enabled: (change.currentTarget as HTMLInputElement).checked });
+    const automatic = event.data1 === 18;
+    label.innerHTML = `<input data-midi-enabled type="checkbox" ${event.enabled ? "checked" : ""}><span><strong>${automatic ? "SONG POSITION · AUTO" : kind}</strong><small>${formatMusicalLocation(event.position,event.atSeconds)} · CH ${(event.status & 15) + 1} · ${automatic ? "18 / setlist position" : `${event.data1}/${event.data2}`}</small></span>${automatic ? "" : `<input data-midi-value type="number" min="1" max="127" value="${event.data2}" title="ProPresenter value">`}${event.data1 === 19 ? '<button data-midi-delete title="Delete slide command">DELETE</button>' : ""}`;
+    (label.querySelector("[data-midi-enabled]") as HTMLInputElement).onchange = (change) => void arrange({ type: "set-midi-enabled", eventId: event.id, enabled: (change.currentTarget as HTMLInputElement).checked });
+    const value = label.querySelector<HTMLInputElement>("[data-midi-value]");
+    if (value) value.onchange = () => void arrange({ type: "set-midi-value", eventId: event.id, value: Number(value.value) });
+    const remove = label.querySelector<HTMLButtonElement>("[data-midi-delete]");
+    if (remove) remove.onclick = () => void arrange({ type: "delete-midi-event", eventId: event.id });
     midi.append(label);
   }
 }
@@ -1049,6 +1061,7 @@ function renderEditorTimeline() {
   if (!workspace) return;
   const timeline = $("#editorTimeline");
   const zoom = Number(($<HTMLInputElement>("#editorZoom")).value);
+  $("#editorZoomValue").textContent = `${zoom}x`;
   timeline.style.width = `${zoom * 100}%`;
   timeline.closest<HTMLElement>(".editor-timeline-shell")!.style.setProperty("--stem-row-height", `${stemRowHeight}px`);
   timeline.style.setProperty("--stem-row-height", `${stemRowHeight}px`);
@@ -1119,7 +1132,24 @@ function renderMarkers() {
     marker.onclick=(event)=>{event.stopPropagation();if(!dragged)selectRegion(cue.targetRegionId);};cueLane.append(marker);
   }
   const midiLane = $("#editorMidiLane"); midiLane.querySelectorAll("i").forEach((item) => item.remove());
-  for (const event of workspace.draft.midi) { const marker = document.createElement("i"); marker.className = event.enabled ? "" : "disabled"; marker.style.left = `${(event.atSeconds / workspace.draft.durationSeconds) * 100}%`; marker.title = `${midiKind(event.status, event.data2)} · CH ${(event.status & 15) + 1} · ${event.data1}/${event.data2}`; midiLane.append(marker); }
+  const commandEvents = workspace.draft.midi.filter((event: any) => (event.status & 240) === 144 && event.data2 > 0 && [17, 18, 19].includes(event.data1));
+  for (const event of commandEvents) {
+    const marker = document.createElement("i"), editable = event.data1 === 19; let dragged = false, dragAt = event.atSeconds;
+    marker.className = `${event.enabled ? "" : "disabled"} note-${event.data1}`;
+    marker.style.left = `${(event.atSeconds / workspace.draft.durationSeconds) * 100}%`;
+    marker.innerHTML = `<span>${event.data1 === 18 ? "18/AUTO" : `${event.data1}/${event.data2}`}</span>`;
+    marker.title = event.data1 === 18 ? "Song position is assigned automatically from the confirmed set" : editable ? "Drag to move · double-click to change slide value" : `Fixed ProPresenter command ${event.data1}/${event.data2}`;
+    const position = (pointer: PointerEvent) => { const rect = $("#editorTimeline").getBoundingClientRect(), raw = Math.max(0, Math.min(workspace.draft.durationSeconds, ((pointer.clientX - rect.left) / rect.width) * workspace.draft.durationSeconds)); return pointer.shiftKey ? raw : snapToGrid(raw); };
+    if (editable) {
+      marker.onpointerdown = (pointer) => { pointer.preventDefault(); pointer.stopPropagation(); dragged = false; dragAt = event.atSeconds; marker.setPointerCapture(pointer.pointerId); marker.classList.add("dragging"); };
+      marker.onpointermove = (pointer) => { if (!marker.hasPointerCapture(pointer.pointerId)) return; dragAt = position(pointer); dragged = dragged || Math.abs(dragAt - event.atSeconds) > .0001; marker.style.left = `${(dragAt / workspace.draft.durationSeconds) * 100}%`; };
+      marker.onpointerup = (pointer) => { if (!marker.hasPointerCapture(pointer.pointerId)) return; marker.releasePointerCapture(pointer.pointerId); marker.classList.remove("dragging"); if (dragged) void arrange({ type: "set-midi-time", eventId: event.id, atPosition: editorPosition(dragAt) }); };
+      marker.ondblclick = (pointer) => { pointer.preventDefault(); pointer.stopPropagation(); const next = prompt("ProPresenter slide value (1–127)", String(event.data2)); if (next !== null) void arrange({ type: "set-midi-value", eventId: event.id, value: Number(next) }); };
+    }
+    marker.onclick = (pointer) => { pointer.stopPropagation(); const section = workspace.draft.sections.find((candidate: any) => event.atSeconds >= candidate.startSeconds && event.atSeconds < candidate.endSeconds); if (section) selectRegion(section.id); };
+    midiLane.append(marker);
+  }
+  midiLane.ondblclick = (pointer) => { if ((pointer.target as HTMLElement).closest("i")) return; pointer.preventDefault(); pointer.stopPropagation(); const rect = $("#editorTimeline").getBoundingClientRect(), raw = Math.max(0, Math.min(workspace.draft.durationSeconds, ((pointer.clientX - rect.left) / rect.width) * workspace.draft.durationSeconds)), at = pointer.shiftKey ? raw : snapToGrid(raw), next = prompt("New ProPresenter slide value (1–127)", "1"); if (next !== null) void arrange({ type: "add-slide-midi", atPosition: editorPosition(at), value: Number(next) }); };
 }
 
 function bindEditorTimelinePointer() {
@@ -1327,7 +1357,8 @@ function audioHealthSummary(){if(!audioHealth)return liveState.fault?`FAULT · $
 async function liveCommand(command: any) { try { const state=await window.playback.performance.command(command);if(state.songIndex!==activeSongIndex){await synchronizePerformanceSong(state.songIndex,state);return;}liveState=state;renderLiveState(); } catch (error) { showError(error); } }
 function navigateSection(offset: number) { if (!liveState.panicActive) { void liveCommand({ action: offset < 0 ? "previous-section" : "next-section" }); return; } const anchor = liveState.recoveryRegionId ?? liveState.currentRegionId; const index = song.regions.findIndex((item: any) => item.id === anchor); const target = song.regions[Math.max(0, Math.min(song.regions.length - 1, index + offset))]; if (target) void liveCommand({ action: "recover", regionId: target.id }); }
 function moveSelected(offset: number) { const index = workspace.draft.sections.findIndex((item: any) => item.id === selectedRegionId); const destination = index + offset; if (destination >= 0 && destination < workspace.draft.sections.length) void arrange({ type: "move-section", sectionId: selectedRegionId, toIndex: destination }); }
-function stepEditorWidth(amount: number) { const control = $("#editorZoom") as HTMLInputElement; control.value = String(Math.max(Number(control.min), Math.min(Number(control.max), Number(control.value) + amount))); localStorage.setItem("playback.editor.zoom", control.value); renderEditorTimeline(); }
+function renderEditorTimelineAtTransport(){renderEditorTimeline();const scroll=$("#editorTimelineScroll"),ratio=workspace?.draft.durationSeconds?Math.max(0,Math.min(1,currentPosition/workspace.draft.durationSeconds)):0;scroll.scrollLeft=Math.max(0,Math.min(scroll.scrollWidth-scroll.clientWidth,ratio*scroll.scrollWidth-scroll.clientWidth/2));}
+function stepEditorWidth(amount: number) { const control = $("#editorZoom") as HTMLInputElement; control.value = String(Math.max(Number(control.min), Math.min(Number(control.max), Number(control.value) + amount))); localStorage.setItem("playback.editor.zoom", control.value); renderEditorTimelineAtTransport(); }
 function stepStemHeight(amount: number) { stemRowHeight = Math.max(58, Math.min(240, stemRowHeight + amount)); localStorage.setItem("playback.editor.stemHeight.v2", String(stemRowHeight)); renderEditorTimeline(); }
 function selectRegion(id: string) { selectedRegionId = id; renderRegionList(); renderSelectedInspector(); renderEditorTimeline(); }
 function selectRelative(offset: number) { const index = workspace.draft.sections.findIndex((section: any) => section.id === selectedRegionId); const target = workspace.draft.sections[Math.max(0, Math.min(workspace.draft.sections.length - 1, index + offset))]; if (target) selectRegion(target.id); }

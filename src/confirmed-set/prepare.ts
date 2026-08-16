@@ -3,12 +3,13 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { CONFIRMED_SET_SCHEMA_VERSION, DEFAULT_SHOW_STATE, validateConfirmedSet, type ConfirmedSetManifest, type ConfirmedSetShowState, type ReadinessReport } from "./manifest.js";
-import type { MusicalPosition, PreparedSong } from "../domain/song.js";
+import type { MusicalPosition, PreparedMidiEvent, PreparedSong } from "../domain/song.js";
 import { writeCombinedWaveformSummary } from "../prep/wav-waveform.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 import type { SongTransitionPlan } from "../live/song-transition.js";
 import { writeCountedCue } from "../prep/cue-sequence.js";
 import type { ClickTemplateId } from "../domain/click-templates.js";
+import { measureSongLoudness } from "../audio/song-loudness.js";
 
 export interface StemSource {
   readonly relativePath: string;
@@ -94,9 +95,11 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
       if (!cachedStems.length) throw new Error(`No waveform sources available for ${inputSong.preparedSong.song.title}`);
       await writeCombinedWaveformSummary(cachedStems.map((stem) => stem.sourcePath), waveformPath);
       completedUnits+=1;report(`Building ${inputSong.preparedSong.song.title} waveform`);
+      report(`Matching ${inputSong.preparedSong.song.title} loudness`);
+      const loudnessNormalization=await measureSongLoudness({stemPaths:cachedStems.map(stem=>stem.sourcePath),...(inputSong.preparedSong.stemMix?{stemMix:inputSong.preparedSong.stemMix}:{}),...(input.ffmpegPath?{ffmpegPath:input.ffmpegPath}:{})});
       const liveAssets = inputSong.liveAssets ? await prepareLiveAssets(inputSong.liveAssets, inputSong.preparedSong, songDirectory, input.ffmpegPath) : undefined;
       completedUnits+=1;report(`Preparing ${inputSong.preparedSong.song.title} click, cues, and pad`);
-      songs.push({ ...inputSong.preparedSong, stems: cachedStems, waveformPath, ...(liveAssets ? { liveAssets } : {}) });
+      songs.push(resolveSetlistPositionMidi({ ...inputSong.preparedSong, stems: cachedStems, waveformPath, loudnessNormalization, ...(liveAssets ? { liveAssets } : {}) }, songIndex));
     }
 
     const draftManifest: ConfirmedSetManifest = {
@@ -127,6 +130,20 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
     await rm(temporaryDirectory, { recursive: true, force: true });
     throw error;
   }
+}
+
+/** Note 18 selects the presentation by its current one-based setlist position. */
+export function resolveSetlistPositionMidi(song: PreparedSong, songIndex: number): PreparedSong {
+  const position = songIndex + 1;
+  if (!Number.isInteger(position) || position < 1 || position > 127) throw new Error("ProPresenter setlist position must be between 1 and 127");
+  const rewrite = (events: readonly PreparedMidiEvent[]) => events.map((event) =>
+    (event.status & 0xf0) === 0x90 && event.data1 === 18 && event.data2 > 0
+      ? { ...event, data2: position }
+      : event,
+  );
+  if (song.control) return { ...song, control: { ...song.control, proPresenterMidi: rewrite(song.control.proPresenterMidi) } };
+  if (song.arrangement) return { ...song, arrangement: { ...song.arrangement, proPresenterMidi: rewrite(song.arrangement.proPresenterMidi) } };
+  return song;
 }
 
 export async function loadConfirmedSet(manifestPath: string): Promise<ConfirmedSetManifest> {

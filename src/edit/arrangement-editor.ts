@@ -69,7 +69,11 @@ export type ArrangementCommand =
   | { readonly type: "set-cue-enabled"; readonly cueId: string; readonly enabled: boolean }
   | { readonly type: "set-cue-target"; readonly cueId: string; readonly targetRegionId: string }
   | { readonly type: "set-cue-time"; readonly cueId: string; readonly atPosition: MusicalPosition }
-  | { readonly type: "set-midi-enabled"; readonly eventId: string; readonly enabled: boolean };
+  | { readonly type: "set-midi-enabled"; readonly eventId: string; readonly enabled: boolean }
+  | { readonly type: "set-midi-time"; readonly eventId: string; readonly atPosition: MusicalPosition }
+  | { readonly type: "set-midi-value"; readonly eventId: string; readonly value: number }
+  | { readonly type: "add-slide-midi"; readonly atPosition: MusicalPosition; readonly value: number }
+  | { readonly type: "delete-midi-event"; readonly eventId: string };
 
 export function createArrangementDraft(
   song: PreparedSong,
@@ -140,15 +144,60 @@ export function normalizeStemMix(value: readonly StemMixSetting[] | undefined, s
   });
 }
 
-function arrangementSourceFingerprint(song: PreparedSong): string {
-  return [
-    song.cacheFingerprint,
-    song.arrangement?.id ?? "original-song",
-    song.arrangement?.sourceSha256 ?? "",
-    song.selectedKey,
-    song.selectedBpm,
-    `${song.timeSignature.numerator}/${song.timeSignature.denominator}`,
-  ].join("|");
+export function arrangementSourceFingerprint(song: PreparedSong): string {
+  return createHash("sha256").update(JSON.stringify({
+    cacheFingerprint: song.cacheFingerprint,
+    arrangement: song.arrangement ? { id: song.arrangement.id, sourceSha256: song.arrangement.sourceSha256, midi: song.arrangement.proPresenterMidi } : null,
+    control: song.control ? { sourceSha256: song.control.sourceSha256, midi: song.control.proPresenterMidi } : null,
+    key: song.selectedKey,
+    bpm: song.selectedBpm,
+    meter: song.timeSignature,
+    durationSeconds: song.durationSeconds,
+    stems: song.stems.map(stem => ({ role: stem.role, sourcePath: stem.sourcePath, durationSeconds: stem.durationSeconds, displayName: stem.displayName ?? null })),
+    regions: song.regions,
+    cues: song.cues,
+    liveCues: song.liveAssets?.cues.map(cue => ({ label: cue.label, atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId, audioPath: cue.audioPath })) ?? [],
+    click: song.liveAssets?.click ? { templateId: song.liveAssets.click.templateId, events: song.liveAssets.click.events } : null,
+  })).digest("hex");
+}
+
+export function reconcileArrangementDraftSource(saved: AppArrangementDraft, fresh: AppArrangementDraft): AppArrangementDraft {
+  if (saved.sourceFingerprint === fresh.sourceFingerprint) return saved;
+  const freshBySource = new Map(fresh.sections.map(section => [section.sourceRegionId, section]));
+  let sections = saved.sections
+    .filter(section => section.id.startsWith("app-") || freshBySource.has(section.sourceRegionId))
+    .map(section => {
+      const source = freshBySource.get(section.sourceRegionId);
+      return source ? { ...section, sourceStartSeconds: source.sourceStartSeconds, sourceEndSeconds: source.sourceEndSeconds } : section;
+    });
+  const represented = new Set(sections.map(section => section.sourceRegionId));
+  sections = [...sections, ...fresh.sections.filter(section => !represented.has(section.sourceRegionId))];
+  const selectedBpm = saved.selectedBpm === saved.baseBpm ? fresh.baseBpm : saved.selectedBpm;
+  const selectedKey = saved.selectedKey === saved.baseKey ? fresh.baseKey : saved.selectedKey;
+  const scale = fresh.baseBpm / selectedBpm;
+  const reflowed = reflow(renumberOccurrences(sections), scale);
+  const savedCueBySource = new Map(saved.cues.map(cue => [cue.sourceRegionId, cue]));
+  const cues = fresh.cues.flatMap(cue => {
+    const target = reflowed.find(section => section.sourceRegionId === cue.sourceRegionId);
+    if (!target) return [];
+    const previous = savedCueBySource.get(cue.sourceRegionId);
+    return [{ ...cue, id: previous?.id ?? cue.id, enabled: previous?.enabled ?? cue.enabled, phrase: target.name, targetRegionId: target.id, atSeconds: Math.max(0, target.startSeconds - cue.sourceLeadSeconds * scale) }];
+  });
+  const savedMidiById = new Map(saved.midi.map(event => [event.id, event]));
+  const midi = retimeMidi(fresh.midi.map(event => ({ ...event, enabled: savedMidiById.get(event.id)?.enabled ?? event.enabled })), reflowed, scale);
+  return withMusicalLocations({
+    ...fresh,
+    name: saved.name,
+    selectedKey,
+    selectedBpm,
+    clickTemplateId: saved.clickTemplateId,
+    durationSeconds: reflowed.at(-1)?.endSeconds ?? fresh.durationSeconds,
+    sections: reflowed,
+    cues,
+    midi,
+    stemMix: normalizeStemMix(saved.stemMix, fresh.stemMix.length),
+    revision: saved.revision + 1,
+  });
 }
 
 function sourceTimelineSections(song: PreparedSong): ArrangementSection[] {
@@ -290,6 +339,46 @@ export function applyArrangementCommand(
       return { ...event, enabled: command.enabled };
     });
     if (!found) throw new Error("MIDI event was not found");
+  } else if (command.type === "set-midi-time") {
+    const index = midi.findIndex((event) => event.id === command.eventId);
+    if (index < 0) throw new Error("MIDI event was not found");
+    const selected = midi[index]!;
+    if (!isEditableMidiNoteOn(selected)) throw new Error("Only fixed ProPresenter commands can be moved");
+    const atSeconds = positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature);
+    if (atSeconds < 0 || atSeconds > draft.durationSeconds) throw new Error("MIDI position is outside the arrangement");
+    const targetSection = sectionAt(draft.sections, Math.min(atSeconds, Math.max(0, draft.durationSeconds - 0.0001)));
+    if (!targetSection) throw new Error("MIDI position has no destination section");
+    const sourceAtSeconds = targetSection.sourceStartSeconds + (atSeconds - targetSection.startSeconds) / oldScale;
+    const noteOffIndex = matchingNoteOffIndex(midi, index);
+    const noteDuration = noteOffIndex >= 0 ? Math.max(0, midi[noteOffIndex]!.atSeconds - selected.atSeconds) : 0;
+    midi[index] = { ...selected, atSeconds, sourceAtSeconds, sourceRegionId: targetSection.sourceRegionId };
+    if (noteOffIndex >= 0) midi[noteOffIndex] = { ...midi[noteOffIndex]!, atSeconds: Math.min(draft.durationSeconds, atSeconds + noteDuration), sourceAtSeconds: sourceAtSeconds + noteDuration / oldScale, sourceRegionId: targetSection.sourceRegionId };
+  } else if (command.type === "set-midi-value") {
+    if (!Number.isInteger(command.value) || command.value < 1 || command.value > 127) throw new Error("Slide value must be between 1 and 127");
+    let found = false;
+    midi = midi.map((event) => {
+      if (event.id !== command.eventId) return event;
+      found = true;
+      if (!isEditableMidiNoteOn(event)) throw new Error("Only fixed note 17 and note 19 values can be edited");
+      return { ...event, data2: command.value };
+    });
+    if (!found) throw new Error("MIDI event was not found");
+  } else if (command.type === "add-slide-midi") {
+    if (!Number.isInteger(command.value) || command.value < 1 || command.value > 127) throw new Error("Slide value must be between 1 and 127");
+    const atSeconds = positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature);
+    const targetSection = sectionAt(draft.sections, Math.min(atSeconds, Math.max(0, draft.durationSeconds - 0.0001)));
+    if (!targetSection) throw new Error("MIDI position has no destination section");
+    const sourceAtSeconds = targetSection.sourceStartSeconds + (atSeconds - targetSection.startSeconds) / oldScale;
+    const id = `midi-${randomUUID()}`;
+    midi.push({ id, enabled: true, atSeconds, sourceAtSeconds, sourceRegionId: targetSection.sourceRegionId, status: 0x90, data1: 19, data2: command.value });
+    const offAt = Math.min(draft.durationSeconds, atSeconds + Math.min(0.1, 60 / draft.selectedBpm / 4));
+    midi.push({ id: `${id}-off`, enabled: true, atSeconds: offAt, sourceAtSeconds: sourceAtSeconds + (offAt - atSeconds) / oldScale, sourceRegionId: targetSection.sourceRegionId, status: 0x80, data1: 19, data2: 0 });
+  } else if (command.type === "delete-midi-event") {
+    const index = midi.findIndex((event) => event.id === command.eventId);
+    if (index < 0) throw new Error("MIDI event was not found");
+    if (!isEditableMidiNoteOn(midi[index]!)) throw new Error("Only fixed ProPresenter commands can be deleted");
+    const noteOffIndex = matchingNoteOffIndex(midi, index);
+    midi = midi.filter((_event, candidate) => candidate !== index && candidate !== noteOffIndex);
   }
 
   sections = renumberOccurrences(sections);
@@ -309,6 +398,16 @@ export function applyArrangementCommand(
     midi: retimedMidi,
     revision: draft.revision + 1,
   });
+}
+
+function isEditableMidiNoteOn(event: ArrangementMidiEvent): boolean {
+  return (event.status & 0xf0) === 0x90 && event.data2 > 0 && (event.data1 === 17 || event.data1 === 19);
+}
+
+function matchingNoteOffIndex(events: readonly ArrangementMidiEvent[], noteOnIndex: number): number {
+  const noteOn = events[noteOnIndex]!;
+  const channel = noteOn.status & 0x0f;
+  return events.findIndex((event, index) => index > noteOnIndex && event.data1 === noteOn.data1 && (event.status & 0x0f) === channel && ((event.status & 0xf0) === 0x80 || (event.status & 0xf0) === 0x90 && event.data2 === 0));
 }
 
 function withMusicalLocations<T extends AppArrangementDraft>(draft: T): T {

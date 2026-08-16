@@ -70,6 +70,9 @@ test("review cues begin one full measure before their destination and clamp the 
 test("numbered section cues fall back to the base cue audio",()=>{
   assert.deepEqual(cueAudioLookupNames("Verse 1"),["VERSE 1.wav","VERSE1.wav","VERSE.wav"]);
   assert.deepEqual(cueAudioLookupNames("Turnaround 2"),["TURN AROUND 2.wav","TURNAROUND2.wav","TURN AROUND.wav","TURNAROUND.wav"]);
+  assert.deepEqual(cueAudioLookupNames("DownBridge"),["DOWN BRIDGE.wav","DOWNBRIDGE.wav"]);
+  assert.deepEqual(cueAudioLookupNames("DownChorus"),["DOWN CHORUS.wav","DOWNCHORUS.wav"]);
+  assert.deepEqual(cueAudioLookupNames("A Capella"),["ACAPPELLA.wav","ACAPELLA.wav"]);
 });
 
 test("review preparation rejects stale nested MultiTracks analyzer paths", async () => {
