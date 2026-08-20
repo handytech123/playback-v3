@@ -108,6 +108,7 @@ import {
   movePreparedSong,
   reorderPreparedSong,
   removePreparedSong,
+  repairOperatorSetlistForConfirmation,
   renameOperatorSetlist,
   replacePreparedSong,
   saveOperatorSetlist,
@@ -1554,6 +1555,27 @@ async function createWindow(): Promise<void> {
   ipcMain.handle(
     "prep:confirm",
     async (_event, options?: { selectedIndex?: number }) => {
+      const repairedSetlist = await repairOperatorSetlistForConfirmation(
+        operatorSetlist,
+        async (item, index) => {
+        sendToRenderer("prep:confirm-status", {
+          progress: Math.max(1, Math.round((index / operatorSetlist.items.length) * 3)),
+          label: `Preparing ${item.title} cues`,
+        });
+        const repaired = await repairLegacyReviewCues(item);
+        await hydrateReviewSongLiveAssets({
+          manifestPath: repaired.manifestPath,
+          songIndex: repaired.songIndex,
+          cueFolder: productionDefaults.cueFolder,
+          ffmpegPath: runtimeFfmpegPath,
+        });
+          return repaired;
+        },
+      );
+      if (repairedSetlist !== operatorSetlist) {
+        operatorSetlist = repairedSetlist;
+        await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
+      }
       const result = await confirmOperatorSet({
         setlist: operatorSetlist,
         cacheRoot: join(projectRoot, ".playback-cache", "confirmed-sets"),
