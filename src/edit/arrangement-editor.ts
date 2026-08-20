@@ -80,12 +80,14 @@ export function createArrangementDraft(
   name = `${song.song.title} Arrangement`,
 ): AppArrangementDraft {
   const sections: ArrangementSection[] = renumberOccurrences(sourceTimelineSections(song));
-  const sourceCues = song.liveAssets?.cues.map((cue) => ({
-    phrase: cue.label,
-    ...(cue.position ? { position: cue.position } : {}),
-    atSeconds: cue.atSeconds,
-    targetRegionId: cue.targetRegionId,
-  })) ?? song.cues;
+  const sourceCues = song.liveAssets?.cues?.length
+    ? song.liveAssets.cues.map((cue) => ({
+        phrase: cue.label,
+        ...(cue.position ? { position: cue.position } : {}),
+        atSeconds: cue.atSeconds,
+        targetRegionId: cue.targetRegionId,
+      }))
+    : song.cues;
   const cues = sourceCues.flatMap((source) => {
     const section = sections.find((candidate) => candidate.id === source.targetRegionId);
     if (!section) return [];

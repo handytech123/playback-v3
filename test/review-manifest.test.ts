@@ -27,7 +27,7 @@ async function writeSilentWav(path: string, seconds = 1) {
 }
 
 test("analyzer song-map format has an explicit invalidation version",()=>{
-  assert.equal(ANALYZER_SONG_MAP_VERSION,14);
+  assert.equal(ANALYZER_SONG_MAP_VERSION,15);
 });
 
 test("vendor pad stems are playable stems, not reference audio", () => {
@@ -108,11 +108,14 @@ test("review preparation rejects stale nested MultiTracks analyzer paths", async
 test("review preparation exposes Analyzer RPP arrangements as prepared choices", async () => {
   const root = await mkdtemp(join(tmpdir(), "analyzer-arrangements-"));
   const song = join(root, "Song");
+  const arrangementFolder = join(song, "Arrangements", "Short Version");
   const cues = join(root, "cues");
   await mkdir(song, { recursive: true });
+  await mkdir(arrangementFolder, { recursive: true });
   await mkdir(cues, { recursive: true });
   await Promise.all(["INTRO.wav", "VERSE.wav", "TWO.wav", "THREE.wav", "FOUR.wav"].map(name => writeSilentWav(join(cues, name))));
   await writeSilentWav(join(song, "Bass.wav"), 4);
+  await writeSilentWav(join(arrangementFolder, "Short Bass.wav"), 8);
   await writeFile(join(song, "playback-song.json"), JSON.stringify({
     schema: "playback-analyzer-package/v1",
     schemaVersion: 1,
@@ -131,6 +134,8 @@ test("review preparation exposes Analyzer RPP arrangements as prepared choices",
       sourcePath: "Arrangements/Short Version/Short Version.rpp",
       bpm: 120,
       timeSignature: "4/4",
+      durationSeconds: 8,
+      audioFiles: [{ path: "Arrangements/Short Version/Short Bass.wav", playLive: true, playbackBus: "bass", sha256: "short-bass", trackName: "Short Bass" }],
       regions: [{ id: "a1", name: "Verse", start: { position: { measure: 1, beat: 1, tick: 0 } }, end: { position: { measure: 3, beat: 1, tick: 0 } } }],
       cues: [{ phrase: "Verse", cueStart: { position: { measure: 1, beat: 1, tick: 0 } }, targetRegionId: "a1" }],
       control: { slidesMidi: [{ atSeconds: 1, status: 144, data1: 19, data2: 2 }] },
@@ -151,6 +156,9 @@ test("review preparation exposes Analyzer RPP arrangements as prepared choices",
   assert.equal(result.manifest.songs.length, 2);
   assert.equal(result.manifest.songs[0]!.arrangement, undefined);
   assert.equal(result.manifest.songs[1]!.arrangement?.name, "Short Version");
+  assert.equal(result.manifest.songs[1]!.durationSeconds, 8);
+  assert.match(result.manifest.songs[1]!.stems[0]!.sourcePath, /arrangements[\\/]+short[\\/]+stems[\\/]+01-Short_Bass\.wav$/);
+  assert.equal(result.manifest.songs[1]!.stems[0]!.displayName, "Short Bass");
   assert.equal(result.manifest.songs[1]!.regions[0]!.name, "Verse");
   assert.equal(result.manifest.songs[1]!.arrangement?.proPresenterMidi.length, 1);
   assert.equal((result.manifest as any).review.arrangementCount, 1);

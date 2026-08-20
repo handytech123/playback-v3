@@ -72,6 +72,7 @@ root.innerHTML = `
       <aside class="editor-inspector"><button id="toggleEditorInspector" class="panel-collapse-toggle" title="Show or hide Selected Region">REGION</button>
         <section><h2>Selected Region</h2><label>Name<input id="sectionName"></label><div class="field-pair grid-position-fields"><label>Start · Measure.Beat<input id="sectionStart" inputmode="decimal" placeholder="1.1"></label><label>End · Measure.Beat<input id="sectionEnd" inputmode="decimal" placeholder="2.1"></label></div><p id="sectionSource"></p><div class="button-grid"><button id="selectPrevious">SELECT ←</button><button id="selectNext">SELECT →</button><button id="moveEarlier">MOVE ←</button><button id="moveLater">MOVE →</button><button id="duplicateRegion">DUPLICATE</button><button id="splitRegion">SPLIT AT PLAYHEAD</button><button id="deleteRegion" class="danger">REMOVE + CLOSE GAP</button><button id="auditionRegion">AUDITION SOURCE</button><button id="loopAudition">LOOP SOURCE</button><button id="auditionBoundary">AUDITION BOUNDARY</button><button id="trimStart">TRIM START HERE</button><button id="trimEnd">TRIM END HERE</button></div></section>
         <section><h2>Destination Cue</h2><label class="check"><input id="cueEnabled" type="checkbox"> Enabled</label><label>Destination<select id="cueTarget"></select></label><label>Cue At · Measure.Beat<input id="cuePosition" inputmode="decimal" placeholder="1.1"></label><button id="auditionArrangementCue">AUDITION CUE</button><p id="cueDetail"></p></section>
+        <section><h2>Cue List</h2><div id="cueList" class="cue-list"></div></section>
         <section><h2>Slides MIDI</h2><div id="midiEvents" class="midi-events"></div></section>
         <section><h2>Readiness</h2><div id="readinessSummary"></div><div id="readinessChecks"></div></section>
         <section class="editor-actions"><div class="button-grid"><button id="arrangementUndo">UNDO</button><button id="arrangementRedo">REDO</button><button id="saveDraft">SAVE DRAFT</button><button id="revertDraft">REVERT</button></div><button id="saveArrangement" class="save-arrangement">SAVE ARRANGEMENT VERSION</button><p id="editorStatus">Original Song remains unchanged.</p></section>
@@ -117,6 +118,7 @@ let performanceDuration = song.durationSeconds;
 let performanceGrid = buildZeroBasedGrid(song.selectedBpm, song.timeSignature, performanceDuration);
 let workspace: any = null;
 let selectedRegionId = song.regions[0]?.id;
+let selectedCueId: string | null = null;
 let selectionStart: number | null = null;
 let selectionEnd: number | null = null;
 let expandedStems = false;
@@ -927,6 +929,9 @@ function renderCatalog() {
 async function refreshWorkspace() {
   workspace = await window.playback.arrange.workspace();
   if (!workspace.draft.sections.some((section: any) => section.id === selectedRegionId)) selectedRegionId = workspace.draft.sections[0]?.id;
+  if (selectedCueId && !workspace.draft.cues.some((cue: any) => cue.id === selectedCueId)) selectedCueId = null;
+  const cue = selectedCueId ? workspace.draft.cues.find((item: any) => item.id === selectedCueId) : null;
+  if (cue && workspace.draft.sections.some((section: any) => section.id === cue.targetRegionId)) selectedRegionId = cue.targetRegionId;
   renderEditor();
 }
 
@@ -952,7 +957,7 @@ function renderEditor() {
   $("#draftState").textContent = workspace.dirty ? `UNSAVED · REV ${draft.revision}` : `SAVED · REV ${draft.revision}`;
   ($("#arrangementUndo") as HTMLButtonElement).disabled = !workspace.canUndo;
   ($("#arrangementRedo") as HTMLButtonElement).disabled = !workspace.canRedo;
-  renderRegionList(); renderSelectedInspector(); renderReadiness(); renderEditorTimeline();
+  renderRegionList(); renderCueList(); renderSelectedInspector(); renderReadiness(); renderEditorTimeline();
 }
 
 function renderRegionList() {
@@ -988,9 +993,12 @@ function renderSelectedInspector() {
   target.replaceChildren(...workspace.draft.sections.map((item: any) => new Option(item.name, item.id)));
   target.value = cue?.targetRegionId ?? section.id;
   const cuePosition = $("#cuePosition") as HTMLInputElement;
-  cuePosition.value = cue ? formatMusicalLocation(cue.position,cue.atSeconds) : "";
+  cuePosition.value = cue ? formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds) : "";
   cuePosition.disabled = !cue;
-  $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatMusicalLocation(cue.position,cue.atSeconds)} → ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
+  ($("#cueEnabled") as HTMLInputElement).disabled = !cue;
+  target.disabled = !cue;
+  ($("#auditionArrangementCue") as HTMLButtonElement).disabled = !cue;
+  $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds)} → ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
   const midi = $("#midiEvents"); midi.replaceChildren();
   const events = workspace.draft.midi.filter((event: any) => event.atSeconds >= section.startSeconds && event.atSeconds < section.endSeconds && (event.status & 240) === 144 && event.data2 > 0);
   if (!events.length) midi.textContent = "No Slides MIDI in this region.";
@@ -1006,6 +1014,26 @@ function renderSelectedInspector() {
     if (remove) remove.onclick = () => void arrange({ type: "delete-midi-event", eventId: event.id });
     midi.append(label);
   }
+}
+
+function renderCueList() {
+  const list = $("#cueList"); list.replaceChildren();
+  if (!workspace.draft.cues.length) {
+    list.innerHTML = "<p>No destination cues in this arrangement.</p>";
+    selectedCueId = null;
+    return;
+  }
+  if (!selectedCue()) selectedCueId = workspace.draft.cues.find((cue: any) => cue.targetRegionId === selectedRegionId)?.id ?? workspace.draft.cues[0]?.id ?? null;
+  for (const cue of workspace.draft.cues) {
+    const target = sectionById(cue.targetRegionId);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `cue-list-item ${cue.id === selectedCueId ? "selected" : ""} ${cue.enabled ? "" : "disabled"}`;
+    row.innerHTML = `<span>${cue.enabled ? "ON" : "OFF"}</span><strong>${escapeHtml(cue.phrase)}</strong><small>${escapeHtml(formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds))} → ${escapeHtml(target?.name ?? "Missing destination")}</small>`;
+    row.onclick = () => selectCue(cue.id);
+    list.append(row);
+  }
+  list.querySelector(".cue-list-item.selected")?.scrollIntoView({ block: "nearest" });
 }
 
 function renderReadiness() {
@@ -1125,11 +1153,11 @@ function renderMarkers() {
     const marker=document.createElement("i"),target=sectionById(cue.targetRegionId);let dragged=false,dragAt=cue.atSeconds;
     marker.className=cue.enabled?"":"disabled";marker.style.left=`${(cue.atSeconds/workspace.draft.durationSeconds)*100}%`;marker.title=`Drag ${cue.phrase} left or right · announces ${target?.name}`;marker.innerHTML=`<span>${escapeHtml(cue.phrase)}</span>`;
     const position=(event:PointerEvent)=>{const rect=$("#editorTimeline").getBoundingClientRect(),raw=((event.clientX-rect.left)/rect.width)*workspace.draft.durationSeconds;return Math.max(0,Math.min(target?.startSeconds??workspace.draft.durationSeconds,snapToGrid(raw)));};
-    marker.onpointerdown=(event)=>{event.preventDefault();event.stopPropagation();dragged=false;dragAt=cue.atSeconds;marker.setPointerCapture(event.pointerId);marker.classList.add("dragging");selectedRegionId=cue.targetRegionId;renderRegionList();renderSelectedInspector();};
+    marker.onpointerdown=(event)=>{event.preventDefault();event.stopPropagation();dragged=false;dragAt=cue.atSeconds;marker.setPointerCapture(event.pointerId);marker.classList.add("dragging");selectedCueId=cue.id;selectedRegionId=cue.targetRegionId;renderRegionList();renderCueList();renderSelectedInspector();};
     marker.onpointermove=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;const next=position(event);dragged=dragged||Math.abs(next-cue.atSeconds)>.0001;dragAt=next;marker.style.left=`${(next/workspace.draft.durationSeconds)*100}%`;marker.title=`${cue.phrase} · ${formatGridLocation(next,editorGrid())}`;};
     marker.onpointerup=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;marker.releasePointerCapture(event.pointerId);marker.classList.remove("dragging");if(dragged)void arrange({type:"set-cue-time",cueId:cue.id,atPosition:editorPosition(dragAt)});};
     marker.onpointercancel=()=>{marker.classList.remove("dragging");marker.style.left=`${(cue.atSeconds/workspace.draft.durationSeconds)*100}%`;};
-    marker.onclick=(event)=>{event.stopPropagation();if(!dragged)selectRegion(cue.targetRegionId);};cueLane.append(marker);
+    marker.onclick=(event)=>{event.stopPropagation();if(!dragged)selectCue(cue.id);};cueLane.append(marker);
   }
   const midiLane = $("#editorMidiLane"); midiLane.querySelectorAll("i").forEach((item) => item.remove());
   const commandEvents = workspace.draft.midi.filter((event: any) => (event.status & 240) === 144 && event.data2 > 0 && [17, 18, 19].includes(event.data1));
@@ -1360,10 +1388,22 @@ function moveSelected(offset: number) { const index = workspace.draft.sections.f
 function renderEditorTimelineAtTransport(){renderEditorTimeline();const scroll=$("#editorTimelineScroll"),ratio=workspace?.draft.durationSeconds?Math.max(0,Math.min(1,currentPosition/workspace.draft.durationSeconds)):0;scroll.scrollLeft=Math.max(0,Math.min(scroll.scrollWidth-scroll.clientWidth,ratio*scroll.scrollWidth-scroll.clientWidth/2));}
 function stepEditorWidth(amount: number) { const control = $("#editorZoom") as HTMLInputElement; control.value = String(Math.max(Number(control.min), Math.min(Number(control.max), Number(control.value) + amount))); localStorage.setItem("playback.editor.zoom", control.value); renderEditorTimelineAtTransport(); }
 function stepStemHeight(amount: number) { stemRowHeight = Math.max(58, Math.min(240, stemRowHeight + amount)); localStorage.setItem("playback.editor.stemHeight.v2", String(stemRowHeight)); renderEditorTimeline(); }
-function selectRegion(id: string) { selectedRegionId = id; renderRegionList(); renderSelectedInspector(); renderEditorTimeline(); }
+function selectRegion(id: string) {
+  selectedRegionId = id;
+  selectedCueId = workspace?.draft.cues.find((cue: any) => cue.targetRegionId === id)?.id ?? null;
+  renderRegionList(); renderCueList(); renderSelectedInspector(); renderEditorTimeline();
+}
+function selectCue(id: string) {
+  const cue = workspace?.draft.cues.find((item: any) => item.id === id);
+  if (!cue) return;
+  selectedCueId = cue.id;
+  selectedRegionId = cue.targetRegionId;
+  renderRegionList(); renderCueList(); renderSelectedInspector(); renderEditorTimeline();
+}
 function selectRelative(offset: number) { const index = workspace.draft.sections.findIndex((section: any) => section.id === selectedRegionId); const target = workspace.draft.sections[Math.max(0, Math.min(workspace.draft.sections.length - 1, index + offset))]; if (target) selectRegion(target.id); }
 function selectedSection() { return workspace?.draft.sections.find((section: any) => section.id === selectedRegionId); }
-function selectedCue() { return workspace?.draft.cues.find((cue: any) => cue.targetRegionId === selectedRegionId); }
+function selectedCue() { return workspace?.draft.cues.find((cue: any) => cue.id === selectedCueId) ?? workspace?.draft.cues.find((cue: any) => cue.targetRegionId === selectedRegionId); }
+function cueDisplayPosition(cue: any) { return secondsToMusicalPosition(cue.atSeconds, workspace.draft.selectedBpm, workspace.draft.timeSignature); }
 function sectionById(id: string) { return workspace?.draft.sections.find((section: any) => section.id === id); }
 function gridEntryPosition(value: string) {
   const match = value.trim().match(/^(\d+)[.:](\d+)$/);

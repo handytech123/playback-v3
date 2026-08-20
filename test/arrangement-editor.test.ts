@@ -33,6 +33,25 @@ const song: PreparedSong = {
   cacheFingerprint: "x",
 };
 const pos = (measure: number, beat: number) => ({ measure, beat, tick: 0 });
+test("falls back to prepared cue markers when rendered live cue assets are empty", () => {
+  const draft = createArrangementDraft({
+    ...song,
+    liveAssets: {
+      click: {
+        regularPath: "click.wav",
+        accentPath: "accent.wav",
+        events: [{ atSeconds: 0, accent: true }],
+        templateId: "4-4-quarter",
+      },
+      cues: [],
+      repeatCuePath: "repeat.wav",
+      pad: { key: "C", audioPath: "pad.wav" },
+    },
+  });
+  assert.equal(draft.cues.length, 1);
+  assert.equal(draft.cues[0]?.phrase, "Chorus 1");
+  assert.equal(draft.cues[0]?.targetRegionId, "b");
+});
 test("moves, duplicates, deletes, and reflows non-destructive source slices", () => {
   let draft = createArrangementDraft(song);
   draft = applyArrangementCommand(draft, {

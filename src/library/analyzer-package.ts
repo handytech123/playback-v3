@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { positionToGridBeats, positionToSeconds, secondsToMusicalPosition } from "../domain/grid.js";
+import { addGridBeats, positionToGridBeats, positionToSeconds, secondsToMusicalPosition } from "../domain/grid.js";
 import type { MusicalPosition, Region, TimeSignature } from "../domain/song.js";
 
-export type AnalyzerCountPattern = "234" | "456" | "23456";
+export type AnalyzerCountPattern = "234" | "34" | "456" | "23456";
 
 export interface AnalyzerCueFact {
   readonly id: string;
@@ -30,13 +30,7 @@ export interface PlaybackAnalyzerPackage {
     readonly originalKey?: string | null;
   };
   readonly timeline: { readonly durationMs: number };
-  readonly audioFiles: readonly {
-    readonly path: string;
-    readonly sha256?: string;
-    readonly role?: string;
-    readonly playbackBus?: string | null;
-    readonly playLive?: boolean;
-  }[];
+  readonly audioFiles: readonly AnalyzerAudioFileFact[];
   readonly click?: {
     readonly playbackPattern?: {
       readonly templateId?: string;
@@ -66,11 +60,23 @@ export interface AnalyzerTimingFact {
   readonly position?: { readonly measure: number; readonly beat: number; readonly tick?: number };
 }
 
+export interface AnalyzerAudioFileFact {
+  readonly path: string;
+  readonly sha256?: string;
+  readonly role?: string;
+  readonly playbackBus?: string | null;
+  readonly playLive?: boolean;
+  readonly trackName?: string;
+  readonly durationSeconds?: number;
+  readonly durationMs?: number;
+}
+
 export interface AnalyzerRegionFact {
   readonly id?: string;
   readonly name?: string;
   readonly displayName?: string;
   readonly sectionType?: string;
+  readonly sourceCueId?: string;
   readonly start?: AnalyzerTimingFact;
   readonly end?: AnalyzerTimingFact;
   readonly startSeconds?: number;
@@ -99,6 +105,8 @@ export interface AnalyzerArrangementFact {
   readonly sourcePath?: string;
   readonly bpm?: number;
   readonly timeSignature?: string;
+  readonly durationSeconds?: number;
+  readonly audioFiles?: readonly AnalyzerAudioFileFact[];
   readonly regions?: readonly AnalyzerRegionFact[];
   readonly cues?: readonly AnalyzerTimelineCueFact[];
   readonly control?: {
@@ -130,7 +138,7 @@ export function mapAnalyzerTimelinePackage(packageData: PlaybackAnalyzerPackage,
 }
 
 export function mapAnalyzerTimelineFacts(sourceRegions: readonly AnalyzerRegionFact[], sourceCues: readonly (AnalyzerCueFact | AnalyzerTimelineCueFact)[], durationSeconds: number, bpm: number, meter: TimeSignature): { regions: Region[]; cues: readonly { phrase: string; position?: MusicalPosition; atSeconds: number; targetRegionId: string }[] } | null {
-  if (!sourceRegions.length) return null;
+  if (!sourceRegions.length) return deriveTimelineFromCueFacts(sourceCues, durationSeconds, bpm, meter);
   const regions = sourceRegions.map((region, index) => {
     const start = timingFromAnalyzer(region.start, region.startSeconds, bpm, meter), end = timingFromAnalyzer(region.end, region.endSeconds, bpm, meter);
     if (!start || !end) throw new Error(`Analyzer region ${region.id || index + 1} is missing timing`);
@@ -138,15 +146,86 @@ export function mapAnalyzerTimelineFacts(sourceRegions: readonly AnalyzerRegionF
     return { id: String(region.id ?? `analyzer-region-${String(index + 1).padStart(3, "0")}`), name: name || `Region ${index + 1}`, startPosition: start.position, endPosition: end.position, startSeconds: start.seconds, endSeconds: end.seconds };
   }).filter(region => region.endSeconds > region.startSeconds).sort((a, b) => positionToGridBeats(a.startPosition!, meter) - positionToGridBeats(b.startPosition!, meter));
   if (!regions.length) throw new Error("Analyzer package regions are empty after timing validation");
+  const sourceCueToRegion = new Map<string, string>();
+  sourceRegions.forEach((region, index) => {
+    if (region.sourceCueId) sourceCueToRegion.set(normalizedAnalyzerId(region.sourceCueId), regions[index]?.id ?? String(region.id ?? ""));
+  });
   const cues = sourceCues.map((cue, index) => {
     const timelineCue = cue as AnalyzerTimelineCueFact, phrase = String(timelineCue.phrase ?? timelineCue.name ?? timelineCue.spokenPhrase ?? "").trim();
     const start = timingFromAnalyzer(timelineCue.cueStart ?? timelineCue.start, timelineCue.atSeconds, bpm, meter);
     if (!phrase || !start) return null;
-    const targetRegionId = timelineCue.targetRegionId ?? timelineCue.destinationRegionId;
+    const cueId = normalizedAnalyzerId(timelineCue.id);
+    const targetRegionId = timelineCue.targetRegionId ?? timelineCue.destinationRegionId ?? sourceCueToRegion.get(cueId) ?? targetRegionByLead(cue as AnalyzerCueFact, start, regions, bpm, meter);
     if (!targetRegionId || !regions.some(region => region.id === targetRegionId)) return null;
     return { phrase, position: start.position, atSeconds: start.seconds, targetRegionId };
   }).filter((cue): cue is { phrase: string; position: MusicalPosition; atSeconds: number; targetRegionId: string } => cue !== null && cue.atSeconds <= durationSeconds);
   return { regions, cues };
+}
+
+export function analyzerPackageHasTimeline(packageData: PlaybackAnalyzerPackage): boolean {
+  if (packageData.regions?.length) return true;
+  return (packageData.cues ?? []).some((cue) => {
+    const candidate = cue as AnalyzerCueFact;
+    return Boolean(candidate.phrase && candidate.cueStart?.position && Number.isFinite(Number(candidate.leadGridBeats)));
+  });
+}
+
+function deriveTimelineFromCueFacts(sourceCues: readonly (AnalyzerCueFact | AnalyzerTimelineCueFact)[], durationSeconds: number, bpm: number, meter: TimeSignature): { regions: Region[]; cues: readonly { phrase: string; position?: MusicalPosition; atSeconds: number; targetRegionId: string }[] } | null {
+  const facts = sourceCues.map((cue, index) => {
+    const candidate = cue as AnalyzerCueFact;
+    const phrase = String(candidate.phrase ?? "").trim();
+    const cueStart = timingFromAnalyzer(candidate.cueStart, undefined, bpm, meter);
+    const leadGridBeats = Number(candidate.leadGridBeats);
+    if (!phrase || !cueStart || !Number.isFinite(leadGridBeats)) return null;
+    const regionStartPosition = addGridBeats(cueStart.position, leadGridBeats, meter);
+    const regionStartSeconds = positionToSeconds(regionStartPosition, bpm, meter);
+    if (!Number.isFinite(regionStartSeconds) || regionStartSeconds < 0 || regionStartSeconds >= durationSeconds) return null;
+    return { index, phrase, cueStart, regionStartPosition, regionStartSeconds };
+  }).filter((fact): fact is NonNullable<typeof fact> => fact !== null).sort((a, b) => positionToGridBeats(a.regionStartPosition, meter) - positionToGridBeats(b.regionStartPosition, meter));
+  if (!facts.length) return null;
+
+  const occurrence = new Map<string, number>();
+  const regions: Region[] = facts.map((fact, index) => {
+    const count = (occurrence.get(fact.phrase.toLowerCase()) ?? 0) + 1;
+    occurrence.set(fact.phrase.toLowerCase(), count);
+    const next = facts[index + 1];
+    const endSeconds = next?.regionStartSeconds ?? durationSeconds;
+    const endPosition = next?.regionStartPosition ?? secondsToMusicalPosition(durationSeconds, bpm, meter);
+    const name = count > 1 ? `${fact.phrase} ${count}` : fact.phrase;
+    return {
+      id: `derived-region-${String(index + 1).padStart(3, "0")}`,
+      name,
+      startPosition: fact.regionStartPosition,
+      endPosition,
+      startSeconds: fact.regionStartSeconds,
+      endSeconds,
+    };
+  }).filter(region => region.endSeconds > region.startSeconds);
+  if (!regions.length) return null;
+
+  const cues = facts.map((fact) => {
+    const regionIndex = regions.findIndex(region => region.startSeconds === fact.regionStartSeconds);
+    if (regionIndex < 0) return null;
+    return {
+      phrase: fact.phrase,
+      position: fact.cueStart.position,
+      atSeconds: fact.cueStart.seconds,
+      targetRegionId: regions[regionIndex]!.id,
+    };
+  }).filter((cue): cue is { phrase: string; position: MusicalPosition; atSeconds: number; targetRegionId: string } => cue !== null && cue.atSeconds <= durationSeconds);
+  return { regions, cues };
+}
+
+function normalizedAnalyzerId(value: unknown): string {
+  return String(value ?? "").replace(/-(0+)(\d+)$/, "-$2");
+}
+
+function targetRegionByLead(cue: AnalyzerCueFact, start: { position: MusicalPosition }, regions: readonly Region[], bpm: number, meter: TimeSignature): string | undefined {
+  const leadGridBeats = Number(cue.leadGridBeats);
+  if (!Number.isFinite(leadGridBeats)) return undefined;
+  const targetPosition = addGridBeats(start.position, leadGridBeats, meter);
+  const targetSeconds = positionToSeconds(targetPosition, bpm, meter);
+  return regions.find(region => Math.abs(region.startSeconds - targetSeconds) < 0.001)?.id;
 }
 
 function timingFromAnalyzer(timing: AnalyzerTimingFact | undefined, fallbackSeconds: unknown, bpm: number, meter: TimeSignature): { position: MusicalPosition; seconds: number } | null {

@@ -84,6 +84,7 @@ import {
 import { evaluateEditorReadiness } from "../edit/editor-readiness.js";
 import {
   arrangementFingerprint,
+  arrangementSourceFingerprint,
   reconcileArrangementDraftSource,
   type AppArrangementDraft,
 } from "../edit/arrangement-editor.js";
@@ -707,6 +708,8 @@ async function createWindow(): Promise<void> {
       ) as ConfirmedSetManifest,
       preparedSong = sourceManifest.songs[songIndex];
     if (!preparedSong) throw new Error("Editor source song is unavailable");
+    const currentSourceFingerprint = arrangementSourceFingerprint(preparedSong);
+    const arrangementSourceId = preparedSong.arrangement?.id ?? "original-song";
     const liveCues = preparedSong.liveAssets?.cues?.length
       ? preparedSong.liveAssets.cues
       : preparedSong.cues.map((cue: any) => ({
@@ -728,6 +731,8 @@ async function createWindow(): Promise<void> {
           kind: "analyzer",
           path: "playback-song.json",
           importedAt: new Date().toISOString(),
+          sourceFingerprint: currentSourceFingerprint,
+          sourceArrangementId: arrangementSourceId,
         },
         regions: normalizeRegions(preparedSong.regions),
         cues: liveCues.map((cue: any, index: number) => ({
@@ -742,11 +747,13 @@ async function createWindow(): Promise<void> {
         })),
       },
       savedMapPath = currentSongMapPath(mapRoot, editableMap.songId),
-      initialMap = (await mapExists(savedMapPath))
-        ? await loadSongMap(savedMapPath)
-        : editableMap,
       baseArrangementDraft = createArrangementDraft(preparedSong),
-      arrangementSourceId = preparedSong.arrangement?.id ?? "original-song",
+      loadedMap = (await mapExists(savedMapPath))
+        ? await loadSongMap(savedMapPath)
+        : null,
+      initialMap = loadedMap && loadedMap.source.sourceFingerprint === currentSourceFingerprint && loadedMap.source.sourceArrangementId === arrangementSourceId
+        ? loadedMap
+        : editableMap,
       draftFile = arrangementDraftPath(
         mapRoot,
         preparedSong.song.id,
@@ -755,6 +762,10 @@ async function createWindow(): Promise<void> {
       restoredDraftValue = await loadArrangementDraft(
         draftFile,
         preparedSong.song.id,
+        {
+          sourceFingerprint: currentSourceFingerprint,
+          sourceArrangementId: arrangementSourceId,
+        },
       ),
       restoredDraft = restoredDraftValue
         ? reconcileArrangementDraftSource(restoredDraftValue, baseArrangementDraft)
@@ -1217,8 +1228,19 @@ async function createWindow(): Promise<void> {
       );
     return next;
   };
+  const repairPreparedChoices = async (choices: PreparedLibraryChoice[]) =>
+    Promise.all(
+      choices.map((choice) =>
+        repairLegacyReviewCues(choice).catch((error) => {
+          console.warn(`Could not repair prepared review cues for ${choice.title}`, error);
+          return choice;
+        }),
+      ),
+    );
   const preparedChoices = async () =>
-    discoverPreparedLibrary(await allPreparedManifestPaths(operatorSetlist));
+    repairPreparedChoices(
+      await discoverPreparedLibrary(await allPreparedManifestPaths(operatorSetlist)),
+    );
   const prepResponse = async <T extends Record<string, unknown>>(
     extra: T = {} as T,
   ) => {
@@ -1228,6 +1250,13 @@ async function createWindow(): Promise<void> {
       clickSoundSettings,
       runtimeFfmpegPath,
     );
+    try {
+      const relinked = relinkImportedSetlist(operatorSetlist, prepared);
+      if (JSON.stringify(relinked.items) !== JSON.stringify(operatorSetlist.items)) {
+        operatorSetlist = relinked;
+        await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
+      }
+    } catch {}
     return {
       ...extra,
       setlist: operatorSetlist,
@@ -1554,6 +1583,14 @@ async function createWindow(): Promise<void> {
   ipcMain.handle(
     "prep:confirm",
     async (_event, options?: { selectedIndex?: number }) => {
+      const prepared = await ensureSetlistOriginalVersions(
+        await preparedChoices(),
+        operatorSetlist,
+        clickSoundSettings,
+        runtimeFfmpegPath,
+      );
+      operatorSetlist = relinkImportedSetlist(operatorSetlist, prepared);
+      await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
       const result = await confirmOperatorSet({
         setlist: operatorSetlist,
         cacheRoot: join(projectRoot, ".playback-cache", "confirmed-sets"),
@@ -3265,6 +3302,16 @@ function relinkImportedSetlist(
         (choice) =>
           choice.title === item.title &&
           choice.arrangement === item.arrangement,
+      ) ??
+      prepared.find(
+        (choice) =>
+          String(choice.songId) === String(item.songId) &&
+          choice.arrangement === "Original Song",
+      ) ??
+      prepared.find(
+        (choice) =>
+          choice.title === item.title &&
+          choice.arrangement === "Original Song",
       );
     if (!match)
       throw new Error(

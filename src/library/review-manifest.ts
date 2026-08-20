@@ -10,10 +10,9 @@ import { writeCountedCue } from "../prep/cue-sequence.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 import { isReferenceAudio } from "./audio-role.js";
 import { parseTimeSignature, type MasterSongRow } from "./normalize-song.js";
-import { loadPlaybackAnalyzerPackage, mapAnalyzerTimelineFacts, mapAnalyzerTimelinePackage, type AnalyzerArrangementFact } from "./analyzer-package.js";
-import { importReaperProject } from "../reaper/rpp-import.js";
+import { loadPlaybackAnalyzerPackage, mapAnalyzerTimelineFacts, mapAnalyzerTimelinePackage, type AnalyzerArrangementFact, type AnalyzerAudioFileFact } from "./analyzer-package.js";
 
-export const ANALYZER_SONG_MAP_VERSION = 14;
+export const ANALYZER_SONG_MAP_VERSION = 15;
 const REVIEW_STEM_CACHE_VERSION = 3;
 
 export async function prepareCandidateReview(input: {
@@ -53,8 +52,7 @@ export async function prepareCandidateReview(input: {
     join(input.padFolder, `Pad_${padFileKey(selectedKey)}.wav`),
     ...cueSources.filter((value): value is string => Boolean(value)),
   ]);
-  const arrangementRppFingerprint = await fingerprintFiles((analyzerPackage.arrangements ?? []).flatMap(arrangement => typeof arrangement.sourcePath === "string" && /\.rpp$/i.test(arrangement.sourcePath) ? [safeAnalyzerAudioPath(sourceFolder, arrangement.sourcePath)] : []));
-
+  const arrangementAnalyzerFingerprint = analyzerArrangementFingerprint(analyzerPackage.arrangements ?? []);
   const sourceFingerprint = createHash("sha256").update(JSON.stringify({
     songMapVersion: ANALYZER_SONG_MAP_VERSION,
     master: { key: input.master.key, bpm: input.master.bpm, timeSignature: input.master.timeSignature, folderPath: input.master.folderPath },
@@ -62,7 +60,7 @@ export async function prepareCandidateReview(input: {
     clickRegularPath: input.clickRegularPath,
     clickAccentPath: input.clickAccentPath,
     reusableAudioFingerprint,
-    arrangementRppFingerprint,
+    arrangementAnalyzerFingerprint,
     reviewStemCacheVersion: REVIEW_STEM_CACHE_VERSION,
     analyzerControlVersion: 1,
   })).digest("hex");
@@ -75,7 +73,7 @@ export async function prepareCandidateReview(input: {
   // so the normal waveform cache validity check is not enough here.
   await Promise.all([rm(waveformPath, { force: true }), rm(bundlePath, { force: true })]);
 
-  const sourceStems = analyzerPackage.audioFiles.filter(isPlayableEditorStem).map(file => ({ role: file.playbackBus ?? file.role ?? "music-stem", sourcePath: safeAnalyzerAudioPath(sourceFolder, file.path), durationSeconds: duration, displayName: originalStemDisplayName(file.path) }));
+  const sourceStems = analyzerSourceStems(sourceFolder, analyzerPackage.audioFiles, duration);
   if (!sourceStems.length) throw new Error("No playable music file is available for Editor review");
   const stems=await prepareReviewStems(sourceStems, join(reviewRoot, "stems"), input.ffmpegPath);
   const analyzerTimeline = mapAnalyzerTimelinePackage(analyzerPackage, duration, input.master.bpm, meter);
@@ -105,7 +103,7 @@ export async function prepareCandidateReview(input: {
     stems,
     regions,
     cues: cueMarkers.map(cue => ({ phrase: cue.label, ...("position" in cue ? { position: cue.position } : {}), atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId })),
-    cacheFingerprint: analyzerPackage.audioFiles.map((file) => String(file.sha256 ?? "")).filter(Boolean).sort().join(":"),
+    cacheFingerprint: analyzerAudioFingerprint(analyzerPackage.audioFiles),
     waveformPath,
     control: {
       sourceType: "reaper-import",
@@ -128,7 +126,7 @@ export async function prepareCandidateReview(input: {
   };
 
   const arrangementSongs: PreparedSong[] = [];
-  const { control: _originalControl, ...arrangementBaseSong } = song;
+  const { control: _originalControl, waveformPath: _originalWaveformPath, ...arrangementBaseSong } = song;
   for (const arrangement of analyzerPackage.arrangements ?? []) {
     const arrangementMeter = arrangement.timeSignature ? parseTimeSignature(arrangement.timeSignature) : meter;
     const arrangementBpm = Number(arrangement.bpm ?? input.master.bpm);
@@ -137,17 +135,33 @@ export async function prepareCandidateReview(input: {
     if (!arrangementTimeline) continue;
     const arrangementCueMarkers = arrangementTimeline.cues.map(cue => ({ ...(cue.position ? { position: cue.position } : {}), atSeconds: cue.atSeconds, label: cue.phrase, targetRegionId: cue.targetRegionId }));
     const safeArrangementId = safeId(String(arrangement.id ?? arrangement.name ?? arrangement.sourcePath ?? `arrangement-${arrangementSongs.length + 1}`));
-    let arrangementMidi = analyzerArrangementSlidesMidi(arrangement), arrangementSourceSha256 = createHash("sha256").update(String(arrangement.sourcePath ?? safeArrangementId)).digest("hex");
-    if (!arrangementMidi.length && typeof arrangement.sourcePath === "string" && /\.rpp$/i.test(arrangement.sourcePath)) {
-      try { const imported = await importReaperProject(safeAnalyzerAudioPath(sourceFolder, arrangement.sourcePath), originalSongFacts.id); arrangementMidi = [...imported.arrangement.proPresenterMidi]; arrangementSourceSha256 = imported.arrangement.sourceSha256; } catch {}
-    }
+    const arrangementSourceStems = analyzerSourceStems(sourceFolder, arrangement.audioFiles ?? [], arrangementDuration);
+    if (!arrangementSourceStems.length) continue;
+    const arrangementStems = await prepareReviewStems(arrangementSourceStems, join(reviewRoot, "arrangements", safeArrangementId, "stems"), input.ffmpegPath);
+    const arrangementMidi = analyzerArrangementSlidesMidi(arrangement);
+    const arrangementSourceSha256 = createHash("sha256").update(JSON.stringify({
+      sourcePath: arrangement.sourcePath ?? null,
+      audioFiles: analyzerAudioFingerprint(arrangement.audioFiles ?? []),
+      regions: arrangement.regions ?? [],
+      cues: arrangement.cues ?? [],
+      midi: arrangementMidi,
+    })).digest("hex");
     arrangementSongs.push({
       ...arrangementBaseSong,
       selectedBpm: arrangementBpm,
       timeSignature: arrangementMeter,
       durationSeconds: arrangementDuration,
+      stems: arrangementStems,
       regions: arrangementTimeline.regions,
       cues: arrangementCueMarkers.map(cue => ({ phrase: cue.label, ...("position" in cue ? { position: cue.position } : {}), atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId })),
+      cacheFingerprint: createHash("sha256").update(JSON.stringify({
+        arrangementId: safeArrangementId,
+        sourceSha256: arrangementSourceSha256,
+        bpm: arrangementBpm,
+        timeSignature: arrangementMeter,
+        durationSeconds: arrangementDuration,
+        stemFingerprint: analyzerAudioFingerprint(arrangement.audioFiles ?? []),
+      })).digest("hex"),
       liveAssets: {
         ...song.liveAssets!,
         cues: [],
@@ -271,6 +285,8 @@ function mapAnalyzerArrangement(arrangement: AnalyzerArrangementFact, duration: 
 }
 
 function analyzerArrangementDuration(arrangement: AnalyzerArrangementFact, bpm: number, meter: TimeSignature, fallbackDuration: number) {
+  const explicitDuration = Number(arrangement.durationSeconds);
+  if (Number.isFinite(explicitDuration) && explicitDuration > 0) return explicitDuration;
   const ends = (arrangement.regions ?? []).map(region => {
     const endPosition = region.end?.position;
     if (endPosition) return positionToSeconds({
@@ -284,6 +300,34 @@ function analyzerArrangementDuration(arrangement: AnalyzerArrangementFact, bpm: 
     return Number.isFinite(endSeconds) ? endSeconds : 0;
   }).filter(value => Number.isFinite(value) && value > 0);
   return ends.length ? Math.max(...ends) : fallbackDuration;
+}
+
+function analyzerSourceStems(sourceFolder: string, audioFiles: readonly AnalyzerAudioFileFact[], durationSeconds: number) {
+  return audioFiles.filter(isPlayableEditorStem).map(file => ({
+    role: file.playbackBus ?? file.role ?? "music-stem",
+    sourcePath: safeAnalyzerAudioPath(sourceFolder, file.path),
+    durationSeconds,
+    displayName: originalStemDisplayName(file.trackName ?? file.path),
+  }));
+}
+
+function analyzerAudioFingerprint(audioFiles: readonly AnalyzerAudioFileFact[]) {
+  return audioFiles.map(file => `${file.sha256 ?? ""}:${file.path}:${file.playbackBus ?? ""}:${file.role ?? ""}`).sort().join("|");
+}
+
+function analyzerArrangementFingerprint(arrangements: readonly AnalyzerArrangementFact[]) {
+  return createHash("sha256").update(JSON.stringify(arrangements.map(arrangement => ({
+    id: arrangement.id ?? null,
+    name: arrangement.name ?? null,
+    sourcePath: arrangement.sourcePath ?? null,
+    bpm: arrangement.bpm ?? null,
+    timeSignature: arrangement.timeSignature ?? null,
+    durationSeconds: arrangement.durationSeconds ?? null,
+    audioFiles: analyzerAudioFingerprint(arrangement.audioFiles ?? []),
+    regions: arrangement.regions ?? [],
+    cues: arrangement.cues ?? [],
+    slidesMidi: arrangement.control?.slidesMidi ?? [],
+  })))).digest("hex");
 }
 
 async function prepareReviewStems(stems: readonly { role: string; sourcePath: string; durationSeconds: number; displayName?: string }[], outputFolder: string, ffmpegPath: string) {
@@ -305,7 +349,7 @@ async function prepareReviewStems(stems: readonly { role: string; sourcePath: st
   return prepared;
 }
 
-function isPlayableEditorStem(file: { readonly path: string; readonly role?: string; readonly playbackBus?: string | null; readonly playLive?: boolean }) {
+function isPlayableEditorStem(file: AnalyzerAudioFileFact) {
   if (isReferenceAudio(file.path)) return false;
   if (file.role === "click-reference" || file.role === "cue-reference" || file.role === "ignore") return false;
   if (file.playLive === true) return true;
