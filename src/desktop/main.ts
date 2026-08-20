@@ -3147,24 +3147,25 @@ async function ensureSetlistOriginalVersions(
   clickSoundSettings: { normalPath: string; accentPath: string },
   ffmpegPath: string,
 ): Promise<PreparedLibraryChoice[]> {
-  const existingOriginals = new Set(
-    prepared
-      .filter((choice) => choice.arrangement === "Original Song")
-      .map((choice) => String(choice.songId)),
-  );
-  const missingSongIds = [
-    ...new Set(
-      setlist.items
-        .map((item) => String(item.songId))
-        .filter((songId) => !existingOriginals.has(songId)),
-    ),
+  const setSongIds = [
+    ...new Set(setlist.items.map((item) => String(item.songId))),
   ];
-  if (!missingSongIds.length) return prepared;
+  if (!setSongIds.length) return prepared;
   const catalog = await importMasterCatalog(
       productionDefaults.masterWorkbookPath,
     ),
     next = [...prepared];
-  for (const songId of missingSongIds) {
+  const choiceKey = (choice: PreparedLibraryChoice) =>
+    [
+      choice.songId,
+      choice.arrangement,
+      choice.key,
+      choice.bpm,
+      resolve(choice.manifestPath),
+      choice.songIndex,
+    ].join("\u0000");
+  const seen = new Set(next.map(choiceKey));
+  for (const songId of setSongIds) {
     const master = catalog.songs.find(
       (song) => String(song.catalogId) === songId,
     );
@@ -3182,13 +3183,17 @@ async function ensureSetlistOriginalVersions(
         padFolder: productionDefaults.padFolder,
         ffmpegPath,
       });
-      const original = (
-        await discoverPreparedLibrary([review.manifestPath])
-      ).find((choice) => choice.arrangement === "Original Song");
-      if (original) next.push(original);
+      for (const choice of await discoverPreparedLibrary([
+        review.manifestPath,
+      ])) {
+        const key = choiceKey(choice);
+        if (seen.has(key)) continue;
+        next.push(choice);
+        seen.add(key);
+      }
     } catch (error) {
       console.warn(
-        `Original Song version unavailable for ${master.title}`,
+        `Setlist versions unavailable for ${master.title}`,
         error,
       );
     }

@@ -38,7 +38,7 @@ root.innerHTML = `
   </section>
   <section id="editorWorkspace" class="editor-workspace" hidden>
     <section class="editor-set-deck set-card-deck" aria-label="Songs in confirmed set"><div class="set-deck-label"><span>EDIT SET</span><strong id="editorSetName">Sunday Set</strong></div><div id="editorSetSongs" class="performance-set-songs"></div></section>
-    <section class="editor-setlist-toolbar"><label>SET NAME<input id="editorSetlistName" value="Sunday Set"></label><span id="editorSetlistStatus">Loading draft set…</span><button id="editorImportSetlist">IMPORT SET</button><button id="editorExportSetlist">EXPORT SET</button><button id="editorClearSetlist" class="danger">CLEAR SET</button></section><div id="confirmSetProgress" class="confirm-set-progress" hidden><div><strong>CONFIRMING SET</strong><span id="confirmSetProgressLabel">Preparing isolated performance cache…</span><b id="confirmSetProgressPercent">0%</b></div><progress id="confirmSetProgressBar" max="100" value="0"></progress></div><div id="editorLoadStatus" class="editor-load-status" hidden><i><b id="editorLoadPercent">0%</b></i><span><strong>LOADING SONG</strong><small id="editorLoadLabel">Preparing editor…</small></span><progress id="editorLoadProgress" max="100" value="0"></progress></div>
+    <section class="editor-setlist-toolbar"><label>SET NAME<input id="editorSetlistName" value="Sunday Set"></label><span id="editorSetlistStatus">Loading draft set…</span><button id="editorUpdateLibrary" class="primary">UPDATE LIBRARY</button><button id="editorImportSetlist">IMPORT SET</button><button id="editorExportSetlist">EXPORT SET</button><button id="editorClearSetlist" class="danger">CLEAR SET</button></section><div id="confirmSetProgress" class="confirm-set-progress" hidden><div><strong>CONFIRMING SET</strong><span id="confirmSetProgressLabel">Preparing isolated performance cache…</span><b id="confirmSetProgressPercent">0%</b></div><progress id="confirmSetProgressBar" max="100" value="0"></progress></div><div id="editorLoadStatus" class="editor-load-status" hidden><i><b id="editorLoadPercent">0%</b></i><span><strong>LOADING SONG</strong><small id="editorLoadLabel">Preparing editor…</small></span><progress id="editorLoadProgress" max="100" value="0"></progress></div>
     <section id="editorSongVersions" class="editor-song-versions" hidden><div><span>SELECTED SONG</span><strong id="selectedSetSong">—</strong></div><label>ARRANGEMENT<select id="editorArrangementVersion" hidden></select><div class="version-menu"><button id="editorArrangementVersionButton" type="button">Select arrangement</button><div id="editorArrangementVersionMenu" class="version-menu-options" hidden></div></div></label></section>
     <section id="editorEmptySelection" class="editor-empty-selection" hidden><strong>NO SONG LOADED</strong><span>Select + ADD SONG to load an Original Song or arrangement into this set card.</span></section>
     <div class="editor-topbar">
@@ -855,6 +855,7 @@ function setupPrep() {
   $("#setlistName").onchange = () => void prepCommand({ action: "rename", name: ($("#setlistName") as HTMLInputElement).value });
   $("#clearSetlist").onclick = () => void prepCommand({ action: "clear" });
   $("#editorClearSetlist").onclick = () => void prepCommand({ action: "clear" });
+  $("#editorUpdateLibrary").onclick = () => void updateEditorLibrary();
   $("#editorExportSetlist").onclick = () => void exportCurrentSetlist();
   $("#editorImportSetlist").onclick = () => void importSetlist();
   $("#confirmSet").onclick = async () => { const button = $("#confirmSet") as HTMLButtonElement; button.disabled = true; $("#setlistStatus").textContent = "Copying and validating the isolated performance package…"; try { localStorage.setItem("playback.ui.mode","performance"); const result = await window.playback.prep.confirm(); $("#setlistStatus").textContent = `Confirmed ${result.songs} song${result.songs === 1 ? "" : "s"}. Loading Performance…`; } catch (error) { localStorage.setItem("playback.ui.mode","prep"); showError(error); button.disabled = false; $("#setlistStatus").textContent = "Confirm Set failed. Draft was preserved."; } };
@@ -869,6 +870,24 @@ async function setPrepMode() {
 }
 
 async function prepCommand(command: any) { try { prepState = await window.playback.prep.command(command); renderPrep(); renderEditorSetBuilder(); } catch (error) { showError(error); } }
+async function updateEditorLibrary(){
+  const button=$("#editorUpdateLibrary") as HTMLButtonElement;
+  button.disabled=true;
+  $("#editorSetlistStatus").textContent="Updating metadata and library...";
+  try{
+    const result=await window.playback.prep.update();
+    catalogState=result;
+    prepState=result;
+    renderPrep();
+    renderEditorSetBuilder();
+    $("#editorSetlistStatus").textContent=`Library updated: ${result.updated} rebuilt, ${result.unchanged} unchanged, ${result.prepared.length} versions ready.`;
+  }catch(error){
+    showError(error);
+    $("#editorSetlistStatus").textContent="Library update failed.";
+  }finally{
+    button.disabled=false;
+  }
+}
 async function exportCurrentSetlist(){
   const button=$("#editorExportSetlist") as HTMLButtonElement;
   button.disabled=true;

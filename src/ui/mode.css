@@ -551,3 +551,189 @@ body:not(.expanded-editor).edit-mode .editor-grid{height:calc(100vh - 455px);min
 .midi-event>[data-midi-delete]{padding:5px}
 .midi-event.automatic{grid-template-columns:auto 1fr}
 .midi-event.automatic strong{color:#9eb4c5}
+
+/* Readability pass: lift the tiny control/status text without enlarging primary transport text. */
+.modes button,
+.setlist span,
+.setlist small,
+.arrangement-tools select,
+.arrangement-tools button,
+.midi-status,
+.route-status,
+.live-section>span,
+.live-section button,
+.live-buses button,
+.live-buses small,
+#panicState,
+#liveFault,
+#jumpState,
+.arrangement-editor #arrangementStatus,
+.editor-topbar small,
+.view-toggle button,
+.zoom-control,
+.draft-state,
+.editor-facts label,
+.editor-facts small,
+.editor-facts strong,
+.region-browser header button,
+.region-list-item>span,
+.region-list-item strong,
+.region-list-item small,
+.editor-ruler span,
+.marker-lane>span,
+.editor-region strong,
+.editor-region small,
+.stem-row label,
+.editor-selection-readout,
+.editor-selection-readout strong,
+.editor-inspector label,
+.editor-inspector p,
+.editor-inspector button,
+.midi-event strong,
+.midi-event small,
+.readiness-summary,
+.readiness-check strong,
+.readiness-check small,
+.transport-snap>span,
+.transport .transport-snap button,
+.stem-label-gutter label,
+.editor-size-controls>span,
+.summary-stem-mixer-heading,
+.editor-summary-channel .channel-switches button,
+.editor-summary-channel .channel-name,
+.dante-routing-grid>strong,
+.dante-routing-grid>b,
+.dante-routing-grid>span strong,
+.dante-routing-grid>span small,
+.dante-routing-grid .route-mode,
+.settings-menu-button,
+.arrangement-tools #slidesMidi,
+.arrangement-tools #surfaceMidi,
+#remoteSettings.settings-window>header p,
+#remoteSettings .settings-tabs button,
+.settings-section-heading>span,
+.settings-grid>label,
+.settings-grid button,
+.settings-action-list button,
+.settings-readout span,
+.settings-readout strong,
+.settings-help,
+.settings-report,
+.click-sound-row label span,
+.click-sound-actions p,
+.settings-action-list button strong,
+.settings-action-list button small,
+.library-health>span,
+.library-health>small,
+.library-paths label,
+.library-paths input,
+.library-issue strong,
+.library-issue small,
+.library-issue p,
+.transition-timing-grid label small,
+.transition-behaviors strong,
+.transition-behaviors span,
+.confirm-set-progress strong,
+.confirm-set-progress span,
+.confirm-set-progress b,
+.cue-list p,
+.cue-list-item span,
+.cue-list-item strong,
+.cue-list-item small,
+.osc-qr-copy>span,
+.osc-qr-copy p,
+.osc-qr-copy label,
+.osc-qr-code small,
+.editor-top-field input,
+.editor-top-field select,
+.save-arrangement-top,
+.arrangement-name-dialog p,
+.arrangement-name-dialog label,
+.edit-mode nav .modes button,
+.edit-mode .transport-clock span,
+.edit-mode .transport-clock small,
+.edit-mode .ready,
+.edit-mode .editor-set-deck .set-deck-label span,
+.edit-mode .editor-set-deck .set-deck-label strong,
+.edit-mode .performance-set-songs .set-song-card>span,
+.edit-mode .performance-set-songs .set-song-card>small,
+.edit-mode .performance-set-songs .set-transition>span,
+.edit-mode .performance-set-songs .set-transition>strong,
+.edit-mode .performance-set-songs .set-transition>small,
+.edit-mode .editor-setlist-toolbar input,
+.edit-mode .editor-setlist-toolbar button,
+.edit-mode .editor-song-versions strong,
+.edit-mode .editor-info-row>div:first-child strong,
+.edit-mode .editor-top-field input,
+.edit-mode .editor-top-field select,
+.edit-mode .editor-view-row .view-toggle button,
+.edit-mode .editor-view-row .zoom-control,
+.edit-mode .editor-view-row .transport-snap>span,
+.edit-mode .editor-view-row .transport-snap button,
+.panel-collapse-toggle,
+.editor-summary-channel .channel-head strong,
+.editor-summary-channel>small,
+.performance-mode .daw-channel:not(.master) .channel-head b,
+.performance-mode .daw-channel:not(.master) output,
+.daw-mixer>header strong,
+.daw-mixer>header button,
+.midi-lane i span,
+.edit-mode .midi-lane i span,
+.zoom-control output {
+  font-size:12px!important;
+}
+
+.editor-summary-channel .channel-name,
+.performance-mode .daw-channel:not(.master) .channel-name,
+.performance-mode .daw-channel:not(.master) .channel-switches button,
+.daw-mixer>header span,
+.stem-console-name strong {
+  font-size:14px!important;
+}
+
+/* Edit set strip: keep the top row readable by showing about seven song cards,
+   then let the rest scroll instead of squeezing the cards smaller. */
+.edit-mode .editor-set-deck{
+  height:92px;
+  margin-bottom:9px;
+}
+
+.edit-mode .editor-set-deck .set-deck-label{
+  width:118px;
+  flex-basis:118px;
+}
+
+.edit-mode .performance-set-songs{
+  gap:6px;
+  padding:4px;
+  scroll-padding-inline:4px;
+}
+
+.edit-mode .performance-set-songs .set-song-card{
+  flex:0 0 clamp(178px,calc((100vw - 620px)/7),225px)!important;
+  min-width:178px!important;
+  grid-template-columns:26px minmax(120px,1fr);
+  padding:11px 12px!important;
+}
+
+.edit-mode .performance-set-songs .set-transition{
+  flex:0 0 62px!important;
+  min-width:62px!important;
+  max-width:62px!important;
+}
+
+.edit-mode .performance-set-songs .set-transition>span{
+  font-size:6px!important;
+  line-height:1!important;
+}
+
+.edit-mode .performance-set-songs .set-transition>strong{
+  font-size:8px!important;
+  line-height:1.05!important;
+  white-space:normal!important;
+}
+
+.edit-mode .performance-set-songs .set-transition>small{
+  font-size:6px!important;
+  line-height:1!important;
+}

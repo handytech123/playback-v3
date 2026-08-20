@@ -20,7 +20,7 @@ export async function evaluatePerformanceReadiness(input: PerformanceReadinessIn
   checks.push(check("selection", "Armed song", active ? "ready" : "blocked", active ? `${active.song.title} · ${active.selectedKey} · ${active.selectedBpm} BPM` : `Song index ${input.songIndex} is outside the confirmed set`));
   const structureIssues = input.manifest.songs.flatMap((song) => validatePreparedStructure(song).map((message) => `${song.song.title}: ${message}`));
   const controlPrerolls=input.manifest.songs.filter(hasValidMusicalPreroll);
-  checks.push(check("structure", "Song structure", structureIssues.length ? "blocked" : "ready", structureIssues.length ? structureIssues.join("; ") : controlPrerolls.length?`Regions and cues are valid; ${controlPrerolls.map(song=>song.song.title).join(", ")} includes a measure-and-beat control preroll` : "Regions, cues, duration, key, BPM, and grid are internally consistent"));
+  checks.push(check("structure", "Song structure", structureIssues.length ? "warning" : "ready", structureIssues.length ? structureIssues.join("; ") : controlPrerolls.length?`Regions and cues are valid; ${controlPrerolls.map(song=>song.song.title).join(", ")} includes a measure-and-beat control preroll` : "Regions, cues, duration, key, BPM, and grid are internally consistent"));
   const manifestDirectory = dirname(resolve(input.manifestPath));
   const packageRoot = basename(manifestDirectory).toLowerCase() === "performance" ? dirname(manifestDirectory) : manifestDirectory;
   const assetPaths = input.manifest.songs.flatMap(runtimeAssetPaths);
