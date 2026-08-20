@@ -84,6 +84,7 @@ import {
 import { evaluateEditorReadiness } from "../edit/editor-readiness.js";
 import {
   arrangementFingerprint,
+  arrangementSourceFingerprint,
   reconcileArrangementDraftSource,
   type AppArrangementDraft,
 } from "../edit/arrangement-editor.js";
@@ -708,6 +709,8 @@ async function createWindow(): Promise<void> {
       ) as ConfirmedSetManifest,
       preparedSong = sourceManifest.songs[songIndex];
     if (!preparedSong) throw new Error("Editor source song is unavailable");
+    const currentSourceFingerprint = arrangementSourceFingerprint(preparedSong);
+    const arrangementSourceId = preparedSong.arrangement?.id ?? "original-song";
     const liveCues = preparedSong.liveAssets?.cues?.length
       ? preparedSong.liveAssets.cues
       : preparedSong.cues.map((cue: any) => ({
@@ -729,6 +732,8 @@ async function createWindow(): Promise<void> {
           kind: "analyzer",
           path: "playback-song.json",
           importedAt: new Date().toISOString(),
+          sourceFingerprint: currentSourceFingerprint,
+          sourceArrangementId: arrangementSourceId,
         },
         regions: normalizeRegions(preparedSong.regions),
         cues: liveCues.map((cue: any, index: number) => ({
@@ -743,11 +748,13 @@ async function createWindow(): Promise<void> {
         })),
       },
       savedMapPath = currentSongMapPath(mapRoot, editableMap.songId),
-      initialMap = (await mapExists(savedMapPath))
-        ? await loadSongMap(savedMapPath)
-        : editableMap,
       baseArrangementDraft = createArrangementDraft(preparedSong),
-      arrangementSourceId = preparedSong.arrangement?.id ?? "original-song",
+      loadedMap = (await mapExists(savedMapPath))
+        ? await loadSongMap(savedMapPath)
+        : null,
+      initialMap = loadedMap && loadedMap.source.sourceFingerprint === currentSourceFingerprint && loadedMap.source.sourceArrangementId === arrangementSourceId
+        ? loadedMap
+        : editableMap,
       draftFile = arrangementDraftPath(
         mapRoot,
         preparedSong.song.id,
@@ -756,6 +763,10 @@ async function createWindow(): Promise<void> {
       restoredDraftValue = await loadArrangementDraft(
         draftFile,
         preparedSong.song.id,
+        {
+          sourceFingerprint: currentSourceFingerprint,
+          sourceArrangementId: arrangementSourceId,
+        },
       ),
       restoredDraft = restoredDraftValue
         ? reconcileArrangementDraftSource(restoredDraftValue, baseArrangementDraft)
@@ -1218,8 +1229,19 @@ async function createWindow(): Promise<void> {
       );
     return next;
   };
+  const repairPreparedChoices = async (choices: PreparedLibraryChoice[]) =>
+    Promise.all(
+      choices.map((choice) =>
+        repairLegacyReviewCues(choice).catch((error) => {
+          console.warn(`Could not repair prepared review cues for ${choice.title}`, error);
+          return choice;
+        }),
+      ),
+    );
   const preparedChoices = async () =>
-    discoverPreparedLibrary(await allPreparedManifestPaths(operatorSetlist));
+    repairPreparedChoices(
+      await discoverPreparedLibrary(await allPreparedManifestPaths(operatorSetlist)),
+    );
   const prepResponse = async <T extends Record<string, unknown>>(
     extra: T = {} as T,
   ) => {
@@ -1229,6 +1251,13 @@ async function createWindow(): Promise<void> {
       clickSoundSettings,
       runtimeFfmpegPath,
     );
+    try {
+      const relinked = relinkImportedSetlist(operatorSetlist, prepared);
+      if (JSON.stringify(relinked.items) !== JSON.stringify(operatorSetlist.items)) {
+        operatorSetlist = relinked;
+        await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
+      }
+    } catch {}
     return {
       ...extra,
       setlist: operatorSetlist,
@@ -1555,20 +1584,31 @@ async function createWindow(): Promise<void> {
   ipcMain.handle(
     "prep:confirm",
     async (_event, options?: { selectedIndex?: number }) => {
+      const prepared = await ensureSetlistOriginalVersions(
+        await preparedChoices(),
+        operatorSetlist,
+        clickSoundSettings,
+        runtimeFfmpegPath,
+      );
+      operatorSetlist = relinkImportedSetlist(operatorSetlist, prepared);
+      await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
       const repairedSetlist = await repairOperatorSetlistForConfirmation(
         operatorSetlist,
         async (item, index) => {
-        sendToRenderer("prep:confirm-status", {
-          progress: Math.max(1, Math.round((index / operatorSetlist.items.length) * 3)),
-          label: `Preparing ${item.title} cues`,
-        });
-        const repaired = await repairLegacyReviewCues(item);
-        await hydrateReviewSongLiveAssets({
-          manifestPath: repaired.manifestPath,
-          songIndex: repaired.songIndex,
-          cueFolder: productionDefaults.cueFolder,
-          ffmpegPath: runtimeFfmpegPath,
-        });
+          sendToRenderer("prep:confirm-status", {
+            progress: Math.max(
+              1,
+              Math.round((index / operatorSetlist.items.length) * 3),
+            ),
+            label: `Preparing ${item.title} cues`,
+          });
+          const repaired = await repairLegacyReviewCues(item);
+          await hydrateReviewSongLiveAssets({
+            manifestPath: repaired.manifestPath,
+            songIndex: repaired.songIndex,
+            cueFolder: productionDefaults.cueFolder,
+            ffmpegPath: runtimeFfmpegPath,
+          });
           return repaired;
         },
       );
@@ -3132,24 +3172,25 @@ async function ensureSetlistOriginalVersions(
   clickSoundSettings: { normalPath: string; accentPath: string },
   ffmpegPath: string,
 ): Promise<PreparedLibraryChoice[]> {
-  const existingOriginals = new Set(
-    prepared
-      .filter((choice) => choice.arrangement === "Original Song")
-      .map((choice) => String(choice.songId)),
-  );
-  const missingSongIds = [
-    ...new Set(
-      setlist.items
-        .map((item) => String(item.songId))
-        .filter((songId) => !existingOriginals.has(songId)),
-    ),
+  const setSongIds = [
+    ...new Set(setlist.items.map((item) => String(item.songId))),
   ];
-  if (!missingSongIds.length) return prepared;
+  if (!setSongIds.length) return prepared;
   const catalog = await importMasterCatalog(
       productionDefaults.masterWorkbookPath,
     ),
     next = [...prepared];
-  for (const songId of missingSongIds) {
+  const choiceKey = (choice: PreparedLibraryChoice) =>
+    [
+      choice.songId,
+      choice.arrangement,
+      choice.key,
+      choice.bpm,
+      resolve(choice.manifestPath),
+      choice.songIndex,
+    ].join("\u0000");
+  const seen = new Set(next.map(choiceKey));
+  for (const songId of setSongIds) {
     const master = catalog.songs.find(
       (song) => String(song.catalogId) === songId,
     );
@@ -3167,13 +3208,17 @@ async function ensureSetlistOriginalVersions(
         padFolder: productionDefaults.padFolder,
         ffmpegPath,
       });
-      const original = (
-        await discoverPreparedLibrary([review.manifestPath])
-      ).find((choice) => choice.arrangement === "Original Song");
-      if (original) next.push(original);
+      for (const choice of await discoverPreparedLibrary([
+        review.manifestPath,
+      ])) {
+        const key = choiceKey(choice);
+        if (seen.has(key)) continue;
+        next.push(choice);
+        seen.add(key);
+      }
     } catch (error) {
       console.warn(
-        `Original Song version unavailable for ${master.title}`,
+        `Setlist versions unavailable for ${master.title}`,
         error,
       );
     }
@@ -3287,6 +3332,16 @@ function relinkImportedSetlist(
         (choice) =>
           choice.title === item.title &&
           choice.arrangement === item.arrangement,
+      ) ??
+      prepared.find(
+        (choice) =>
+          String(choice.songId) === String(item.songId) &&
+          choice.arrangement === "Original Song",
+      ) ??
+      prepared.find(
+        (choice) =>
+          choice.title === item.title &&
+          choice.arrangement === "Original Song",
       );
     if (!match)
       throw new Error(

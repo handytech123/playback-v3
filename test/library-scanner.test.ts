@@ -54,6 +54,29 @@ test("playback-song package is the library gate for editor review", async () => 
   assert.equal(song.analyzerMetadataPath, join(root, "playback-song.json"));
 });
 
+test("cue-fact playback-song package is available for editor review", async () => {
+  const root = await mkdtemp(join(tmpdir(), "playback-library-cue-facts-"));
+  await writeFile(join(root, "playback-song.json"), JSON.stringify({
+    schema: "playback-analyzer-package/v1",
+    schemaVersion: 1,
+    generatedAt: "2026-08-10T00:00:00.000Z",
+    review: { status: "ready" },
+    master: { catalogId: "Cue Facts", title: "Cue Facts" },
+    timeline: { durationMs: 10000 },
+    audioFiles: [{ path: "music.wav", role: "music-stem", playbackBus: "music-stem", playLive: true }],
+    regions: [],
+    cues: [{ id: "c1", phrase: "Verse", countPattern: "234", leadGridBeats: 4, cueStart: { timeMs: 0, position: { measure: 1, beat: 1 } } }],
+    click: { playbackPattern: { templateId: "4-4-quarter", events: [{ atSeconds: 0, accent: true }] } },
+  }));
+
+  const result = await scanMasterLibrary([row(root, "Cue Facts")]);
+  const song = result.songs[0]!;
+
+  assert.equal(song.readiness, "needs-review");
+  assert.equal(song.regionMetadataPath, join(root, "playback-song.json"));
+});
+
+
 test("vendor pad stems count as playable library audio", async () => {
   const root = await mkdtemp(join(tmpdir(), "playback-library-pad-stem-"));
   await writeFile(join(root, "playback-song.json"), JSON.stringify({

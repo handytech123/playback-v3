@@ -12,7 +12,7 @@ const NUMBER_NAMES = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX"] as c
 export function countedCueDelays(bpm: number, meter: TimeSignature, countPattern?: AnalyzerCountPattern): readonly { label: string; delaySeconds: number }[] {
   if (countPattern) {
     const beatSeconds = secondsPerNotatedBeat(bpm, meter);
-    const positions: Record<AnalyzerCountPattern, readonly number[]> = { "234": [2,3,4], "456": [4,5,6], "23456": [2,3,4,5,6] };
+    const positions: Record<AnalyzerCountPattern, readonly number[]> = { "234": [2,3,4], "34": [3,4], "456": [4,5,6], "23456": [2,3,4,5,6] };
     return positions[countPattern].map(position => ({ label: String(position), delaySeconds: (position - 1) * beatSeconds }));
   }
   if (meter.numerator < 2 || meter.numerator >= NUMBER_NAMES.length) return [];
