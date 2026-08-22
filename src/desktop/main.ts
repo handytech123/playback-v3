@@ -153,6 +153,7 @@ import {
   DEFAULT_INSTRUMENT_OUTPUTS,
   PLAYBACK_OUTPUT_PROFILE,
 } from "../audio/output-layout.js";
+import { applySavedSongMix, captureSongMix, emptySongMixLibrary, linearGainToGldDb, SONG_MIX_BUS_KEYS, type SongMixBusKey, type SongMixLibrary } from "../live/song-mix.js";
 import { reconcileAudioRouting } from "../audio/routing-reconcile.js";
 import {
   deriveAudioRouting,
@@ -497,11 +498,15 @@ async function createWindow(): Promise<void> {
       else emptyStartup = true;
     }
   }
-  const manifest = emptyStartup
+  const songMixPath = join(projectRoot, ".playback-data", "song-mixes.json");
+  let songMixLibrary: SongMixLibrary = emptySongMixLibrary();
+  try { const saved=JSON.parse(await readFile(songMixPath,"utf8"));if(saved?.schemaVersion===1&&saved.songs&&typeof saved.songs==="object")songMixLibrary=saved; } catch {}
+  let manifest = emptyStartup
     ? emptyStartupManifest()
     : (JSON.parse(
         await readFile(manifestPath, "utf8"),
       ) as ConfirmedSetManifest);
+  manifest={...manifest,songs:manifest.songs.map(song=>applySavedSongMix(song,songMixLibrary.songs[song.song.id]))};
   const selectedSongPath = join(
     projectRoot,
     ".playback-data",
@@ -1002,6 +1007,7 @@ async function createWindow(): Promise<void> {
       selectedSongPath,
       JSON.stringify({ index, selectedAt: new Date().toISOString() }, null, 2),
     );
+    await recallSongMixOnGld(index);
     return readinessFor(index, currentReady, null);
   };
   const beginPerformanceTransition = async (
@@ -1041,6 +1047,7 @@ async function createWindow(): Promise<void> {
           2,
         ),
       );
+      await recallSongMixOnGld(index);
       return {
         readiness: await readinessFor(index, currentReady, null),
         elapsedSeconds: selected.elapsedSeconds,
@@ -1127,6 +1134,14 @@ async function createWindow(): Promise<void> {
         controlBus?.publishState();
       });
   let controlSettings = await loadOrCreateControlSettings();
+  const gldSongMixInputs:Record<SongMixBusKey,number>={drums:10,bass:12,acoustic:14,electric:16,keys:36,strings:37,vocals:39,other:41};
+  const recallSongMixOnGld=async(index:number)=>{
+    if(!surfaceMixerMidiEnabled||!controlSettings.gld.writesEnabled||!controlSettings.gld.midiOutputName)return;
+    const saved=songMixLibrary.songs[manifest.songs[index]!.song.id];if(!saved)return;
+    for(const bus of SONG_MIX_BUS_KEYS){const mix=saved.buses[bus];if(!mix)continue;for(const intent of [{type:"fader",strip:{kind:"input",number:gldSongMixInputs[bus]},db:linearGainToGldDb(mix.gain)},{type:"mute",strip:{kind:"input",number:gldSongMixInputs[bus]},muted:mix.muted}] as const){const message=encodeGldIntent(intent,controlSettings.gld.midiChannel);await sendMidiBytes(controlSettings.gld.midiOutputName,message.bytes);}}
+    if(saved.pad){for(const intent of [{type:"fader",strip:{kind:"input",number:33},db:linearGainToGldDb(saved.pad.gain)},{type:"mute",strip:{kind:"input",number:33},muted:saved.pad.muted}] as const){const message=encodeGldIntent(intent,controlSettings.gld.midiChannel);await sendMidiBytes(controlSettings.gld.midiOutputName,message.bytes);}}
+  };
+  void recallSongMixOnGld(selectedSongIndex).catch(error=>console.warn("GLD song mix recall failed",error));
   midiInputRouter = new MidiInputRouter(
     controlBus,
     FOOT_CONTROLLER_PROFILES[controlSettings.footControllerProfile],
@@ -1974,6 +1989,14 @@ async function createWindow(): Promise<void> {
     },
   );
   ipcMain.handle("performance:get", () => performance!.snapshot);
+  ipcMain.handle("performance:save-mix",async()=>{
+    const index=performance!.snapshot.songIndex,song=manifest.songs[index]!,saved=captureSongMix(song,performance!.snapshot.mixer);
+    songMixLibrary={schemaVersion:1,songs:{...songMixLibrary.songs,[song.song.id]:saved}};
+    await mkdir(dirname(songMixPath),{recursive:true});const temporary=`${songMixPath}.${process.pid}.tmp`;await writeFile(temporary,JSON.stringify(songMixLibrary,null,2),"utf8");await rename(temporary,songMixPath);
+    (manifest.songs as unknown as any[])[index]=applySavedSongMix(song,saved);
+    await recallSongMixOnGld(index);
+    return{songId:song.song.id,title:song.song.title,savedAt:saved.savedAt};
+  });
   ipcMain.handle("set:get-song", async (_event, index: number) =>
     performanceSongPayload(index),
   );
@@ -2048,7 +2071,7 @@ async function createWindow(): Promise<void> {
     gld: {
       ...controlSettings.gld,
       devices: await listMidiOutputs(),
-      writesLocked: true,
+      writesLocked: !controlSettings.gld.writesEnabled,
     },
   }));
   ipcMain.handle(
@@ -2156,6 +2179,7 @@ async function createWindow(): Promise<void> {
         ...controlSettings.gld,
         midiOutputName: value.midiOutputName,
         midiChannel: value.midiChannel,
+        writesEnabled: true,
       };
       await writeControlSettings({
         ...controlSettings,
@@ -2165,7 +2189,7 @@ async function createWindow(): Promise<void> {
         status: "connection-tested",
         selected: value.midiOutputName,
         midiChannel: value.midiChannel,
-        writesLocked: true,
+        writesLocked: false,
       };
     },
   );
@@ -3030,7 +3054,7 @@ async function loadOrCreateControlSettings(): Promise<ControlSettings> {
             typeof value.gld?.midiOutputName === "string"
               ? value.gld.midiOutputName
               : null,
-          writesEnabled: false,
+          writesEnabled: value.gld?.writesEnabled !== false && typeof value.gld?.midiOutputName === "string",
         },
         updatedAt:
           typeof value.updatedAt === "string"

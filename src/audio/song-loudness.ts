@@ -29,7 +29,7 @@ export async function measureSongLoudness(input:{readonly stemPaths:readonly str
   const audible=input.stemPaths.map((path,index)=>({path,index,mix:input.stemMix?.find(item=>item.index===index)})),
     anySolo=audible.some(item=>item.mix?.solo),
     selected=audible.filter(item=>!item.mix?.muted&&(!anySolo||item.mix?.solo));
-  if(!selected.length)throw new Error("Song loudness cannot be measured because every stem is muted");
+  if(!selected.length)return{version:PERFORMANCE_LOUDNESS_VERSION,targetLufs:PERFORMANCE_LOUDNESS_TARGET_LUFS,measuredLufs:-70,measuredTruePeakDbtp:-70,automaticGainDb:0,appliedGainDb:0};
   const args=["-hide_banner","-nostats"];
   for(const item of selected)args.push("-i",item.path);
   const chains=selected.map((item,index)=>`[${index}:a]volume=${finiteGain(item.mix?.gain)}[s${index}]`),
