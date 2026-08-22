@@ -175,20 +175,6 @@ const runtimeFfmpegPath = app.isPackaged
   : join(sourceRoot, "vendor", "runtime", "ffmpeg.exe");
 process.env.PLAYBACK_FFMPEG_PATH ??= runtimeFfmpegPath;
 process.env.PATH = `${dirname(runtimeFfmpegPath)};${process.env.PATH ?? ""}`;
-const originalManifestPath = join(
-    projectRoot,
-    ".playback-cache",
-    "milestone-1-cornerstone-performance-v3",
-    "confirmed-set.json",
-  ),
-  arrangementManifestPath = join(
-    projectRoot,
-    ".playback-cache",
-    "arrangements",
-    "reaper-72091bdc9061",
-    "performance",
-    "confirmed-set.json",
-  );
 const manifestArgument = process.argv
   .find((value) => value.startsWith("--manifest="))
   ?.slice("--manifest=".length);
@@ -198,7 +184,7 @@ const explicitManifestPath = manifestArgument
     ? resolve(process.env.PLAYBACK_MANIFEST_PATH)
     : null;
 app.setAppUserModelId("org.handytech.playbackv3");
-let manifestPath = explicitManifestPath ?? originalManifestPath;
+let manifestPath = explicitManifestPath ?? "";
 const enginePath = app.isPackaged
   ? join(assetRoot, "native", "PlaybackEngineProbe.exe")
   : join(
@@ -496,7 +482,7 @@ async function createWindow(): Promise<void> {
       else emptyStartup = true;
     }
   }
-  const manifest = emptyStartup
+  let manifest = emptyStartup
     ? emptyStartupManifest()
     : (JSON.parse(
         await readFile(manifestPath, "utf8"),
@@ -1148,7 +1134,7 @@ async function createWindow(): Promise<void> {
     for (const [bus, gain] of Object.entries(manifest.show.mixer))
       engine.setBusGain(bus as LiveBus, gain);
   if (nativeArmError) performance.reportFault(nativeArmError);
-  ipcMain.handle("playback:bootstrap", async () => {
+  const bootstrapPayload = async () => {
     const activeSongIndex = performance!.snapshot.songIndex,
       activeSong = manifest.songs[activeSongIndex]!,
       activeWaveform = emptyStartup
@@ -1184,7 +1170,83 @@ async function createWindow(): Promise<void> {
         stereoFallback: (currentReady ?? ready).stereoFallback === true,
       },
     };
-  });
+  };
+  const loadConfirmedPerformancePackage = async (
+    nextManifestPath: string,
+    nextManifest: ConfirmedSetManifest,
+    nextSongIndex = 0,
+  ) => {
+    sendToRenderer("prep:confirm-status", {
+      progress: 88,
+      label: "Loading confirmed set into Performance without restarting...",
+    });
+    manifestPath = resolve(nextManifestPath);
+    manifest = nextManifest;
+    emptyStartup = false;
+    selectedSongIndex =
+      Number.isInteger(nextSongIndex) && manifest.songs[nextSongIndex]
+        ? nextSongIndex
+        : 0;
+    const labels = performanceStemDisplayLabels(manifest.songs[selectedSongIndex]!);
+    globalBusRouting = migrateGlobalBusRouting(
+      globalBusRouting,
+      selectedAudioRouting,
+      labels,
+    );
+    selectedAudioRouting = deriveAudioRouting(globalBusRouting!, labels);
+    selectedStereoRouting = reconcileAudioRouting(
+      selectedStereoRouting ? normalizeAudioRouting(selectedStereoRouting) : null,
+      stereoAudioRouting(manifest.songs[selectedSongIndex]!.stems.length),
+      manifest.songs[selectedSongIndex]!.stems.length,
+    );
+    await saveDeviceSettings();
+    currentReady = null;
+    nativeArmError = null;
+    performance = new PerformanceSession(
+      manifest,
+      effects,
+      manifest.show?.routing ?? DEFAULT_ROUTES,
+      await readinessFor(selectedSongIndex, null, null),
+      manifest.show?.mixer,
+      selectedSongIndex,
+    );
+    controlBus = new PlaybackCommandBus(performance, manifest.name);
+    controlBus.onState((state) => sendToRenderer("control:state", state));
+    midiInputRouter = new MidiInputRouter(
+      controlBus,
+      FOOT_CONTROLLER_PROFILES[controlSettings.footControllerProfile],
+    );
+    if (remoteServer) await remoteServer.close().catch(() => undefined);
+    remoteServer = new RemoteControlServer(controlBus, {
+      token: controlSettings.token,
+      host: controlSettings.lanEnabled ? "0.0.0.0" : "127.0.0.1",
+      httpPort: controlSettings.httpPort,
+      oscPort: controlSettings.oscPort,
+      enableOsc: controlSettings.oscEnabled,
+      oscTokenRequired: controlSettings.lanEnabled,
+    });
+    try {
+      remoteAddress = await remoteServer.start();
+    } catch (error) {
+      console.error("Remote control adapter unavailable", error);
+      remoteAddress = null;
+    }
+    const readyState = await armSourceSong(manifestPath, selectedSongIndex);
+    currentReady = readyState;
+    applyPreparedSongMixer(manifest.songs[selectedSongIndex]!);
+    if (manifest.show)
+      for (const [bus, gain] of Object.entries(manifest.show.mixer))
+        engine.setBusGain(bus as LiveBus, gain);
+    performance.setReadiness(await readinessFor(selectedSongIndex, readyState, null));
+    sendToRenderer("performance:state", performance.snapshot);
+    controlBus.publishState();
+    sendToRenderer("prep:confirm-status", {
+      progress: 100,
+      label: "Performance package loaded.",
+    });
+    return bootstrapPayload();
+  };
+  ipcMain.handle("playback:bootstrap", bootstrapPayload);
   const repairLegacyReviewCues = async (choice: any) => {
     const source = JSON.parse(
         await readFile(choice.manifestPath, "utf8"),
@@ -1237,6 +1299,20 @@ async function createWindow(): Promise<void> {
         }),
       ),
     );
+  const repairPreparedChoicesStrict = async (
+    choices: PreparedLibraryChoice[],
+    onProgress?: (status: { progress: number; label: string }) => void,
+  ) => {
+    const repaired: PreparedLibraryChoice[] = [];
+    for (const [index, choice] of choices.entries()) {
+      onProgress?.({
+        progress: Math.round(3 + (index / Math.max(choices.length, 1)) * 17),
+        label: `Checking cue audio for ${choice.title}`,
+      });
+      repaired.push(await repairLegacyReviewCues(choice));
+    }
+    return repaired;
+  };
   const preparedChoices = async () =>
     repairPreparedChoices(
       await discoverPreparedLibrary(await allPreparedManifestPaths(operatorSetlist)),
@@ -1505,6 +1581,25 @@ async function createWindow(): Promise<void> {
       );
     if (!item) throw new Error("Set song is no longer available");
     const choice: any = await repairLegacyReviewCues(item);
+    const repairedItem = {
+      ...item,
+      ...choice,
+      itemId: item.itemId,
+      ...(item.transitionToNext
+        ? { transitionToNext: item.transitionToNext }
+        : {}),
+      ...(item.stemMix ? { stemMix: item.stemMix } : {}),
+    };
+    if (JSON.stringify(repairedItem) !== JSON.stringify(item)) {
+      operatorSetlist = {
+        ...operatorSetlist,
+        items: operatorSetlist.items.map((candidate) =>
+          candidate.itemId === itemId ? repairedItem : candidate,
+        ),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
+    }
     report(
       20,
       choice.arrangement === "Original Song"
@@ -1584,7 +1679,12 @@ async function createWindow(): Promise<void> {
     "prep:confirm",
     async (_event, options?: { selectedIndex?: number }) => {
       const prepared = await ensureSetlistOriginalVersions(
-        await preparedChoices(),
+        await repairPreparedChoicesStrict(
+          await discoverPreparedLibrary(
+            await allPreparedManifestPaths(operatorSetlist),
+          ),
+          (status) => sendToRenderer("prep:confirm-status", status),
+        ),
         operatorSetlist,
         clickSoundSettings,
         runtimeFfmpegPath,
@@ -1627,18 +1727,16 @@ async function createWindow(): Promise<void> {
             2,
           ),
         );
-      setTimeout(() => {
-        app.relaunch({
-          args: process.argv
-            .slice(1)
-            .filter((value) => !value.startsWith("--manifest=")),
-        });
-        app.exit(0);
-      }, 500);
+      const bootstrap = await loadConfirmedPerformancePackage(
+        result.manifestPath,
+        result.manifest,
+        Number.isInteger(options?.selectedIndex) ? options!.selectedIndex! : 0,
+      );
       return {
         manifestPath: result.manifestPath,
         songs: result.manifest.songs.length,
         readiness: result.readiness,
+        bootstrap,
       };
     },
   );

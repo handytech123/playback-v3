@@ -18,6 +18,7 @@ root.innerHTML = `
     <div class="setlist" hidden><button id="previousSong">‹</button><span>SET 01</span><strong>Loading…</strong><small>Original Song</small><button id="nextSong">›</button></div>
   </nav>
   <header class="app-heading"><div><span id="modeLabel" class="eyebrow">PERFORMANCE MODE · CONFIRMED SET</span><h1 id="title">Loading…</h1><p id="facts"></p></div><section class="transport"><div class="transport-buttons"><button id="stop" aria-label="Stop">■</button><button id="play" class="primary" aria-label="Play">▶</button><button id="pause" aria-label="Pause">Ⅱ</button><button id="pad">PAD</button><button id="panic" class="panic">PANIC</button></div><div class="transport-clock"><span>ELAPSED / REMAINING</span><strong id="clock">0:00.000 / -0:00.000</strong><small id="position">1.1</small></div></section><button id="ready" class="ready">ARMING</button></header>
+  <div id="globalLoadingStatus" class="global-loading-status" hidden><i></i><strong id="globalLoadingTitle">WORKING</strong><span id="globalLoadingDetail">Please wait.</span></div>
   <section id="prepWorkspace" class="prep-workspace" hidden>
     <div class="prep-toolbar"><div><span class="eyebrow">LIBRARY / PREPARATION LANE</span><h2>Build The Confirmed Set</h2><p>Choose prepared versions, order the set, then freeze one isolated performance package. Library maintenance is in Settings.</p></div></div>
     <div class="prep-summary" id="librarySummary"><span>Use Settings → Library / Analysis to update metadata and library content.</span></div>
@@ -126,7 +127,7 @@ let dragRegionId: string | null = null;
 let dragSetItemId: string | null = null;
 let editorLoading: Promise<void> | null = null;
 let loopAuditionRegionId: string | null = null;
-let stemRowHeight = Math.max(58, Math.min(240, Number(localStorage.getItem("playback.editor.stemHeight.v2")) || 129));
+let stemRowHeight = Math.max(92, Math.min(320, Number(localStorage.getItem("playback.editor.stemHeight.v2")) || 156));
 let summaryMixerHeight = Math.max(150, Math.min(360, Number(localStorage.getItem("playback.editor.summaryMixerHeight")) || 230));
 let editorSnapMode: EditorSnapMode = localStorage.getItem("playback.editor.snap") === "measure" ? "measure" : "beat";
 let arrangementOrderCollapsed = localStorage.getItem("playback.editor.arrangementOrderCollapsed") === "1";
@@ -136,6 +137,7 @@ let performanceMeterGroups: { readonly id: string; readonly indices: readonly nu
 let loadingSetItemId:string|null=null,loadingProgress=0,loadingLabel="";
 let editorLoadSerial:Promise<void>=Promise.resolve();
 let performanceSongLoadSerial=0;
+let globalLoadingDepth=0;
 let performanceRegionSelectionExplicit=false;
 let setCardContextMenu:HTMLElement|null=null;
 const pendingEditorWaveforms=new Map<string,any>();
@@ -150,6 +152,25 @@ const transitionOptions=Object.entries(transitionLabels) as [SongTransitionType,
 const mixerCommandTimers = new Map<number,number>();
 const performanceMixerCommandTimers = new Map<string,number>();
 const editorMixerCommandTimers = new Map<number,number>();
+function showGlobalLoading(title:string,detail:string){
+  $("#globalLoadingTitle").textContent=title;
+  $("#globalLoadingDetail").textContent=detail;
+  $("#globalLoadingStatus").hidden=false;
+}
+async function withGlobalLoading<T>(title:string,detail:string,task:()=>Promise<T>){
+  globalLoadingDepth+=1;
+  showGlobalLoading(title,detail);
+  try{return await task();}
+  finally{
+    globalLoadingDepth=Math.max(0,globalLoadingDepth-1);
+    if(globalLoadingDepth===0)$("#globalLoadingStatus").hidden=true;
+  }
+}
+function setSetlistStatus(message:string,busy=false){
+  const status=$("#editorSetlistStatus");
+  status.textContent=message;
+  status.classList.toggle("busy",busy);
+}
 const storedEditorZoom = Number(localStorage.getItem("playback.editor.zoom"));
 if (storedEditorZoom >= 1 && storedEditorZoom <= 12) ($("#editorZoom") as HTMLInputElement).value = String(storedEditorZoom);
 document.body.classList.add("edit-mode");
@@ -244,15 +265,37 @@ function applyPerformanceSong(payload:any,state:any){
   renderLiveState();
 }
 
+function applyBootstrapPayload(payload:any){
+  if(!payload?.manifest)return;
+  Object.assign(data,payload);
+  activeSongIndex=payload.activeSongIndex??0;
+  song=data.manifest.songs[activeSongIndex];
+  liveState=payload.performance??liveState;
+  currentPosition=Number(liveState.positionSeconds??0);
+  performanceDuration=song.durationSeconds;
+  performanceGrid=buildZeroBasedGrid(song.selectedBpm,song.timeSignature,performanceDuration);
+  selectedRegionId=liveState.currentRegionId??song.regions[0]?.id??null;
+  performanceRegionSelectionExplicit=false;
+  mixerRenderSignature="";
+  performanceMeterGroups=[];
+  renderPerformanceSongChrome();
+  renderPerformanceSet();
+  renderPerformanceTimeline();
+  renderTransportPosition();
+  renderLiveState();
+  renderDawMixer();
+  renderPerformanceReadiness(liveState.readiness);
+}
+
 async function synchronizePerformanceSong(index:number,state:any){
   const serial=++performanceSongLoadSerial;
-  try{const payload=await window.playback.set.getSong(index);if(serial!==performanceSongLoadSerial)return;applyPerformanceSong(payload,state);}catch(error){showError(error);}
+  try{const payload=await withGlobalLoading("LOADING SONG","Loading selected song into Performance.",()=>window.playback.set.getSong(index));if(serial!==performanceSongLoadSerial)return;applyPerformanceSong(payload,state);}catch(error){showError(error);}
 }
 
 async function selectPerformanceSong(index:number){
   if(index===activeSongIndex)return;
   const serial=++performanceSongLoadSerial;
-  try{const payload=await window.playback.set.selectSong(index);if(serial!==performanceSongLoadSerial)return;applyPerformanceSong(payload,payload.state);}catch(error){showError(error);}
+  try{const payload=await withGlobalLoading("LOADING SONG","Switching Performance to the selected song.",()=>window.playback.set.selectSong(index));if(serial!==performanceSongLoadSerial)return;applyPerformanceSong(payload,payload.state);}catch(error){showError(error);}
 }
 
 function renderSetStrip(strip:HTMLElement){
@@ -286,7 +329,7 @@ function renderEditorSetBuilder() {
   if (!selectedSetItemId || !items.some((item) => item.itemId === selectedSetItemId)) selectedSetItemId = items.find((item, index) => data.manifest.songs[index]?.song.id === item.songId)?.itemId ?? items[0]?.itemId ?? null;
   $("#editorSetName").textContent = prepState.setlist.name;
   ($<HTMLInputElement>("#editorSetlistName")).value = prepState.setlist.name;
-  $("#editorSetlistStatus").textContent = `${items.length}/10 songs · changes save automatically`;
+  setSetlistStatus(`${items.length}/10 songs · changes save automatically`);
   for (let index = 0; index < 10; index += 1) {
     const item = items[index];
     if (item) {
@@ -399,7 +442,7 @@ function renderSongLibraryResults() {
   const originals = (prepState?.prepared ?? []).filter((choice: any) => choice.arrangement === "Original Song").filter((choice: any, index: number, all: any[]) => all.findIndex((other) => other.songId === choice.songId) === index);
   const preparedBySong=new Map(originals.map((choice:any)=>[choice.songId,choice])),masterRows=(catalogState?.songs??[]).map((song:any)=>({...song,prepared:preparedBySong.get(song.songId)})),choices=(masterRows.length?masterRows:originals.map((choice:any)=>({...choice,readiness:"ready",prepared:choice}))).filter((choice:any) => { const text = `${choice.title} ${choice.artist}`.toLowerCase(), bpm = Number(choice.bpm), speedMatch = speed === "all" || speed === "slow" && bpm <= 80 || speed === "medium" && bpm >= 81 && bpm <= 110 || speed === "fast" && bpm >= 111; return (!search || text.includes(search)) && speedMatch; });
   results.replaceChildren();
-  for (const choice of choices) { const row = document.createElement("button"),prepared=choice.prepared,reviewable=choice.readiness==="ready"||choice.readiness==="needs-review";row.className=`library-choice ${choice.readiness}`;row.innerHTML = `<span><strong>${escapeHtml(choice.title)}</strong><small>${escapeHtml(choice.artist)} · ORIGINAL SONG</small></span><b>${escapeHtml(choice.key||"KEY REVIEW")} · ${choice.bpm} BPM</b><i>${prepared||reviewable?"LOAD":"UNAVAILABLE"}</i>`;row.disabled=!prepared&&!reviewable;row.onclick = async () => { row.disabled = true;row.querySelector("i")!.textContent=prepared?"LOADING…":"PREPARING…";try{if(prepared){await prepCommand({ action: "add", choiceId: prepared.id });selectedSetItemId=prepState.setlist.items.at(-1)?.itemId??null;}else{const result=await window.playback.prep.review(choice.songId);prepState=result;selectedSetItemId=result.addedItemId??prepState.setlist.items.at(-1)?.itemId??null;}renderEditorSetBuilder();($<HTMLDialogElement>("#songLibraryPicker")).close();$("#editorSetlistStatus").textContent=`Loading ${choice.title} Original Song…`;await loadEditorItem(selectedSetItemId!);}catch(error){row.disabled=false;row.querySelector("i")!.textContent="TRY AGAIN";showError(error);}};results.append(row); }
+  for (const choice of choices) { const row = document.createElement("button"),prepared=choice.prepared,reviewable=choice.readiness==="ready"||choice.readiness==="needs-review";row.className=`library-choice ${choice.readiness}`;row.innerHTML = `<span><strong>${escapeHtml(choice.title)}</strong><small>${escapeHtml(choice.artist)} · ORIGINAL SONG</small></span><b>${escapeHtml(choice.key||"KEY REVIEW")} · ${choice.bpm} BPM</b><i>${prepared||reviewable?"LOAD":"UNAVAILABLE"}</i>`;row.disabled=!prepared&&!reviewable;row.onclick = async () => { row.disabled = true;row.querySelector("i")!.textContent=prepared?"LOADING…":"PREPARING…";try{if(prepared){await prepCommand({ action: "add", choiceId: prepared.id });selectedSetItemId=prepState.setlist.items.at(-1)?.itemId??null;}else{const result=await withGlobalLoading("PREPARING SONG",`Preparing ${choice.title} for the editor.`,()=>window.playback.prep.review(choice.songId));prepState=result;selectedSetItemId=result.addedItemId??prepState.setlist.items.at(-1)?.itemId??null;}renderEditorSetBuilder();($<HTMLDialogElement>("#songLibraryPicker")).close();setSetlistStatus(`Loading ${choice.title} Original Song…`,true);await loadEditorItem(selectedSetItemId!);}catch(error){row.disabled=false;row.querySelector("i")!.textContent="TRY AGAIN";showError(error);}};results.append(row); }
   if (!choices.length) results.innerHTML = `<p>No Original Songs match this name and speed.</p>`;
 }
 
@@ -796,7 +839,7 @@ async function setMode(edit: boolean) {
   $("#facts").textContent = `${song.selectedKey} • ${song.selectedBpm} BPM • ${song.timeSignature.numerator}/${song.timeSignature.denominator} • ${song.stems.length} stems`;
   $("#modeLabel").textContent = edit ? "EDIT · SONG MAP + ARRANGEMENT WORKSPACE" : "PERFORMANCE MODE · CONFIRMED SET";
   if (edit && !prepState) {
-    $("#editorSetlistStatus").textContent = "Loading setlist...";
+    setSetlistStatus("Loading setlist...",true);
     void window.playback.prep.get().then((state) => {
       prepState = state;
       if (editMode) renderEditorSetBuilder();
@@ -825,11 +868,18 @@ async function enterPerformanceMode(){
     }
     localStorage.setItem("playback.ui.mode","performance");
     const selectedIndex=Math.max(0,prepState.setlist.items.findIndex((item:any)=>item.itemId===selectedSetItemId));
-    $("#editorSetlistStatus").textContent="Confirming, caching, and checking the complete set for Performance…";
+    setSetlistStatus("Confirming, caching, and checking the complete set for Performance...",true);
     const confirmStatus=$("#confirmSetProgress");confirmStatus.hidden=false;confirmStatus.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=0;$("#confirmSetProgressPercent").textContent="0%";$("#confirmSetProgressLabel").textContent="Starting Confirm Set…";
     ($<HTMLButtonElement>("#performanceMode")).disabled=true;
-    await window.playback.prep.confirm({selectedIndex});
-  }catch(error){localStorage.setItem("playback.ui.mode","edit");($<HTMLButtonElement>("#performanceMode")).disabled=false;$("#confirmSetProgress").classList.add("fault");$("#confirmSetProgressLabel").textContent=error instanceof Error?error.message:String(error);showError(error);}
+    const result=await withGlobalLoading("CONFIRMING SET","Preparing the isolated performance package.",()=>window.playback.prep.confirm({selectedIndex}));
+    applyBootstrapPayload(result.bootstrap);
+    $("#confirmSetProgressLabel").textContent="Performance package loaded.";
+    $("#confirmSetProgressPercent").textContent="100%";
+    ($<HTMLProgressElement>("#confirmSetProgressBar")).value=100;
+    setSetlistStatus(`Confirmed ${result.songs} song${result.songs===1?"":"s"}. Performance loaded.`);
+    ($<HTMLButtonElement>("#performanceMode")).disabled=false;
+    await setMode(false);
+  }catch(error){localStorage.setItem("playback.ui.mode","edit");($<HTMLButtonElement>("#performanceMode")).disabled=false;$("#confirmSetProgress").classList.add("fault");$("#confirmSetProgressLabel").textContent=error instanceof Error?error.message:String(error);setSetlistStatus("Confirm Set failed. Draft was preserved.");showError(error);}
 }
 
 function confirmedSetMatchesDraft(){
@@ -848,7 +898,7 @@ function confirmedSetMatchesDraft(){
 }
 
 function setupPrep() {
-  window.playback.prep.onConfirmStatus((state)=>{const progress=Math.max(0,Math.min(100,Math.round(state.progress))),status=$("#confirmSetProgress");status.hidden=false;status.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=progress;$("#confirmSetProgressPercent").textContent=`${progress}%`;$("#confirmSetProgressLabel").textContent=state.label;$("#editorSetlistStatus").textContent=state.label;});
+  window.playback.prep.onConfirmStatus((state)=>{const progress=Math.max(0,Math.min(100,Math.round(state.progress))),status=$("#confirmSetProgress");status.hidden=false;status.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=progress;$("#confirmSetProgressPercent").textContent=`${progress}%`;$("#confirmSetProgressLabel").textContent=state.label;setSetlistStatus(state.label,true);if(globalLoadingDepth>0)showGlobalLoading("CONFIRMING SET",state.label);});
   window.playback.prep.onLoadStatus((state)=>{loadingSetItemId=state.itemId;loadingProgress=Math.max(0,Math.min(100,Math.round(state.progress)));loadingLabel=state.label;renderEditorSetBuilder();if(loadingProgress===100)window.setTimeout(()=>{if(loadingSetItemId===state.itemId&&loadingProgress===100){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}},650);});
   window.playback.prep.onWaveformsReady((state)=>{pendingEditorWaveforms.set(state.itemId,state.waveforms);if(selectedSetItemId===state.itemId&&workspace){workspace={...workspace,waveforms:state.waveforms};pendingEditorWaveforms.delete(state.itemId);requestAnimationFrame(()=>renderEditorTimeline());}});
   $("#libraryFilter").oninput = () => renderCatalog();
@@ -858,7 +908,7 @@ function setupPrep() {
   $("#editorUpdateLibrary").onclick = () => void updateEditorLibrary();
   $("#editorExportSetlist").onclick = () => void exportCurrentSetlist();
   $("#editorImportSetlist").onclick = () => void importSetlist();
-  $("#confirmSet").onclick = async () => { const button = $("#confirmSet") as HTMLButtonElement; button.disabled = true; $("#setlistStatus").textContent = "Copying and validating the isolated performance package…"; try { localStorage.setItem("playback.ui.mode","performance"); const result = await window.playback.prep.confirm(); $("#setlistStatus").textContent = `Confirmed ${result.songs} song${result.songs === 1 ? "" : "s"}. Loading Performance…`; } catch (error) { localStorage.setItem("playback.ui.mode","prep"); showError(error); button.disabled = false; $("#setlistStatus").textContent = "Confirm Set failed. Draft was preserved."; } };
+  $("#confirmSet").onclick = async () => { const button = $("#confirmSet") as HTMLButtonElement; button.disabled = true; $("#setlistStatus").textContent = "Copying and validating the isolated performance package…"; try { localStorage.setItem("playback.ui.mode","performance"); const result = await withGlobalLoading("CONFIRMING SET","Copying and validating the isolated performance package.",()=>window.playback.prep.confirm()); applyBootstrapPayload(result.bootstrap); $("#setlistStatus").textContent = `Confirmed ${result.songs} song${result.songs === 1 ? "" : "s"}. Performance loaded.`; await setMode(false); } catch (error) { localStorage.setItem("playback.ui.mode","prep"); showError(error); button.disabled = false; $("#setlistStatus").textContent = "Confirm Set failed. Draft was preserved."; } };
 }
 
 async function setPrepMode() {
@@ -869,21 +919,45 @@ async function setPrepMode() {
   if (!prepState) prepState = await window.playback.prep.get(); renderPrep();
 }
 
-async function prepCommand(command: any) { try { prepState = await window.playback.prep.command(command); renderPrep(); renderEditorSetBuilder(); } catch (error) { showError(error); } }
+function clearEditorSelectionState(){
+  workspace=null;
+  pendingEditorWaveforms.clear();
+  loadingSetItemId=null;
+  loadingProgress=0;
+  loadingLabel="";
+  selectedRegionId=null;
+  selectedCueId=null;
+  selectionStart=null;
+  selectionEnd=null;
+  currentPosition=0;
+}
+async function prepCommand(command: any) {
+  try {
+    const previousSelection=selectedSetItemId;
+    prepState = await withGlobalLoading("UPDATING SETLIST","Saving setlist changes.",()=>window.playback.prep.command(command));
+    const stillSelected=prepState.setlist.items.some((item:any)=>item.itemId===previousSelection);
+    if(command.action==="clear"||!stillSelected){
+      selectedSetItemId=prepState.setlist.items[0]?.itemId??null;
+      clearEditorSelectionState();
+    }
+    renderPrep();
+    renderEditorSetBuilder();
+  } catch (error) { showError(error); }
+}
 async function updateEditorLibrary(){
   const button=$("#editorUpdateLibrary") as HTMLButtonElement;
   button.disabled=true;
-  $("#editorSetlistStatus").textContent="Updating metadata and library...";
+  setSetlistStatus("Updating metadata and library...",true);
   try{
-    const result=await window.playback.prep.update();
+    const result=await withGlobalLoading("UPDATING LIBRARY","Scanning metadata, arrangements, and prepared versions.",()=>window.playback.prep.update());
     catalogState=result;
     prepState=result;
     renderPrep();
     renderEditorSetBuilder();
-    $("#editorSetlistStatus").textContent=`Library updated: ${result.updated} rebuilt, ${result.unchanged} unchanged, ${result.prepared.length} versions ready.`;
+    setSetlistStatus(`Library updated: ${result.updated} rebuilt, ${result.unchanged} unchanged, ${result.prepared.length} versions ready.`);
   }catch(error){
     showError(error);
-    $("#editorSetlistStatus").textContent="Library update failed.";
+    setSetlistStatus("Library update failed.");
   }finally{
     button.disabled=false;
   }
@@ -891,27 +965,29 @@ async function updateEditorLibrary(){
 async function exportCurrentSetlist(){
   const button=$("#editorExportSetlist") as HTMLButtonElement;
   button.disabled=true;
-  $("#editorSetlistStatus").textContent="Exporting setlist to Dropbox...";
+  setSetlistStatus("Exporting setlist to Dropbox...",true);
   try{
-    const result=await window.playback.prep.exportSetlist();
-    $("#editorSetlistStatus").textContent=`Setlist exported: ${result.path}`;
-  }catch(error){showError(error);$("#editorSetlistStatus").textContent="Setlist export failed.";}
+    const result=await withGlobalLoading("EXPORTING SETLIST","Writing the setlist package to Dropbox.",()=>window.playback.prep.exportSetlist());
+    setSetlistStatus(`Setlist exported: ${result.path}`);
+  }catch(error){showError(error);setSetlistStatus("Setlist export failed.");}
   finally{button.disabled=false;}
 }
 async function importSetlist(){
   const button=$("#editorImportSetlist") as HTMLButtonElement;
   button.disabled=true;
-  $("#editorSetlistStatus").textContent="Importing setlist...";
+  setSetlistStatus("Importing setlist...",true);
   try{
-    const result=await window.playback.prep.importSetlist();
-    if(result?.cancelled){$("#editorSetlistStatus").textContent="Setlist import cancelled.";return;}
+    const result=await withGlobalLoading("IMPORTING SETLIST","Loading the selected setlist package.",()=>window.playback.prep.importSetlist());
+    if(result?.cancelled){setSetlistStatus("Setlist import cancelled.");return;}
     prepState=result;
     selectedSetItemId=prepState.setlist.items[0]?.itemId??null;
-    workspace=null;
+    clearEditorSelectionState();
+    selectedSetItemId=prepState.setlist.items[0]?.itemId??null;
     renderPrep();
     renderEditorSetBuilder();
-    $("#editorSetlistStatus").textContent=`Imported ${prepState.setlist.name} from ${result.importedPath}.`;
-  }catch(error){showError(error);$("#editorSetlistStatus").textContent="Setlist import failed.";}
+    setSetlistStatus(`Imported ${prepState.setlist.name} from ${result.importedPath}.`);
+    if(selectedSetItemId)await loadEditorItem(selectedSetItemId);
+  }catch(error){showError(error);setSetlistStatus("Setlist import failed.");}
   finally{button.disabled=false;}
 }
 function closeSetCardContextMenu(){setCardContextMenu?.remove();setCardContextMenu=null;}
@@ -925,7 +1001,7 @@ function showSetCardContextMenu(clientX:number,clientY:number,itemId:string,titl
   const bounds=menu.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(clientX,innerWidth-bounds.width-8))}px`;menu.style.top=`${Math.max(8,Math.min(clientY,innerHeight-bounds.height-8))}px`;
   window.setTimeout(()=>document.addEventListener("pointerdown",closeSetCardContextMenu,{once:true}),0);
 }
-function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{if(selectedSetItemId!==itemId)return;try{const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;if(!prepState)prepState=await window.playback.prep.get();workspace=result.workspace;const preparedWaveforms=pendingEditorWaveforms.get(itemId);if(preparedWaveforms){workspace={...workspace,waveforms:preparedWaveforms};pendingEditorWaveforms.delete(itemId);}selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
+function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{if(selectedSetItemId!==itemId)return;try{const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;prepState=await window.playback.prep.get();workspace=result.workspace;const preparedWaveforms=pendingEditorWaveforms.get(itemId);if(preparedWaveforms){workspace={...workspace,waveforms:preparedWaveforms};pendingEditorWaveforms.delete(itemId);}selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
 function renderEditorLoadStatus(){const status=$("#editorLoadStatus"),visible=loadingSetItemId!==null;status.hidden=!visible;if(!visible)return;status.style.setProperty("--load-angle",`${loadingProgress*3.6}deg`);$("#editorLoadPercent").textContent=`${loadingProgress}%`;$("#editorLoadLabel").textContent=loadingLabel;($<HTMLProgressElement>("#editorLoadProgress")).value=loadingProgress;}
 function renderPrep() {
   if (!prepState) return;
@@ -946,7 +1022,7 @@ function renderCatalog() {
 }
 
 async function refreshWorkspace() {
-  workspace = await window.playback.arrange.workspace();
+  workspace = await withGlobalLoading("LOADING EDITOR","Loading the selected arrangement workspace.",()=>window.playback.arrange.workspace());
   if (!workspace.draft.sections.some((section: any) => section.id === selectedRegionId)) selectedRegionId = workspace.draft.sections[0]?.id;
   if (selectedCueId && !workspace.draft.cues.some((cue: any) => cue.id === selectedCueId)) selectedCueId = null;
   const cue = selectedCueId ? workspace.draft.cues.find((item: any) => item.id === selectedCueId) : null;
@@ -955,7 +1031,7 @@ async function refreshWorkspace() {
 }
 
 async function arrange(command: any) {
-  try { await window.playback.arrange.command(command); await refreshWorkspace(); setEditorStatus(`Revision ${workspace.draft.revision} · ${workspace.draft.sections.length} regions · ${formatTime(workspace.draft.durationSeconds)}`); }
+  try { await withGlobalLoading("SAVING EDIT","Applying the arrangement edit.",()=>window.playback.arrange.command(command)); await refreshWorkspace(); setEditorStatus(`Revision ${workspace.draft.revision} · ${workspace.draft.sections.length} regions · ${formatTime(workspace.draft.durationSeconds)}`); }
   catch (error) { showError(error); }
 }
 
@@ -1157,7 +1233,7 @@ function renderEditorTimeline() {
     for(const fader of label.querySelectorAll<HTMLInputElement>("input"))fader.oninput=()=>{const latest=workspace.mixer.channels[index],gain=Number(fader.value);workspace.mixer.channels[index]={...latest,gain};workspace.draft.stemMix=workspace.mixer.channels;const previous=editorMixerCommandTimers.get(index);if(previous)clearTimeout(previous);editorMixerCommandTimers.set(index,window.setTimeout(async()=>{try{await updateEditorStemMix(index,{gain:workspace.mixer.channels[index].gain});}catch(error){showError(error);}},30));};
     const row = document.createElement("div"); row.className = `stem-row ${displayIndex % 2 ? "alternate" : ""}`; row.innerHTML = `<canvas></canvas>`; stems.append(row);
     row.style.setProperty("--stem-color", color);
-    drawWaveform(row.querySelector("canvas")!, stem.buckets, color);
+    drawWaveform(row.querySelector("canvas")!, stem.buckets, color,{ visualGain: 3.4, verticalScale: .96, alpha: .98, lineWidth: 2 });
   }
   const scroll = $("#editorTimelineScroll");
   scroll.onscroll = () => { labels.style.transform = `translateY(${-scroll.scrollTop}px)`; };
@@ -1401,12 +1477,22 @@ function renderPerformanceReadiness(report: any) {
 function audioHealthIsHealthy(){return Boolean(audioHealth)&&audioHealth.sampleRate===48000&&audioHealth.blockFrames===512&&audioHealth.xruns===0&&audioHealth.deadlineMisses===0&&!audioHealth.deviceError&&!audioHealthStalled&&!audioHealth.iemClips;}
 function audioHealthSummary(){if(!audioHealth)return liveState.fault?`FAULT · ${liveState.fault}`:liveState.readiness?.ready?"ARMED · CHECKING AUDIO":"NOT READY";if(audioHealthIsHealthy())return"AUDIO OK · 48 kHz · 512";const issues:string[]=[];if(audioHealth.sampleRate!==48000)issues.push(`${audioHealth.sampleRate||0} Hz`);if(audioHealth.blockFrames!==512)issues.push(`${audioHealth.blockFrames||0} samples`);if(audioHealth.xruns)issues.push(`${audioHealth.xruns} dropout${audioHealth.xruns===1?"":"s"}`);if(audioHealth.deadlineMisses)issues.push(`${audioHealth.deadlineMisses} overrun${audioHealth.deadlineMisses===1?"":"s"}`);if(audioHealthStalled)issues.push("clock stopped");if(audioHealth.deviceError)issues.push("device error");if(audioHealth.iemClips)issues.push("PB_IEM overload");return`AUDIO CHECK · ${issues.join(" · ")||"unknown"}`;}
 
-async function liveCommand(command: any) { try { const state=await window.playback.performance.command(command);if(state.songIndex!==activeSongIndex){await synchronizePerformanceSong(state.songIndex,state);return;}liveState=state;renderLiveState(); } catch (error) { showError(error); } }
+async function liveCommand(command: any) {
+  try {
+    const run=()=>window.playback.performance.command(command);
+    const state=command.action==="mixer-channel"
+      ? await run()
+      : await withGlobalLoading("LIVE COMMAND","Sending command to the playback engine.",run);
+    if(state.songIndex!==activeSongIndex){await synchronizePerformanceSong(state.songIndex,state);return;}
+    liveState=state;
+    renderLiveState();
+  } catch (error) { showError(error); }
+}
 function navigateSection(offset: number) { if (!liveState.panicActive) { void liveCommand({ action: offset < 0 ? "previous-section" : "next-section" }); return; } const anchor = liveState.recoveryRegionId ?? liveState.currentRegionId; const index = song.regions.findIndex((item: any) => item.id === anchor); const target = song.regions[Math.max(0, Math.min(song.regions.length - 1, index + offset))]; if (target) void liveCommand({ action: "recover", regionId: target.id }); }
 function moveSelected(offset: number) { const index = workspace.draft.sections.findIndex((item: any) => item.id === selectedRegionId); const destination = index + offset; if (destination >= 0 && destination < workspace.draft.sections.length) void arrange({ type: "move-section", sectionId: selectedRegionId, toIndex: destination }); }
 function renderEditorTimelineAtTransport(){renderEditorTimeline();const scroll=$("#editorTimelineScroll"),ratio=workspace?.draft.durationSeconds?Math.max(0,Math.min(1,currentPosition/workspace.draft.durationSeconds)):0;scroll.scrollLeft=Math.max(0,Math.min(scroll.scrollWidth-scroll.clientWidth,ratio*scroll.scrollWidth-scroll.clientWidth/2));}
 function stepEditorWidth(amount: number) { const control = $("#editorZoom") as HTMLInputElement; control.value = String(Math.max(Number(control.min), Math.min(Number(control.max), Number(control.value) + amount))); localStorage.setItem("playback.editor.zoom", control.value); renderEditorTimelineAtTransport(); }
-function stepStemHeight(amount: number) { stemRowHeight = Math.max(58, Math.min(240, stemRowHeight + amount)); localStorage.setItem("playback.editor.stemHeight.v2", String(stemRowHeight)); renderEditorTimeline(); }
+function stepStemHeight(amount: number) { stemRowHeight = Math.max(92, Math.min(320, stemRowHeight + amount)); localStorage.setItem("playback.editor.stemHeight.v2", String(stemRowHeight)); renderEditorTimeline(); }
 function selectRegion(id: string) {
   selectedRegionId = id;
   selectedCueId = workspace?.draft.cues.find((cue: any) => cue.targetRegionId === id)?.id ?? null;
@@ -1485,11 +1571,11 @@ function regionClass(name: string) {
   return "other";
 }
 function midiKind(status: number, data2: number) { const kind = status & 240; return kind === 144 && data2 > 0 ? "NOTE ON" : kind === 128 || kind === 144 ? "NOTE OFF" : kind === 176 ? "CONTROL" : "MIDI"; }
-function drawWaveform(canvas: HTMLCanvasElement,buckets:readonly any[],color:string){
+function drawWaveform(canvas: HTMLCanvasElement,buckets:readonly any[],color:string,options:{visualGain?:number;verticalScale?:number;alpha?:number;lineWidth?:number}={}){
   const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height){canvas.width=0;canvas.height=0;return;}canvas.width=Math.ceil(rect.width*devicePixelRatio);canvas.height=Math.ceil(rect.height*devicePixelRatio);const context=canvas.getContext("2d")!;context.scale(devicePixelRatio,devicePixelRatio);context.clearRect(0,0,rect.width,rect.height);if(!buckets.length)return;
-  const performanceWaveform=canvas.id==="wave"||canvas.id==="waveProgress",magnitudes=performanceWaveform?buckets.map((bucket:any)=>Math.max(Math.abs(Number(bucket.min)||0),Math.abs(Number(bucket.max)||0))).sort((a:number,b:number)=>a-b):[],reference=performanceWaveform?magnitudes[Math.min(magnitudes.length-1,Math.floor(magnitudes.length*.985))]??1:1,visualGain=performanceWaveform?Math.max(1,Math.min(12,.92/Math.max(.02,reference))):1,mid=rect.height/2,verticalScale=performanceWaveform ? .485 : .86,shape=(value:number)=>{const normalized=Math.min(1,Math.abs(value)*visualGain),defined=performanceWaveform?Math.pow(normalized,.76):normalized;return Math.sign(value)*defined;};
-  context.strokeStyle=color;context.globalAlpha=performanceWaveform ? .16 : .18;context.lineWidth=performanceWaveform?3:2;context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}context.stroke();
-  context.globalAlpha=performanceWaveform ? .96 : .85;context.lineWidth=performanceWaveform?Math.max(1.1,rect.width/buckets.length):1;context.shadowColor=performanceWaveform?color:"transparent";context.shadowBlur=performanceWaveform?2:0;context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}context.stroke();context.shadowBlur=0;
+  const performanceWaveform=canvas.id==="wave"||canvas.id==="waveProgress",magnitudes=performanceWaveform?buckets.map((bucket:any)=>Math.max(Math.abs(Number(bucket.min)||0),Math.abs(Number(bucket.max)||0))).sort((a:number,b:number)=>a-b):[],reference=performanceWaveform?magnitudes[Math.min(magnitudes.length-1,Math.floor(magnitudes.length*.985))]??1:1,visualGain=options.visualGain??(performanceWaveform?Math.max(1,Math.min(12,.92/Math.max(.02,reference))):1),mid=rect.height/2,verticalScale=options.verticalScale??(performanceWaveform ? .485 : .86),shape=(value:number)=>{const normalized=Math.min(1,Math.abs(value)*visualGain),defined=performanceWaveform?Math.pow(normalized,.76):Math.pow(normalized,.72);return Math.sign(value)*defined;};
+  context.strokeStyle=color;context.globalAlpha=performanceWaveform ? .16 : Math.min(.45,(options.alpha??.85)*.36);context.lineWidth=performanceWaveform?3:Math.max(2,options.lineWidth??2);context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}context.stroke();
+  context.globalAlpha=performanceWaveform ? .96 : (options.alpha??.85);context.lineWidth=performanceWaveform?Math.max(1.1,rect.width/buckets.length):Math.max(1,options.lineWidth??1);context.shadowColor=performanceWaveform?color:color;context.shadowBlur=performanceWaveform?2:3;context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}context.stroke();context.shadowBlur=0;
   if(performanceWaveform){context.globalAlpha=.2;context.lineWidth=1;context.beginPath();context.moveTo(0,Math.round(mid)+.5);context.lineTo(rect.width,Math.round(mid)+.5);context.stroke();}
 }
 function formatTime(seconds: number) { const minutes = Math.floor(seconds / 60); return `${minutes}:${(seconds - minutes * 60).toFixed(3).padStart(6, "0")}`; }
