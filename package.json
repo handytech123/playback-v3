@@ -1,6 +1,6 @@
 {
   "name": "playback-v3",
-  "version": "0.1.41",
+  "version": "0.1.47",
   "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
@@ -54,51 +54,14 @@
     "appId": "org.handytech.playbackv3",
     "productName": "Playback V3",
     "asar": true,
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "ui-dist/**/*",
-      "desktop-preload.cjs",
-      "package.json"
-    ],
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "ui-dist/**/*", "desktop-preload.cjs", "package.json"],
     "extraResources": [
-      {
-        "from": "native/build-local/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe",
-        "to": "native/PlaybackEngineProbe.exe"
-      },
-      {
-        "from": "vendor/native-runtime",
-        "to": "native",
-        "filter": [
-          "msvcp140.dll",
-          "vcruntime140.dll",
-          "vcruntime140_1.dll"
-        ]
-      },
-      {
-        "from": "vendor/runtime",
-        "to": "runtime",
-        "filter": [
-          "ffmpeg.exe",
-          "rubberband.exe",
-          "sndfile.dll",
-          "*-LICENSE.txt",
-          "FFMPEG-README.txt"
-        ]
-      }
+      { "from": "native/build-local/PlaybackEngineProbe_artefacts/Release/PlaybackEngineProbe.exe", "to": "native/PlaybackEngineProbe.exe" },
+      { "from": "vendor/native-runtime", "to": "native", "filter": ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"] },
+      { "from": "vendor/runtime", "to": "runtime", "filter": ["ffmpeg.exe", "rubberband.exe", "sndfile.dll", "*-LICENSE.txt", "FFMPEG-README.txt"] }
     ],
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Playback V3",
-      "artifactName": "Playback-V3-Setup-${version}.${ext}"
-    }
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Playback V3", "artifactName": "Playback-V3-Setup-${version}.${ext}" }
   }
 }

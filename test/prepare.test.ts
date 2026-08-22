@@ -62,6 +62,35 @@ test("Confirm Set copies, verifies, and atomically publishes a ready package", a
   assertPcm24At48k(await readFile(result.manifest.songs[0]!.stems[0]!.sourcePath));
   assert.notEqual(result.manifest.songs[0]!.liveAssets?.cues[0]?.audioPath, result.manifest.songs[0]!.liveAssets?.repeatCuePath);
   assert.match(result.manifest.songs[0]!.liveAssets?.repeatCuePath ?? "", /repeat-command\.wav$/);
+
+  const reuseProgress: string[] = [];
+  const reused = await confirmSet({
+    setId: "test-set-reused", setName: "Test Reused", cacheRoot: join(root, "cache"),
+    onProgress: status => reuseProgress.push(status.label),
+    songs: [{ preparedSong, sourceFolder, stems: [{ relativePath: "music.wav", role: "music-stem", durationSeconds: 1, sha256: hash }], liveAssets: {
+      click: { regularPath: join(sourceFolder, "music.wav"), accentPath: join(sourceFolder, "music.wav"), events: [{ atSeconds: 0, accent: true }], templateId: "4-4-quarter" },
+      cues: [
+        { atSeconds: 0.25, label: "Repeat", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" },
+        { atSeconds: 0.5, label: "Verse", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" },
+      ],
+      repeatCuePath: join(sourceFolder, "music.wav"), pad: { key: "C", sourcePath: join(sourceFolder, "music.wav") },
+    } }],
+  });
+  assert.equal(reused.readiness.ready, true);
+  assert.equal(reused.copiedBytes, 0);
+  assert.ok(reuseProgress.some(label => label === "Reusing One · unchanged"));
+  assert.notEqual(reused.manifest.songs[0]!.stems[0]!.sourcePath, result.manifest.songs[0]!.stems[0]!.sourcePath);
+
+  const changedProgress: string[] = [];
+  await confirmSet({
+    setId: "test-set-changed", setName: "Test Changed", cacheRoot: join(root, "cache"), onProgress: status => changedProgress.push(status.label),
+    songs: [{ preparedSong: { ...preparedSong, selectedKey: "Db" }, sourceFolder, stems: [{ relativePath: "music.wav", role: "music-stem", durationSeconds: 1, sha256: hash }], liveAssets: {
+      click: { regularPath: join(sourceFolder, "music.wav"), accentPath: join(sourceFolder, "music.wav"), events: [{ atSeconds: 0, accent: true }], templateId: "4-4-quarter" },
+      cues: [{ atSeconds: 0.5, label: "Verse", sourcePath: join(sourceFolder, "music.wav"), targetRegionId: "r1" }],
+      repeatCuePath: join(sourceFolder, "music.wav"), pad: { key: "Db", sourcePath: join(sourceFolder, "music.wav") },
+    } }],
+  });
+  assert.ok(!changedProgress.some(label => label.includes("unchanged")));
 });
 
 function tinyWav(): Buffer {
