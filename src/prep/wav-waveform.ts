@@ -1,5 +1,6 @@
-import { open, writeFile } from "node:fs/promises";
-import { basename } from "node:path";
+import { createHash } from "node:crypto";
+import { copyFile, mkdir, open, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 export interface WaveformBucket { readonly min: number; readonly max: number; }
 export interface WaveformSummary {
@@ -9,6 +10,12 @@ export interface WaveformSummary {
   readonly channels: number;
   readonly durationSeconds: number;
   readonly buckets: readonly WaveformBucket[];
+}
+
+export interface WaveformCacheSource {
+  readonly path: string;
+  readonly sha256: string;
+  readonly durationSeconds?: number;
 }
 
 interface WaveFormat {
@@ -179,6 +186,65 @@ export async function buildCombinedWaveformSummary(sourcePaths: readonly string[
     durationSeconds,
     buckets,
   };
+}
+
+export function combinedWaveformCacheKey(sources: readonly WaveformCacheSource[], bucketCount = 2400): string {
+  if (!sources.length) throw new Error("At least one playable stem is required for a combined waveform");
+  const hash = createHash("sha256");
+  hash.update(`combined-waveform-v1:${bucketCount}\n`);
+  for (const source of sources) {
+    const duration = Number.isFinite(source.durationSeconds) ? Number(source.durationSeconds).toFixed(6) : "";
+    hash.update(`${source.sha256.toLowerCase()}\t${duration}\n`);
+  }
+  return hash.digest("hex");
+}
+
+function isWaveformSummary(value: unknown, bucketCount: number): value is WaveformSummary {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as WaveformSummary;
+  return candidate.schemaVersion === 1
+    && typeof candidate.source === "string"
+    && Number.isFinite(candidate.sampleRate)
+    && Number.isFinite(candidate.channels)
+    && Number.isFinite(candidate.durationSeconds)
+    && Array.isArray(candidate.buckets)
+    && candidate.buckets.length > 0
+    && candidate.buckets.length <= bucketCount
+    && candidate.buckets.every((bucket) =>
+      bucket
+      && typeof bucket === "object"
+      && Number.isFinite((bucket as WaveformBucket).min)
+      && Number.isFinite((bucket as WaveformBucket).max),
+    );
+}
+
+export async function writeCachedCombinedWaveformSummary(
+  sources: readonly WaveformCacheSource[],
+  destinationPath: string,
+  cacheDirectory: string,
+  bucketCount = 2400,
+): Promise<WaveformSummary> {
+  const cacheKey = combinedWaveformCacheKey(sources, bucketCount);
+  const cachePath = join(cacheDirectory, `${cacheKey}.json`);
+  await mkdir(dirname(destinationPath), { recursive: true });
+
+  try {
+    const cached = JSON.parse(await readFile(cachePath, "utf8")) as unknown;
+    if (isWaveformSummary(cached, bucketCount)) {
+      await copyFile(cachePath, destinationPath);
+      return cached;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      // Invalid cache entries are harmless; rebuild them from verified stems.
+    }
+  }
+
+  const summary = await buildCombinedWaveformSummary(sources.map((source) => source.path), bucketCount);
+  await mkdir(cacheDirectory, { recursive: true });
+  await writeFile(cachePath, JSON.stringify(summary), "utf8");
+  await writeFile(destinationPath, JSON.stringify(summary), { encoding: "utf8", flag: "wx" });
+  return summary;
 }
 
 export async function writeCombinedWaveformSummary(sourcePaths: readonly string[], destinationPath: string, bucketCount = 2400): Promise<WaveformSummary> {

@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { CONFIRMED_SET_SCHEMA_VERSION, DEFAULT_SHOW_STATE, validateConfirmedSet, type ConfirmedSetManifest, type ConfirmedSetShowState, type ReadinessReport } from "./manifest.js";
 import { isMediaOnlySong, type MusicalPosition, type PreparedMidiEvent, type PreparedSong } from "../domain/song.js";
-import { writeCombinedWaveformSummary } from "../prep/wav-waveform.js";
+import { writeCachedCombinedWaveformSummary } from "../prep/wav-waveform.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 import type { SongTransitionPlan } from "../live/song-transition.js";
 import { writeCountedCue } from "../prep/cue-sequence.js";
@@ -94,7 +94,12 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
 
       const waveformPath = join(songDirectory, "waveform.json");
       if (!cachedStems.length) throw new Error(`No waveform sources available for ${inputSong.preparedSong.song.title}`);
-      await writeCombinedWaveformSummary(cachedStems.map((stem) => stem.sourcePath), waveformPath);
+      const waveformSources = cachedStems.map((stem, index) => {
+        const source = inputSong.stems[index];
+        if (!source) throw new Error(`Missing source fingerprint for ${stem.sourcePath}`);
+        return { path: stem.sourcePath, sha256: source.sha256, durationSeconds: stem.durationSeconds };
+      });
+      await writeCachedCombinedWaveformSummary(waveformSources, waveformPath, join(dirname(input.cacheRoot), "waveform-peaks"));
       completedUnits+=1;report(`Building ${inputSong.preparedSong.song.title} waveform`);
       report(`Matching ${inputSong.preparedSong.song.title} loudness`);
       const loudnessNormalization=await measureSongLoudness({stemPaths:cachedStems.map(stem=>stem.sourcePath),...(inputSong.preparedSong.stemMix?{stemMix:inputSong.preparedSong.stemMix}:{}),...(input.ffmpegPath?{ffmpegPath:input.ffmpegPath}:{})});

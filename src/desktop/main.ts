@@ -57,12 +57,7 @@ import {
   type ConfirmedSetManifest,
 } from "../confirmed-set/manifest.js";
 import { buildDynamicClickEvents } from "../domain/grid.js";
-import {
-  isMediaOnlySong,
-  preparedControl,
-  type PreparedMidiEvent,
-  type PreparedSong,
-} from "../domain/song.js";
+import { isMediaOnlySong, type PreparedMidiEvent, type PreparedSong } from "../domain/song.js";
 import { importReaperProject } from "../reaper/rpp-import.js";
 import { saveArrangementVersion } from "../reaper/arrangement-persistence.js";
 import { prepareArrangementCache } from "../reaper/arrangement-cache.js";
@@ -152,6 +147,12 @@ import {
   Gld112SafeClient,
   type GldIntent,
 } from "../control/mixers/gld112.js";
+import {
+  proPresenterApiSlideEvents,
+  proPresenterCueIndexFromMidiValue,
+  proPresenterDueSlideEvents,
+  type ProPresenterSlideCandidate,
+} from "../control/propresenter-api-slides.js";
 import {
   parseAudioDeviceList,
   reconcileAudioDevice,
@@ -361,11 +362,24 @@ async function armNativeSong(
   }
   await engine.closeAndWait();
   engine = new NativeEngineClient();
+  let lastPerformanceStateSent = 0,
+    lastPerformanceStateSignature = "";
   engine.on("transport", (state: NativeTransportState) => {
     performance?.updatePosition(state.positionSeconds);
     sendToRenderer("playback:transport", state);
-    sendToRenderer("performance:state", performance?.snapshot);
     const now = Date.now();
+    const snapshot = performance?.snapshot,
+      signature = snapshot
+        ? `${snapshot.songIndex}:${snapshot.playing ? 1 : 0}:${snapshot.currentRegionId ?? ""}:${snapshot.loopRegionId ?? ""}:${snapshot.panicActive ? 1 : 0}:${snapshot.recoveryRegionId ?? ""}:${snapshot.ready ? 1 : 0}:${snapshot.fault ?? ""}`
+        : "none";
+    if (
+      signature !== lastPerformanceStateSignature ||
+      now - lastPerformanceStateSent >= 100
+    ) {
+      lastPerformanceStateSignature = signature;
+      lastPerformanceStateSent = now;
+      sendToRenderer("performance:state", snapshot);
+    }
     if (now - lastControlPublish >= 100) {
       lastControlPublish = now;
       controlBus?.publishState();
@@ -3118,6 +3132,8 @@ class ProPresenterApiSlideScheduler {
   private lastSongIndex: number | null = null;
   private lastPositionSeconds = 0;
   private inFlight = false;
+  private cachedSong: PreparedSong | null = null;
+  private cachedEvents: readonly ProPresenterSlideCandidate[] = [];
 
   constructor(private readonly state: () => ProPresenterApiSlideSchedulerState) {
     this.timer = setInterval(() => void this.tick(), 75);
@@ -3141,54 +3157,53 @@ class ProPresenterApiSlideScheduler {
       return;
     const song = state.songs[snapshot.songIndex];
     if (!song || isMediaOnlySong(song)) return;
+    let searchFromSeconds = this.lastPositionSeconds,
+      jumped = false;
     if (this.lastSongIndex !== snapshot.songIndex) {
       this.fired.clear();
       this.lastSongIndex = snapshot.songIndex;
+      searchFromSeconds = Math.max(0, snapshot.positionSeconds - 0.2);
     } else if (snapshot.positionSeconds < this.lastPositionSeconds - 0.25) {
       this.fired.clear();
+      searchFromSeconds = Math.max(0, snapshot.positionSeconds - 0.2);
+    } else if (snapshot.positionSeconds > this.lastPositionSeconds + 1.5) {
+      jumped = true;
+      searchFromSeconds = Math.max(0, snapshot.positionSeconds - 0.2);
     }
+    const events = this.slideEventsFor(song);
     this.lastPositionSeconds = snapshot.positionSeconds;
-    const events = proPresenterApiSlideEvents(song);
     if (!events.length) return;
-    const due = events.find(({ event, key }) => {
-      if (this.fired.has(key)) return false;
-      return (
-        event.atSeconds >= snapshot.positionSeconds - 0.2 &&
-        event.atSeconds <= snapshot.positionSeconds + 0.18
-      );
-    });
-    if (!due) return;
-    this.fired.add(due.key);
+    const searchToSeconds = snapshot.positionSeconds + (jumped ? 0.35 : 0.25),
+      dueEvents = proPresenterDueSlideEvents(events, {
+        fromSeconds: searchFromSeconds,
+        toSeconds: searchToSeconds,
+        firedKeys: this.fired,
+      });
+    if (!dueEvents.length) return;
     this.inFlight = true;
     try {
-      await triggerProPresenterApiSlide(
-        state.settings,
-        state.songs,
-        snapshot.songIndex,
-        due.event,
-        state.syncedSetlist,
-      );
+      for (const due of dueEvents) {
+        this.fired.add(due.key);
+        await triggerProPresenterApiSlide(
+          state.settings,
+          state.songs,
+          snapshot.songIndex,
+          due.event,
+          state.syncedSetlist,
+        );
+      }
     } finally {
       this.inFlight = false;
     }
   }
-}
 
-function proPresenterApiSlideEvents(
-  song: PreparedSong,
-): { readonly event: PreparedMidiEvent; readonly key: string }[] {
-  return (preparedControl(song)?.proPresenterMidi ?? [])
-    .map((event, index) => ({ event, index }))
-    .filter(({ event }) => isProPresenterSlideMidiEvent(event))
-    .sort((left, right) => left.event.atSeconds - right.event.atSeconds)
-    .map(({ event, index }) => ({
-      event,
-      key: `${index}:${event.atSeconds.toFixed(3)}:${event.status}:${event.data1}:${event.data2}`,
-    }));
-}
-
-function isProPresenterSlideMidiEvent(event: PreparedMidiEvent): boolean {
-  return (event.status & 0xf0) === 0x90 && event.data1 === 19 && event.data2 > 0;
+  private slideEventsFor(song: PreparedSong): readonly ProPresenterSlideCandidate[] {
+    if (this.cachedSong !== song) {
+      this.cachedSong = song;
+      this.cachedEvents = proPresenterApiSlideEvents(song);
+    }
+    return this.cachedEvents;
+  }
 }
 
 async function triggerProPresenterApiSlide(
@@ -3203,7 +3218,7 @@ async function triggerProPresenterApiSlide(
       syncedSetlist.songIndexes.get(songIndex) ??
       (settings.playlistId ? proPresenterApiSongIndex(songs, songIndex) : null);
   if (!playlistId || apiIndex === null) return;
-  const cueIndex = Math.max(0, Math.trunc(event.data2) - 1),
+  const cueIndex = proPresenterCueIndexFromMidiValue(event.data2),
     path = `/v1/playlist/${encodeURIComponent(playlistId)}/${apiIndex}/${cueIndex}/trigger`;
   try {
     await proPresenterTrigger(proPresenterApiBase(settings), path);

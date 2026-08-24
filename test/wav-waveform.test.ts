@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { buildCombinedWaveformSummary, buildWaveformSummary } from "../src/prep/wav-waveform.js";
+import { buildCombinedWaveformSummary, buildWaveformSummary, writeCachedCombinedWaveformSummary } from "../src/prep/wav-waveform.js";
 
 test("builds normalized min/max peaks from stereo PCM16 WAV", async () => {
   const samples = [-32768, 32767, -16384, 16384, 0, 0, 8192, -8192];
@@ -69,4 +69,30 @@ test("combines every playable stem into one time-aligned summary waveform", asyn
   assert.match(result.source, /^combined:acoustic\.wav\|drums\.wav$/);
   assert.equal(result.buckets[0]!.min, -1);
   assert.ok(result.buckets[3]!.max > 0.99);
+});
+
+test("reuses cached combined waveform peaks by stem fingerprints", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "playback-waveform-cache-"));
+  const cacheDirectory = join(directory, "peak-cache");
+  const firstData = Buffer.alloc(8); [-32768, 0, 0, 0].forEach((value, index) => firstData.writeInt16LE(value, index * 2));
+  const secondData = Buffer.alloc(8); [0, 0, 0, 32767].forEach((value, index) => secondData.writeInt16LE(value, index * 2));
+  const first = join(directory, "acoustic.wav"), second = join(directory, "drums.wav");
+  await writeFile(first, makeWave(firstData, 1, 1, 4, 16));
+  await writeFile(second, makeWave(secondData, 1, 1, 4, 16));
+
+  const sources = [
+    { path: first, sha256: "a".repeat(64), durationSeconds: 1 },
+    { path: second, sha256: "b".repeat(64), durationSeconds: 1 },
+  ];
+  const destination = join(directory, "confirmed", "waveform.json");
+  await writeCachedCombinedWaveformSummary(sources, destination, cacheDirectory, 4);
+
+  const reusedDestination = join(directory, "confirmed-again", "waveform.json");
+  await writeCachedCombinedWaveformSummary(sources.map((source) => ({ ...source, path: join(directory, "missing.wav") })), reusedDestination, cacheDirectory, 4);
+  assert.deepEqual(JSON.parse(await readFile(reusedDestination, "utf8")), JSON.parse(await readFile(destination, "utf8")));
+
+  await assert.rejects(
+    writeCachedCombinedWaveformSummary([{ ...sources[0]!, path: join(directory, "missing.wav"), sha256: "c".repeat(64) }], join(directory, "changed", "waveform.json"), cacheDirectory, 4),
+    /ENOENT|no such file/i,
+  );
 });
