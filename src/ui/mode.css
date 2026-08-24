@@ -232,7 +232,7 @@ body.mixer-collapsed.performance-mode main{padding-bottom:54px}body.mixer-collap
 .editor-setlist-toolbar{display:flex;align-items:center;gap:9px;min-height:44px;margin:-4px 0 10px;padding:6px 9px;border:1px solid #304252;border-radius:7px;background:#101922}.editor-setlist-toolbar label{display:flex;align-items:center;gap:7px;color:#8196a5;font-size:7px;font-weight:800;letter-spacing:.1em}.editor-setlist-toolbar input{width:190px;padding:6px 8px;border:1px solid #3a5060;border-radius:5px;background:#0a1117;color:#eef7fc;font-size:10px}.editor-setlist-toolbar>span{flex:1;color:#8297a6;font-size:8px}.editor-setlist-toolbar button{padding:7px 10px;border:1px solid #40586a;border-radius:5px;background:#172530;color:#dcebf4;font-size:8px;font-weight:800}.editor-setlist-toolbar button.primary{border-color:#41b894;background:#18715b;color:#fff}.editor-setlist-toolbar button.danger{border-color:#7b3944;background:#3b1d25;color:#ffb8c2}.editor-setlist-toolbar button:disabled{cursor:not-allowed;opacity:.45}
 .editor-load-status{display:grid;grid-template-columns:38px minmax(180px,auto) minmax(180px,1fr);gap:10px;align-items:center;min-height:48px;margin:-4px 0 10px;padding:6px 10px;border:1px solid #38708a;border-radius:7px;background:linear-gradient(90deg,#102735,#101a22);box-shadow:inset 3px 0 #63d8ff}.editor-load-status[hidden]{display:none}.editor-load-status>i,.set-card-load-pie{display:grid;place-items:center;border-radius:50%;background:conic-gradient(#63d8ff var(--load-angle),#24333e 0);box-shadow:0 0 10px #63d8ff55;font-style:normal}.editor-load-status>i{width:34px;height:34px}.editor-load-status>i:after,.set-card-load-pie:after{content:"";grid-area:1/1;width:70%;height:70%;border-radius:50%;background:#0b151c}.editor-load-status>i b,.set-card-load-pie b{grid-area:1/1;z-index:1;color:#eaf8ff;font-size:8px}.editor-load-status>span{display:grid;gap:3px}.editor-load-status>span strong{color:#dff6ff;font-size:9px;letter-spacing:.1em}.editor-load-status>span small{color:#8fb3c4;font-size:9px}.editor-load-status progress{width:100%;height:8px;border:0;border-radius:5px;overflow:hidden;background:#23333e}.editor-load-status progress::-webkit-progress-bar{background:#23333e}.editor-load-status progress::-webkit-progress-value{background:linear-gradient(90deg,#3fa9d1,#63d8ff)}.set-card-load-pie{position:absolute;right:7px;bottom:6px;width:28px;height:28px;z-index:4}.set-card-load-pie b{font-size:6px}
 .performance-set-songs .add-song-card{cursor:pointer!important;border-color:#39718d!important;background:#0d202b!important}.performance-set-songs .add-song-card>strong{color:#67dcff!important}.performance-set-songs .add-song-card>small{color:#82aabd!important}.performance-set-songs .add-song-card:hover{border-color:#63d8ff!important;background:#153344!important;box-shadow:inset 0 0 18px #63d8ff18}
-.performance-set-songs .add-media-card{display:grid!important;grid-template-columns:20px minmax(82px,1fr)!important;grid-template-rows:1fr 1fr!important;padding:5px 6px!important;gap:3px 5px!important}.performance-set-songs .add-media-card>span{grid-row:1/3;align-self:center}.performance-set-songs .add-media-card button{display:flex;min-width:0;min-height:0;flex-direction:column;justify-content:center;border:0;border-radius:4px;background:transparent;color:#67dcff;font:inherit;font-size:10px;font-weight:900;text-align:left;cursor:pointer;line-height:1}.performance-set-songs .add-media-card button small{display:block;max-width:100%;overflow:hidden;color:#82aabd;font-size:7px;font-weight:800;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}.performance-set-songs .add-media-card button:hover{background:#153344;color:#f6fbff}
+.performance-set-songs .add-media-card{display:grid!important;grid-template-columns:20px minmax(68px,1fr)!important;grid-template-rows:1fr 1fr!important;padding:6px!important;gap:4px!important}.performance-set-songs .add-media-card>span{grid-row:1/3;align-self:center}.performance-set-songs .add-media-card button{min-width:0;border:0;background:transparent;color:#67dcff;font:inherit;font-weight:900;text-align:left;cursor:pointer;line-height:1.1}.performance-set-songs .add-media-card button small{display:block;overflow:hidden;color:#82aabd;font-size:8px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}.performance-set-songs .add-media-card button:hover{color:#f6fbff}
 .editor-draft-card{cursor:grab;transition:transform .15s ease,margin .15s ease,opacity .15s ease}.editor-draft-card:active{cursor:grabbing}.editor-draft-card.dragging{opacity:.28;filter:saturate(.35)}.editor-draft-card.drop-before{margin-left:28px;box-shadow:-6px 0 0 #63d8ff,0 0 12px #63d8ff66!important}.editor-draft-card.drop-after{margin-right:28px;box-shadow:6px 0 0 #63d8ff,0 0 12px #63d8ff66!important}
 .set-card-context-menu{position:fixed;z-index:10000;display:grid;min-width:210px;gap:7px;padding:9px;border:1px solid #536a7b;border-radius:8px;background:#101923;box-shadow:0 12px 30px #000c;color:#edf6fb}.set-card-context-menu>strong{max-width:260px;padding:3px 6px 7px;border-bottom:1px solid #2e3e4b;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.set-card-context-menu>button{padding:9px 11px;border:1px solid #77404a;border-radius:6px;background:#351720;color:#ffabb8;font-size:11px;font-weight:800;text-align:left;cursor:pointer}.set-card-context-menu>button:hover,.set-card-context-menu>button:focus-visible{border-color:#ff7188;background:#652333;color:#fff}
 .performance-set-songs .editor-draft-card.selected{border-color:#b495ff!important;box-shadow:inset 0 -4px #b495ff,0 0 8px #b495ff55}
@@ -729,22 +729,6 @@ body:not(.expanded-editor).edit-mode .editor-grid{height:calc(100vh - 455px);min
   min-width:178px!important;
   grid-template-columns:26px minmax(120px,1fr);
   padding:11px 12px!important;
-}
-
-.edit-mode .performance-set-songs .add-media-card{
-  flex-basis:clamp(190px,calc((100vw - 560px)/7),235px)!important;
-  min-width:190px!important;
-  grid-template-columns:24px minmax(130px,1fr)!important;
-  grid-template-rows:1fr 1fr!important;
-  padding:7px 8px!important;
-}
-
-.edit-mode .performance-set-songs .add-media-card button{
-  font-size:12px!important;
-}
-
-.edit-mode .performance-set-songs .add-media-card button small{
-  font-size:8px!important;
 }
 
 .edit-mode .performance-set-songs .set-transition{
