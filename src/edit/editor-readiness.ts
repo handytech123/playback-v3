@@ -95,7 +95,7 @@ export async function evaluateEditorReadiness(
     "Key and tempo processing",
     processingAvailable ? "ready" : "blocked",
     processingRequired
-      ? processingAvailable ? `${input.draft.baseKey}/${input.draft.baseBpm} → ${input.draft.selectedKey}/${input.draft.selectedBpm}` : "FFmpeg rubberband processing is unavailable"
+      ? processingAvailable ? `${input.draft.baseKey}/${input.draft.baseBpm} -> ${input.draft.selectedKey}/${input.draft.selectedBpm}` : "FFmpeg rubberband processing is unavailable"
       : "No offline pitch or tempo change required",
   ));
   checks.push(check(
@@ -103,7 +103,7 @@ export async function evaluateEditorReadiness(
     "Slides MIDI",
     input.draft.midi.some((event) => event.enabled) && !input.midiOutputName ? "warning" : "ready",
     input.draft.midi.some((event) => event.enabled)
-      ? input.midiOutputName ? `${input.draft.midi.filter((event) => event.enabled).length} events → ${input.midiOutputName}` : "Events are prepared; MIDI output is disabled"
+      ? input.midiOutputName ? `${input.draft.midi.filter((event) => event.enabled).length} events -> ${input.midiOutputName}` : "Events are prepared; MIDI output is disabled"
       : "No enabled Slides MIDI events",
   ));
   checks.push(check(

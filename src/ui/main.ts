@@ -14,37 +14,37 @@ root.innerHTML = `
 <main>
   <nav>
     <div class="modes"><button id="prepMode" hidden>PREP / SETLIST</button><button id="editMode">EDIT / ARRANGE</button><button id="performanceMode" class="active">PERFORMANCE</button></div>
-    <div class="arrangement-tools"><button id="slidesMidi" class="slides-midi-toggle">PRO-PRESENTER OFF</button><button id="surfaceMidi" class="surface-midi-toggle">SURFACE MIXER OFF</button><button id="remoteControl" class="settings-menu-button" title="Playback settings">⚙ SETTINGS</button></div>
-    <div class="setlist" hidden><button id="previousSong">‹</button><span>SET 01</span><strong>Loading…</strong><small>Original Song</small><button id="nextSong">›</button></div>
+    <div class="arrangement-tools"><button id="slidesMidi" class="slides-midi-toggle">PRO-PRESENTER OFF</button><button id="surfaceMidi" class="surface-midi-toggle">SURFACE MIXER OFF</button><button id="remoteControl" class="settings-menu-button" title="Playback settings"> SETTINGS</button></div>
+    <div class="setlist" hidden><button id="previousSong">PREV</button><span>SET 01</span><strong>Loading...</strong><small>Original Song</small><button id="nextSong">NEXT</button></div>
   </nav>
-  <header class="app-heading"><div><span id="modeLabel" class="eyebrow">PERFORMANCE MODE · CONFIRMED SET</span><h1 id="title">Loading…</h1><p id="facts"></p></div><section class="transport"><div class="transport-buttons"><button id="stop" aria-label="Stop">■</button><button id="play" class="primary" aria-label="Play">▶</button><button id="pause" aria-label="Pause">Ⅱ</button><button id="pad">PAD</button><button id="panic" class="panic">PANIC</button></div><div class="transport-clock"><span>ELAPSED / REMAINING</span><strong id="clock">0:00.000 / -0:00.000</strong><small id="position">1.1</small></div></section><button id="ready" class="ready">ARMING</button></header>
+  <header class="app-heading"><div><span id="modeLabel" class="eyebrow">PERFORMANCE MODE  -  CONFIRMED SET</span><h1 id="title">Loading...</h1><p id="facts"></p></div><section class="transport"><div class="transport-buttons"><button id="stop" aria-label="Stop">STOP</button><button id="play" class="primary" aria-label="Play">PLAY</button><button id="pause" aria-label="Pause">PAUSE</button><button id="pad">PAD</button><button id="panic" class="panic">PANIC</button></div><div class="transport-clock"><span>ELAPSED / REMAINING</span><strong id="clock">0:00.000 / -0:00.000</strong><small id="position">1.1</small></div></section><button id="ready" class="ready">ARMING</button></header>
   <div id="globalLoadingStatus" class="global-loading-status" hidden><i></i><strong id="globalLoadingTitle">WORKING</strong><span id="globalLoadingDetail">Please wait.</span></div>
   <section id="prepWorkspace" class="prep-workspace" hidden>
     <div class="prep-toolbar"><div><span class="eyebrow">LIBRARY / PREPARATION LANE</span><h2>Build The Confirmed Set</h2><p>Choose prepared versions, order the set, then freeze one isolated performance package. Library maintenance is in Settings.</p></div></div>
-    <div class="prep-summary" id="librarySummary"><span>Use Settings → Library / Analysis to update metadata and library content.</span></div>
+    <div class="prep-summary" id="librarySummary"><span>Use Settings > Library / Analysis to update metadata and library content.</span></div>
     <div class="prep-columns">
       <section class="prep-panel"><header><div><h2>Prepared Songs</h2><small>Only performance-ready versions can enter the set.</small></div></header><div id="preparedLibrary" class="prepared-library"></div></section>
       <section class="prep-panel set-builder"><header><label>Set Name<input id="setlistName" value="Sunday Set"></label><button id="clearSetlist">CLEAR</button></header><div id="setlistItems" class="setlist-items"></div><footer><span id="setlistStatus">Draft saves automatically.</span><button id="confirmSet" class="primary">CONFIRM SET + LOAD</button></footer></section>
     </div>
-    <section class="prep-panel catalog-panel"><header><div><h2>Master Library</h2><small>Spreadsheet facts remain authoritative. Rows needing analysis cannot enter Performance.</small></div><input id="libraryFilter" placeholder="Filter title, artist, vendor…"></header><div id="catalogRows" class="catalog-rows"><p>Run Scan Master Library to inspect all catalog songs.</p></div></section>
+    <section class="prep-panel catalog-panel"><header><div><h2>Master Library</h2><small>Spreadsheet facts remain authoritative. Rows needing analysis cannot enter Performance.</small></div><input id="libraryFilter" placeholder="Filter title, artist, vendor..."></header><div id="catalogRows" class="catalog-rows"><p>Run Scan Master Library to inspect all catalog songs.</p></div></section>
   </section>
   <section id="performanceWorkspace" class="workspace performance-workspace">
     <section class="performance-set-deck" aria-label="Confirmed set"><div class="set-deck-label"><span>CONFIRMED SET</span><strong id="performanceSetName">Sunday Set</strong></div><div id="performanceSetSongs" class="performance-set-songs"></div></section>
     <section class="performance-now-deck">
-      <article class="performance-now-song"><span>NOW PLAYING</span><strong id="performanceSongTitle">Loading…</strong><small id="performanceArrangement">Original Song</small></article>
-      <article class="performance-now-section"><span>CURRENT SECTION</span><strong id="currentSection">—</strong><small id="upNextSection">NEXT · —</small></article>
+      <article class="performance-now-song"><span>NOW PLAYING</span><strong id="performanceSongTitle">Loading...</strong><small id="performanceArrangement">Original Song</small></article>
+      <article class="performance-now-section"><span>CURRENT SECTION</span><strong id="currentSection">--</strong><small id="upNextSection">NEXT - --</small></article>
       <article id="performanceActionCard" class="performance-action-card"><span>LIVE ACTION</span><strong id="performanceAction">FOLLOW TIMELINE</strong><small id="performanceActionDetail">No transition is armed</small></article>
     </section>
     <div class="timeline" id="performanceTimeline"><div id="ruler" class="ruler"></div><div id="currentRegionShade" class="performance-current-region-shade"></div><canvas id="wave"></canvas><canvas id="waveProgress" class="wave-progress"></canvas><div id="performanceBoundaryLines" class="performance-boundary-lines"></div><div id="cueMarkers" class="cue-markers"></div><div id="regions" class="regions"></div><div id="playhead" class="playhead"></div></div>
   </section>
   <section id="editorWorkspace" class="editor-workspace" hidden>
     <section class="editor-set-deck set-card-deck" aria-label="Songs in confirmed set"><div class="set-deck-label"><span>EDIT SET</span><strong id="editorSetName">Sunday Set</strong></div><div id="editorSetSongs" class="performance-set-songs"></div></section>
-    <section class="editor-setlist-toolbar"><label>SET NAME<input id="editorSetlistName" value="Sunday Set"></label><span id="editorSetlistStatus">Loading draft set…</span><button id="editorUpdateLibrary" class="primary">UPDATE LIBRARY</button><button id="editorImportSetlist">IMPORT SET</button><button id="editorExportSetlist">EXPORT SET</button><button id="editorClearSetlist" class="danger">CLEAR SET</button></section><div id="confirmSetProgress" class="confirm-set-progress" hidden><div><strong>CONFIRMING SET</strong><span id="confirmSetProgressLabel">Preparing isolated performance cache…</span><b id="confirmSetProgressPercent">0%</b></div><progress id="confirmSetProgressBar" max="100" value="0"></progress></div><div id="editorLoadStatus" class="editor-load-status" hidden><i><b id="editorLoadPercent">0%</b></i><span><strong>LOADING SONG</strong><small id="editorLoadLabel">Preparing editor…</small></span><progress id="editorLoadProgress" max="100" value="0"></progress></div>
-    <section id="editorSongVersions" class="editor-song-versions" hidden><div><span>SELECTED SONG</span><strong id="selectedSetSong">—</strong></div><label>ARRANGEMENT<select id="editorArrangementVersion" hidden></select><div class="version-menu"><button id="editorArrangementVersionButton" type="button">Select arrangement</button><div id="editorArrangementVersionMenu" class="version-menu-options" hidden></div></div></label></section>
+    <section class="editor-setlist-toolbar"><label>SET NAME<input id="editorSetlistName" value="Sunday Set"></label><span id="editorSetlistStatus">Loading draft set...</span><button id="editorUpdateLibrary" class="primary">UPDATE LIBRARY</button><button id="editorImportSetlist">IMPORT SET</button><button id="editorExportSetlist">EXPORT SET</button><button id="editorClearSetlist" class="danger">CLEAR SET</button></section><div id="confirmSetProgress" class="confirm-set-progress" hidden><div><strong>CONFIRMING SET</strong><span id="confirmSetProgressLabel">Preparing isolated performance cache...</span><b id="confirmSetProgressPercent">0%</b></div><progress id="confirmSetProgressBar" max="100" value="0"></progress></div><div id="editorLoadStatus" class="editor-load-status" hidden><i><b id="editorLoadPercent">0%</b></i><span><strong>LOADING SONG</strong><small id="editorLoadLabel">Preparing editor...</small></span><progress id="editorLoadProgress" max="100" value="0"></progress></div>
+    <section id="editorSongVersions" class="editor-song-versions" hidden><div><span>SELECTED SONG</span><strong id="selectedSetSong"> - </strong></div><label>ARRANGEMENT<select id="editorArrangementVersion" hidden></select><div class="version-menu"><button id="editorArrangementVersionButton" type="button">Select arrangement</button><div id="editorArrangementVersionMenu" class="version-menu-options" hidden></div></div></label></section>
     <section id="editorEmptySelection" class="editor-empty-selection" hidden><strong>NO SONG LOADED</strong><span>Select + ADD SONG to load an Original Song or arrangement into this set card.</span></section>
     <div class="editor-topbar">
       <div class="editor-info-row">
-      <div><span class="eyebrow">ARRANGEMENT NAME</span><strong id="editorSelectedArrangementName">Loading…</strong><small id="editorVersion" hidden></small><span id="editorSource" hidden></span></div>
+      <div><span class="eyebrow">ARRANGEMENT NAME</span><strong id="editorSelectedArrangementName">Loading...</strong><small id="editorVersion" hidden></small><span id="editorSource" hidden></span></div>
       <label class="editor-top-field">KEY<select id="arrangementKey"><option>C</option><option>Db</option><option>D</option><option>Eb</option><option>E</option><option>F</option><option>Gb</option><option>G</option><option>Ab</option><option>A</option><option>Bb</option><option>B</option><option>Cm</option><option>Dbm</option><option>Dm</option><option>Ebm</option><option>Em</option><option>Fm</option><option>Gbm</option><option>Gm</option><option>Abm</option><option>Am</option><option>Bbm</option><option>Bm</option></select></label>
       <label class="editor-top-field">BPM<input id="arrangementBpm" type="number" min="1" step=".01"></label>
       <label class="editor-top-field">CLICK TEMPLATE<select id="arrangementClickTemplate"></select></label>
@@ -68,11 +68,11 @@ root.innerHTML = `
           <div id="editorSelection" class="editor-selection" hidden></div><div id="editorPlayhead" class="playhead"></div>
         </div></div></div>
         <div id="summaryStemMixer" class="summary-stem-mixer"></div>
-        <div class="editor-selection-readout"><strong id="playheadLocation">1.1</strong><span id="selectionLocation">Drag in the waveform to create a grid-aligned selection.</span></div><div id="expandedSizeControls" class="editor-corner-controls" hidden><span class="width-adjust"><b>WIDTH</b><button id="widthDown" title="Decrease timeline width">−</button><button id="widthUp" title="Increase timeline width">+</button></span><span class="height-adjust"><b>HEIGHT</b><button id="heightDown" title="Decrease stem height">−</button><button id="heightUp" title="Increase stem height">+</button></span></div>
+        <div class="editor-selection-readout"><strong id="playheadLocation">1.1</strong><span id="selectionLocation">Drag in the waveform to create a grid-aligned selection.</span></div><div id="expandedSizeControls" class="editor-corner-controls" hidden><span class="width-adjust"><b>WIDTH</b><button id="widthDown" title="Decrease timeline width">-</button><button id="widthUp" title="Increase timeline width">+</button></span><span class="height-adjust"><b>HEIGHT</b><button id="heightDown" title="Decrease stem height">-</button><button id="heightUp" title="Increase stem height">+</button></span></div>
       </section>
       <aside class="editor-inspector"><button id="toggleEditorInspector" class="panel-collapse-toggle" title="Show or hide Selected Region">REGION</button>
-        <section><h2>Selected Region</h2><label>Name<input id="sectionName"></label><div class="field-pair grid-position-fields"><label>Start · Measure.Beat<input id="sectionStart" inputmode="decimal" placeholder="1.1"></label><label>End · Measure.Beat<input id="sectionEnd" inputmode="decimal" placeholder="2.1"></label></div><p id="sectionSource"></p><div class="button-grid"><button id="selectPrevious">SELECT ←</button><button id="selectNext">SELECT →</button><button id="moveEarlier">MOVE ←</button><button id="moveLater">MOVE →</button><button id="duplicateRegion">DUPLICATE</button><button id="splitRegion">SPLIT AT PLAYHEAD</button><button id="deleteRegion" class="danger">REMOVE + CLOSE GAP</button><button id="auditionRegion">AUDITION SOURCE</button><button id="loopAudition">LOOP SOURCE</button><button id="auditionBoundary">AUDITION BOUNDARY</button><button id="trimStart">TRIM START HERE</button><button id="trimEnd">TRIM END HERE</button></div></section>
-        <section><h2>Destination Cue</h2><label class="check"><input id="cueEnabled" type="checkbox"> Enabled</label><label>Destination<select id="cueTarget"></select></label><label>Cue At · Measure.Beat<input id="cuePosition" inputmode="decimal" placeholder="1.1"></label><button id="auditionArrangementCue">AUDITION CUE</button><p id="cueDetail"></p></section>
+        <section><h2>Selected Region</h2><label>Name<input id="sectionName"></label><div class="field-pair grid-position-fields"><label>Start - Measure.Beat<input id="sectionStart" inputmode="decimal" placeholder="1.1"></label><label>End - Measure.Beat<input id="sectionEnd" inputmode="decimal" placeholder="2.1"></label></div><p id="sectionSource"></p><div class="button-grid"><button id="selectPrevious">SELECT PREV</button><button id="selectNext">SELECT NEXT</button><button id="moveEarlier">MOVE EARLIER</button><button id="moveLater">MOVE LATER</button><button id="duplicateRegion">DUPLICATE</button><button id="splitRegion">SPLIT AT PLAYHEAD</button><button id="deleteRegion" class="danger">REMOVE + CLOSE GAP</button><button id="auditionRegion">AUDITION SOURCE</button><button id="loopAudition">LOOP SOURCE</button><button id="auditionBoundary">AUDITION BOUNDARY</button><button id="trimStart">TRIM START HERE</button><button id="trimEnd">TRIM END HERE</button></div></section>
+        <section><h2>Destination Cue</h2><label class="check"><input id="cueEnabled" type="checkbox"> Enabled</label><label>Destination<select id="cueTarget"></select></label><label>Cue At  -  Measure.Beat<input id="cuePosition" inputmode="decimal" placeholder="1.1"></label><button id="auditionArrangementCue">AUDITION CUE</button><p id="cueDetail"></p></section>
         <section><h2>Cue List</h2><div id="cueList" class="cue-list"></div></section>
         <section><h2>Slides MIDI</h2><div id="midiEvents" class="midi-events"></div></section>
         <section><h2>Readiness</h2><div id="readinessSummary"></div><div id="readinessChecks"></div></section>
@@ -81,22 +81,22 @@ root.innerHTML = `
     </div>
   </section>
   <section id="liveControls">
-    <div class="live-section"><button id="previousSection">← PREVIOUS</button><button id="repeatOnce">REPEAT ONCE</button><button id="loopSection">LOOP</button><button id="nextSection">NEXT →</button><button id="cueNextSong">CUE NEXT SONG</button></div>
+    <div class="live-section"><button id="previousSection">< PREVIOUS</button><button id="repeatOnce">REPEAT ONCE</button><button id="loopSection">LOOP</button><button id="nextSection">NEXT ></button><button id="cueNextSong">CUE NEXT SONG</button></div>
     <p id="jumpState" hidden><strong>JUMP ARMED</strong><span></span></p><p id="panicState" hidden><strong>MUSICAL RECOVERY</strong><span></span></p><p id="liveFault" hidden><span></span><button id="clearFault">CLEAR FAULT</button></p>
   </section>
   <section id="performanceMixer" class="daw-mixer" aria-label="Live mixer"><div id="mixerResizeHandle" class="mixer-resize-handle" title="Drag to resize mixer"></div><header><div><span>LIVE MIXER</span><strong id="mixerIemStatus">IEM SEND CHECKING</strong></div><button id="mixerCollapse" aria-expanded="true">COLLAPSE</button></header><div id="mixerChannels" class="mixer-channels"></div></section>
 </main>
 <dialog id="reaperImport"><h2>Reaper Arrangement Import</h2><div id="importStatus" class="import-status idle"><strong>WAITING</strong><span>Choose a Reaper project to preview.</span><progress max="100" value="0"></progress></div><div id="importSummary"></div><div id="importDifferences"></div><p id="importWarning"></p><footer><button data-action="cancel">CANCEL</button><button data-action="replace">REPLACE SELECTED ARRANGEMENT</button><button data-action="new" class="primary">IMPORT AS NEW VERSION</button></footer></dialog>
 <dialog id="arrangementNameDialog" class="arrangement-name-dialog"><form method="dialog"><span class="eyebrow">SAVE ARRANGEMENT</span><h2>Verify Arrangement Name</h2><p>This saves your current edits as a new non-destructive arrangement and adds it to the arrangement list.</p><div id="saveArrangementStatus" class="import-status idle"><strong>WAITING</strong><span>Verify the name, then save the arrangement.</span><progress max="100" value="0"></progress></div><label>Arrangement Name<input id="newArrangementName" autocomplete="off"></label><footer><button value="cancel">CANCEL</button><button id="confirmNewArrangement" value="default" class="primary">SAVE ARRANGEMENT</button></footer></form></dialog>
-<dialog id="performanceReadiness"><header><div><span class="eyebrow">PRODUCTION PERFORMANCE READINESS</span><h2 id="performanceReadinessTitle">Checking…</h2></div><button id="closePerformanceReadiness">CLOSE</button></header><div id="performanceReadinessChecks"></div></dialog>
-<dialog id="songLibraryPicker" class="song-library-picker"><header><div><span class="eyebrow">ORIGINAL SONGS</span><h2>Master Song Library</h2></div><button id="closeSongLibrary">CLOSE</button></header><div class="song-library-filters"><label>SEARCH BY NAME<input id="songLibrarySearch" type="search" placeholder="Song title or artist…"></label><label>SPEED<select id="songLibrarySpeed"><option value="all">All tempos</option><option value="slow">Slow · 80 BPM or less</option><option value="medium">Medium · 81–110 BPM</option><option value="fast">Fast · 111 BPM or more</option></select></label></div><div id="songLibraryResults" class="song-library-results"></div></dialog>
+<dialog id="performanceReadiness"><header><div><span class="eyebrow">PRODUCTION PERFORMANCE READINESS</span><h2 id="performanceReadinessTitle">Checking...</h2></div><button id="closePerformanceReadiness">CLOSE</button></header><div id="performanceReadinessChecks"></div></dialog>
+<dialog id="songLibraryPicker" class="song-library-picker"><header><div><span class="eyebrow">ORIGINAL SONGS</span><h2>Master Song Library</h2></div><button id="closeSongLibrary">CLOSE</button></header><div class="song-library-filters"><label>SEARCH BY NAME<input id="songLibrarySearch" type="search" placeholder="Song title or artist..."></label><label>SPEED<select id="songLibrarySpeed"><option value="all">All tempos</option><option value="slow">Slow  -  80 BPM or less</option><option value="medium">Medium  -  81-110 BPM</option><option value="fast">Fast  -  111 BPM or more</option></select></label></div><div id="songLibraryResults" class="song-library-results"></div></dialog>
 <dialog id="remoteSettings" class="settings-window"><header><div><span class="eyebrow">PLAYBACK V3</span><h2>Settings</h2><p id="settingsStatus">Configure the production system without crowding the performance surface.</p></div><button id="closeRemoteSettings">CLOSE</button></header><nav class="settings-tabs" aria-label="Settings sections"><button class="active" data-settings-tab="audio">AUDIO</button><button data-settings-tab="import">LIBRARY / ANALYSIS</button><button data-settings-tab="control">HTTP REMOTE / OSC</button><button data-settings-tab="transitions">TRANSITIONS</button><button data-settings-tab="midi">MIDI</button><button data-settings-tab="system">SYSTEM CHECK</button></nav><div class="settings-pages">
-  <section class="settings-page active" data-settings-page="audio"><div class="settings-section-heading"><span>AUDIO ENGINE</span><h3>Device, routing, and output health</h3></div><div class="settings-grid"><label>Audio Device<select id="audioSelect" title="Audio output"></select></label><label>Active Outputs<select id="audioOutputCount" title="Number of active output channels"></select></label><div class="settings-readout"><span>Routing</span><strong id="routeStatus"></strong></div><div class="settings-readout"><span>IEM Outputs</span><strong id="settingsIemStatus">—</strong></div><button id="refreshAudioSettings">REFRESH DEVICE STATUS</button><button id="runAudioCheck">RUN AUDIO ERROR CHECK</button><div class="settings-section-heading settings-wide"><span>CLICK SOUNDS</span><h3>Choose the two WAV sounds used by every dynamic click pattern</h3></div><div class="click-sound-row settings-wide"><label><span>NORMAL CLICK</span><input id="normalClickPath" readonly></label><button id="chooseNormalClick">CHOOSE WAV</button><button id="previewNormalClick">PREVIEW</button></div><div class="click-sound-row settings-wide"><label><span>ACCENT CLICK</span><input id="accentClickPath" readonly></label><button id="chooseAccentClick">CHOOSE WAV</button><button id="previewAccentClick">PREVIEW</button></div><div class="click-sound-actions settings-wide"><button id="resetClickSounds">RESET TO PLAYBACK DEFAULTS</button><p id="clickSoundStatus">These sounds are saved on this computer and locked into the next Confirmed Set.</p></div><div class="settings-section-heading settings-wide"><span>DANTE OUTPUT MATRIX</span><h3 id="outputMatrixHeading">Assign stems and live buses to available outputs</h3></div><div id="outputMatrix" class="settings-grid settings-wide"></div><div id="audioCheckReport" class="settings-report settings-wide">Select Run Audio Error Check for a live readiness report.</div></div></section>
-  <section class="settings-page" data-settings-page="midi"><div class="settings-section-heading"><span>MIDI DEVICES</span><h3>Slides and console MIDI</h3></div><div class="settings-grid"><label class="settings-wide">ProPresenter MIDI Output<select id="midiSelect" title="ProPresenter MIDI output"></select></label><div class="settings-readout"><span>Output Status</span><strong id="midiStatus"></strong></div><div class="settings-readout"><span>Loaded Slide Events</span><strong id="settingsMidiEvents">—</strong></div><p class="settings-help settings-wide">Reaper MIDI is imported only from a track named Slides. The selected output is saved and the native engine is re-armed when it changes.</p></div><section class="midi-input-settings"><h3>Allen &amp; Heath GLD-112 · Dedicated MIDI Output</h3><div><label>Output<select id="gldMidiOutput"></select></label><label>MIDI Channel<input id="gldChannel" type="number" min="1" max="16" value="2"></label><button id="testGld">TEST DEVICE · NO DATA</button></div><div class="gld-preview"><button id="previewGld">PREVIEW INPUT 1 MUTE</button><code id="gldHex">Writes locked</code></div><p id="gldStatus">The device-open test sends no MIDI data. Console writes remain locked pending physical acceptance.</p></section></section>
-  <section class="settings-page" data-settings-page="import"><div class="settings-section-heading"><span>LIBRARY / ANALYSIS</span><h3>Metadata and library maintenance</h3></div><div class="library-health-grid"><div class="library-health"><span>LIBRARY UPDATE</span><strong id="librarySyncState">IDLE</strong><small id="librarySyncDetail">Not running</small></div><div class="library-health"><span>ANALYZER</span><strong id="libraryAnalyzerState">IDLE</strong><small id="libraryAnalyzerDetail">Waiting for an update</small></div><div class="library-health"><span>READY SONGS</span><strong id="libraryReadyCount">—</strong><small>Analyzer files complete</small></div><div class="library-health"><span>NEEDS ANALYSIS</span><strong id="libraryNeedsCount">—</strong><small>Missing analyzer output</small></div><div class="library-health"><span>MISSING FOLDERS</span><strong id="libraryMissingCount">—</strong><small>Master path unavailable</small></div><div class="library-health"><span>LAST UPDATE</span><strong id="libraryLastScan">NEVER</strong><small id="libraryLastDuration">No completed update</small></div></div><div class="library-paths"><label>Library Root<input id="libraryRootPath" readonly></label><label>Master Workbook<input id="libraryWorkbookPath" readonly></label></div><div class="settings-action-list"><button id="settingsUpdateLibrary"><strong>UPDATE METADATA + LIBRARY</strong><small>Rescan song sources, rebuild changed Analyzer drafts, and refresh the set-builder library without removing setlists or arrangements.</small></button><button id="importReaper"><strong>IMPORT REAPER ARRANGEMENT</strong><small>Preview regions, tempo/key changes, and Slides MIDI before writing.</small></button></div><div id="settingsSyncStatus" class="settings-report">No library task is running.</div><div id="libraryIssueList" class="library-issue-list"><p>Run Update Metadata + Library to see song readiness.</p></div></section>
-  <section class="settings-page" data-settings-page="control"><div class="settings-section-heading"><span>HTTP PERFORMANCE REMOTE</span><h3>Control Performance Mode from a phone, tablet, or browser</h3></div><div class="remote-settings"><p id="remoteStatus"></p><section id="httpQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>HTTP PERFORMANCE REMOTE</span><h3>Scan To Open Remote</h3><p id="httpQrStatus">Enable LAN to create a connection for other devices on this network.</p><label>HTTP Remote Address<input id="remoteUrl" type="text" readonly></label><div class="remote-buttons"><button id="openHttpRemote">OPEN REMOTE HERE</button><button id="copyRemoteUrl">COPY PRIVATE LINK</button><button id="toggleLanRemote">ENABLE LAN</button></div></div><div class="osc-qr-code"><canvas id="httpQrCanvas" width="210" height="210"></canvas><small>PRIVATE · DO NOT SHARE PUBLICLY</small></div></section><dl><div><dt>HTTP REMOTE</dt><dd id="remoteHttp">—</dd></div><div><dt>OSC CONTROL</dt><dd id="remoteOsc">—</dd></div></dl><section id="oscQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>OSC REMOTE CONNECTION</span><h3>Scan To Connect OSC</h3><p id="oscQrStatus">Enable LAN and OSC to create a stage-ready connection code.</p><label>Network Address<select id="oscQrAddress"></select></label><label>Private OSC Profile<input id="oscQrPayload" type="password" readonly></label><div class="remote-buttons"><button id="copyOscProfile">COPY OSC PROFILE</button><button id="toggleOsc">OSC ON</button></div></div><div class="osc-qr-code"><canvas id="oscQrCanvas" width="210" height="210"></canvas><small>PRIVATE · DO NOT SHARE PUBLICLY</small></div></section><section class="midi-input-settings"><h3>Foot Controller / MIDI Input</h3><div><label>Input<select id="midiInputDevice"></select></label><label>Profile<select id="footControllerProfile"><option value="disabled">Disabled</option><option value="basic-notes">Basic Notes · CH 1 · 20–26</option></select></label><button id="applyMidiInput">APPLY + ARM</button></div><p id="midiInputStatus">MIDI input is disabled.</p></section><p class="remote-warning">The HTTP remote mirrors the Performance page without its mixer. LAN links and OSC profiles contain a private control token; keep them inside the production network.</p></div></section>
+  <section class="settings-page active" data-settings-page="audio"><div class="settings-section-heading"><span>AUDIO ENGINE</span><h3>Device, routing, and output health</h3></div><div class="settings-grid"><label>Audio Device<select id="audioSelect" title="Audio output"></select></label><label>Active Outputs<select id="audioOutputCount" title="Number of active output channels"></select></label><div class="settings-readout"><span>Routing</span><strong id="routeStatus"></strong></div><div class="settings-readout"><span>IEM Outputs</span><strong id="settingsIemStatus"> - </strong></div><button id="refreshAudioSettings">REFRESH DEVICE STATUS</button><button id="runAudioCheck">RUN AUDIO ERROR CHECK</button><div class="settings-section-heading settings-wide"><span>CLICK SOUNDS</span><h3>Choose the two WAV sounds used by every dynamic click pattern</h3></div><div class="click-sound-row settings-wide"><label><span>NORMAL CLICK</span><input id="normalClickPath" readonly></label><button id="chooseNormalClick">CHOOSE WAV</button><button id="previewNormalClick">PREVIEW</button></div><div class="click-sound-row settings-wide"><label><span>ACCENT CLICK</span><input id="accentClickPath" readonly></label><button id="chooseAccentClick">CHOOSE WAV</button><button id="previewAccentClick">PREVIEW</button></div><div class="click-sound-actions settings-wide"><button id="resetClickSounds">RESET TO PLAYBACK DEFAULTS</button><p id="clickSoundStatus">These sounds are saved on this computer and locked into the next Confirmed Set.</p></div><div class="settings-section-heading settings-wide"><span>DANTE OUTPUT MATRIX</span><h3 id="outputMatrixHeading">Assign stems and live buses to available outputs</h3></div><div id="outputMatrix" class="settings-grid settings-wide"></div><div id="audioCheckReport" class="settings-report settings-wide">Select Run Audio Error Check for a live readiness report.</div></div></section>
+  <section class="settings-page" data-settings-page="midi"><div class="settings-section-heading"><span>MIDI DEVICES</span><h3>Slides and console MIDI</h3></div><div class="settings-grid"><label class="settings-wide">ProPresenter MIDI Output<select id="midiSelect" title="ProPresenter MIDI output"></select></label><div class="settings-readout"><span>Output Status</span><strong id="midiStatus"></strong></div><div class="settings-readout"><span>Loaded Slide Events</span><strong id="settingsMidiEvents"> - </strong></div><p class="settings-help settings-wide">Reaper MIDI is imported only from a track named Slides. The selected output is saved and the native engine is re-armed when it changes.</p></div><section class="midi-input-settings"><h3>Allen &amp; Heath GLD-112  -  Dedicated MIDI Output</h3><div><label>Output<select id="gldMidiOutput"></select></label><label>MIDI Channel<input id="gldChannel" type="number" min="1" max="16" value="2"></label><button id="testGld">TEST DEVICE  -  NO DATA</button></div><div class="gld-preview"><button id="previewGld">PREVIEW INPUT 1 MUTE</button><code id="gldHex">Writes locked</code></div><p id="gldStatus">The device-open test sends no MIDI data. Console writes remain locked pending physical acceptance.</p></section></section>
+  <section class="settings-page" data-settings-page="import"><div class="settings-section-heading"><span>LIBRARY / ANALYSIS</span><h3>Metadata and library maintenance</h3></div><div class="library-health-grid"><div class="library-health"><span>LIBRARY UPDATE</span><strong id="librarySyncState">IDLE</strong><small id="librarySyncDetail">Not running</small></div><div class="library-health"><span>ANALYZER</span><strong id="libraryAnalyzerState">IDLE</strong><small id="libraryAnalyzerDetail">Waiting for an update</small></div><div class="library-health"><span>READY SONGS</span><strong id="libraryReadyCount"> - </strong><small>Analyzer files complete</small></div><div class="library-health"><span>NEEDS ANALYSIS</span><strong id="libraryNeedsCount"> - </strong><small>Missing analyzer output</small></div><div class="library-health"><span>MISSING FOLDERS</span><strong id="libraryMissingCount"> - </strong><small>Master path unavailable</small></div><div class="library-health"><span>LAST UPDATE</span><strong id="libraryLastScan">NEVER</strong><small id="libraryLastDuration">No completed update</small></div></div><div class="library-paths"><label>Library Root<input id="libraryRootPath" readonly></label><label>Master Workbook<input id="libraryWorkbookPath" readonly></label></div><div class="settings-action-list"><button id="settingsUpdateLibrary"><strong>UPDATE METADATA + LIBRARY</strong><small>Rescan song sources, rebuild changed Analyzer drafts, and refresh the set-builder library without removing setlists or arrangements.</small></button><button id="importReaper"><strong>IMPORT REAPER ARRANGEMENT</strong><small>Preview regions, tempo/key changes, and Slides MIDI before writing.</small></button></div><div id="settingsSyncStatus" class="settings-report">No library task is running.</div><div id="libraryIssueList" class="library-issue-list"><p>Run Update Metadata + Library to see song readiness.</p></div></section>
+  <section class="settings-page" data-settings-page="control"><div class="settings-section-heading"><span>HTTP PERFORMANCE REMOTE</span><h3>Control Performance Mode from a phone, tablet, or browser</h3></div><div class="remote-settings"><p id="remoteStatus"></p><section id="httpQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>HTTP PERFORMANCE REMOTE</span><h3>Scan To Open Remote</h3><p id="httpQrStatus">Enable LAN to create a connection for other devices on this network.</p><label>HTTP Remote Address<input id="remoteUrl" type="text" readonly></label><div class="remote-buttons"><button id="openHttpRemote">OPEN REMOTE HERE</button><button id="copyRemoteUrl">COPY PRIVATE LINK</button><button id="toggleLanRemote">ENABLE LAN</button></div></div><div class="osc-qr-code"><canvas id="httpQrCanvas" width="210" height="210"></canvas><small>PRIVATE  -  DO NOT SHARE PUBLICLY</small></div></section><dl><div><dt>HTTP REMOTE</dt><dd id="remoteHttp"> - </dd></div><div><dt>OSC CONTROL</dt><dd id="remoteOsc"> - </dd></div></dl><section id="oscQrCard" class="osc-qr-card offline"><div class="osc-qr-copy"><span>OSC REMOTE CONNECTION</span><h3>Scan To Connect OSC</h3><p id="oscQrStatus">Enable LAN and OSC to create a stage-ready connection code.</p><label>Network Address<select id="oscQrAddress"></select></label><label>Private OSC Profile<input id="oscQrPayload" type="password" readonly></label><div class="remote-buttons"><button id="copyOscProfile">COPY OSC PROFILE</button><button id="toggleOsc">OSC ON</button></div></div><div class="osc-qr-code"><canvas id="oscQrCanvas" width="210" height="210"></canvas><small>PRIVATE  -  DO NOT SHARE PUBLICLY</small></div></section><section class="midi-input-settings"><h3>Foot Controller / MIDI Input</h3><div><label>Input<select id="midiInputDevice"></select></label><label>Profile<select id="footControllerProfile"><option value="disabled">Disabled</option><option value="basic-notes">Basic Notes  -  CH 1  -  20-26</option></select></label><button id="applyMidiInput">APPLY + ARM</button></div><p id="midiInputStatus">MIDI input is disabled.</p></section><p class="remote-warning">The HTTP remote mirrors the Performance page without its mixer. LAN links and OSC profiles contain a private control token; keep them inside the production network.</p></div></section>
   <section class="settings-page" data-settings-page="transitions"><div class="settings-section-heading"><span>SONG-TO-SONG PLAYBACK</span><h3>Transition timing presets</h3></div><div class="settings-grid transition-timing-grid"><label>Overlap Maximum<input id="transitionOverlapSeconds" type="number" min="0.5" max="5" step="0.5"><small>How early the next song may begin while the outgoing song continues.</small></label><label>Crossfade Length<input id="transitionCrossfadeSeconds" type="number" min="0.5" max="5" step="0.5"><small>Length of the equal-power fade between outgoing and incoming songs.</small></label><button id="saveTransitionSettings" class="settings-wide">SAVE TRANSITION TIMING</button><div id="transitionSettingsStatus" class="settings-report settings-wide">These presets are written into the Confirmed Set when you enter Performance Mode.</div></div><div class="transition-behaviors"><article><strong>CUE NEXT</strong><span>Finish the current song, select and prepare the next song, but do not play it.</span></article><article><strong>STAY</strong><span>Finish and remain on the current song.</span></article><article><strong>AUTO LINK</strong><span>Start the next song immediately when the current song ends.</span></article><article><strong>OVERLAP</strong><span>Start the next song before the current song has completely finished.</span></article><article><strong>CROSSFADE</strong><span>Fade the current song down while fading the next song up.</span></article></div></section>
-  <section class="settings-page" data-settings-page="system"><div class="settings-section-heading"><span>DIAGNOSTICS</span><h3>Production readiness and error check</h3></div><div class="settings-grid"><button id="runSystemCheck">RUN FULL ERROR CHECK</button><button id="openReadinessDetails">OPEN READINESS DETAILS</button><div class="settings-readout"><span>Native Engine</span><strong id="settingsEngineStatus">—</strong></div><div class="settings-readout"><span>Current Set</span><strong id="settingsSetStatus">—</strong></div><div id="systemCheckReport" class="settings-report settings-wide">The full check validates the confirmed package, cache isolation, native engine, routing, MIDI, and next-song preload.</div></div></section>
+  <section class="settings-page" data-settings-page="system"><div class="settings-section-heading"><span>DIAGNOSTICS</span><h3>Production readiness and error check</h3></div><div class="settings-grid"><button id="runSystemCheck">RUN FULL ERROR CHECK</button><button id="openReadinessDetails">OPEN READINESS DETAILS</button><div class="settings-readout"><span>Native Engine</span><strong id="settingsEngineStatus"> - </strong></div><div class="settings-readout"><span>Current Set</span><strong id="settingsSetStatus"> - </strong></div><div id="systemCheckReport" class="settings-report settings-wide">The full check validates the confirmed package, cache isolation, native engine, routing, MIDI, and next-song preload.</div></div></section>
 </div></dialog>`;
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -115,6 +115,7 @@ let prepState: any = null;
 let selectedSetItemId: string | null = null;
 let catalogState: any = null;
 let currentPosition = 0;
+let nativeTransportPlaying = false;
 let performanceDuration = song.durationSeconds;
 let performanceGrid = buildZeroBasedGrid(song.selectedBpm, song.timeSignature, performanceDuration);
 let workspace: any = null;
@@ -218,7 +219,7 @@ function setupNavigation() {
 function renderPerformanceSet() {
   $("#performanceSetName").textContent = data.manifest.name;
   $("#performanceSongTitle").textContent = song.song.title;
-  $("#performanceArrangement").textContent = `${song.arrangement?.name ?? "Original Song"} · ${song.selectedKey} · ${song.selectedBpm} BPM${normalizationLabel(song)}`;
+  $("#performanceArrangement").textContent = `${song.arrangement?.name ?? "Original Song"}  -  ${song.selectedKey}  -  ${song.selectedBpm} BPM${normalizationLabel(song)}`;
   $("#fullSetDuration").textContent=formatSetDuration(fullSetDurationSeconds());
   $("#fullSetSongs").textContent=`${data.manifest.songs.length} SONG${data.manifest.songs.length===1?"":"S"}`;
   renderSetStrip($("#performanceSetSongs"));
@@ -231,18 +232,18 @@ function fullSetDurationSeconds(){
 }
 
 function formatSetDuration(seconds:number){const whole=Math.round(seconds),hours=Math.floor(whole/3600),minutes=Math.floor(whole%3600/60),remaining=whole%60;return hours?`${hours}:${String(minutes).padStart(2,"0")}:${String(remaining).padStart(2,"0")}`:`${minutes}:${String(remaining).padStart(2,"0")}`;}
-function normalizationLabel(value:any){const db=Number(value?.loudnessNormalization?.appliedGainDb);return Number.isFinite(db)?` · AUTO ${db>=0?"+":""}${db.toFixed(1)} dB`:"";}
+function normalizationLabel(value:any){const db=Number(value?.loudnessNormalization?.appliedGainDb);return Number.isFinite(db)?`  -  AUTO ${db>=0?"+":""}${db.toFixed(1)} dB`:"";}
 
 function renderPerformanceSongChrome(){
-  $("#title").textContent=`${song.song.title} — ${song.song.artist}`;
-  $("#facts").textContent=`${song.selectedKey} • ${song.selectedBpm} BPM • ${song.timeSignature.numerator}/${song.timeSignature.denominator} • ${song.stems.length} stems`;
+  $("#title").textContent=`${song.song.title}  -  ${song.song.artist}`;
+  $("#facts").textContent=`${song.selectedKey}  -  ${song.selectedBpm} BPM  -  ${song.timeSignature.numerator}/${song.timeSignature.denominator}  -  ${song.stems.length} stems`;
   $(".setlist strong").textContent=song.song.title;
   $(".setlist small").textContent=song.arrangement?.name??"Original Song";
   ($<HTMLButtonElement>("#previousSong")).disabled=activeSongIndex===0;
   ($<HTMLButtonElement>("#nextSong")).disabled=activeSongIndex>=data.manifest.songs.length-1;
   const cueNext=$<HTMLButtonElement>("#cueNextSong"),hasNext=activeSongIndex<data.manifest.songs.length-1;
   cueNext.disabled=!hasNext;
-  cueNext.textContent=hasNext?"CUE NEXT · READY":"NO NEXT SONG";
+  cueNext.textContent=hasNext?"CUE NEXT  -  READY":"NO NEXT SONG";
   renderPerformanceSet();
 }
 
@@ -305,7 +306,7 @@ function renderSetStrip(strip:HTMLElement){
     const setSong=data.manifest.songs[index];
     if(setSong){
       const button=document.createElement("button");button.className=`set-song-card ${index===activeIndex?"active":""}`;
-      button.innerHTML=`<span>${String(index+1).padStart(2,"0")}</span><strong>${escapeHtml(setSong.song.title)}</strong><small>${escapeHtml(setSong.selectedKey)} · ${setSong.selectedBpm} BPM${escapeHtml(normalizationLabel(setSong))}</small>`;
+      button.innerHTML=`<span>${String(index+1).padStart(2,"0")}</span><strong>${escapeHtml(setSong.song.title)}</strong><small>${escapeHtml(setSong.selectedKey)}  -  ${setSong.selectedBpm} BPM${escapeHtml(normalizationLabel(setSong))}</small>`;
       button.title=index===activeIndex?`${setSong.song.title} is selected`:`Load ${setSong.song.title}`;
       button.onclick=async()=>{if(index===activeIndex)return;button.disabled=true;try{await selectPerformanceSong(index);}finally{button.disabled=false;}};
       strip.append(button);
@@ -315,7 +316,7 @@ function renderSetStrip(strip:HTMLElement){
     if(index<9){
       const loaded=Boolean(data.manifest.songs[index]&&data.manifest.songs[index+1]),transition=document.createElement("label");transition.className=`set-transition ${loaded?"loaded":"empty"}`;
       const selected=(data.manifest.transitions?.find((item:{fromSongIndex:number;type:SongTransitionType})=>item.fromSongIndex===index)?.type??"cue-next") as SongTransitionType,definition=transitionLabels[selected];
-      transition.innerHTML=`<span>TRANSITION</span><strong>${loaded?definition.label:"—"}</strong><small>${loaded?definition.detail:"EMPTY"}</small>`;
+      transition.innerHTML=`<span>TRANSITION</span><strong>${loaded?definition.label:" - "}</strong><small>${loaded?definition.detail:"EMPTY"}</small>`;
       if(loaded){const select=document.createElement("select");select.title=`Change transition from song ${index+1} to song ${index+2}`;for(const[value,option]of transitionOptions)select.add(new Option(option.label,value,false,value===selected));select.onchange=async()=>{select.disabled=true;try{const state=await window.playback.performance.command({action:"transition",fromSongIndex:index,type:select.value,continuePad:true});liveState=state;const plan=state.transitionPlan,dataTransitions=[...(data.manifest.transitions??[])].filter((item:any)=>item.fromSongIndex!==index);if(plan)dataTransitions.push(plan);data.manifest.transitions=dataTransitions;renderPerformanceSet();renderLiveState();}catch(error){showError(error);renderPerformanceSet();}};transition.append(select);}
       strip.append(transition);
     }
@@ -324,20 +325,20 @@ function renderSetStrip(strip:HTMLElement){
 
 function renderEditorSetBuilder() {
   const strip = $("#editorSetSongs"); strip.replaceChildren();
-  if (!prepState) { strip.innerHTML = `<div class="set-song-card empty"><span>—</span><strong>LOADING SET</strong><small>PREPARING LIBRARY</small></div>`; return; }
+  if (!prepState) { strip.innerHTML = `<div class="set-song-card empty"><span> - </span><strong>LOADING SET</strong><small>PREPARING LIBRARY</small></div>`; return; }
   const items = prepState.setlist.items as any[];
   if (!selectedSetItemId || !items.some((item) => item.itemId === selectedSetItemId)) selectedSetItemId = items.find((item, index) => data.manifest.songs[index]?.song.id === item.songId)?.itemId ?? items[0]?.itemId ?? null;
   $("#editorSetName").textContent = prepState.setlist.name;
   ($<HTMLInputElement>("#editorSetlistName")).value = prepState.setlist.name;
-  setSetlistStatus(`${items.length}/10 songs · changes save automatically`);
+  setSetlistStatus(`${items.length}/10 songs  -  changes save automatically`);
   for (let index = 0; index < 10; index += 1) {
     const item = items[index];
     if (item) {
       const card = document.createElement("article");
       const loaded=workspace?.originalFacts?.id===item.songId&&workspace?.source?.name===item.arrangement;
       card.className = `set-song-card editor-draft-card ${loaded ? "active" : ""} ${item.itemId === selectedSetItemId ? "selected" : ""}`;
-      card.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.key)} · ${item.bpm} BPM</small>${loadingSetItemId===item.itemId?`<i class="set-card-load-pie" style="--load-angle:${loadingProgress*3.6}deg"><b>${loadingProgress}%</b></i>`:""}`;
-      card.title = loaded ? `${item.title} is loaded for editing · drag to reorder · right-click for options` : `Load ${item.title} for editing · drag to reorder · right-click for options`;
+      card.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.key)}  -  ${item.bpm} BPM</small>${loadingSetItemId===item.itemId?`<i class="set-card-load-pie" style="--load-angle:${loadingProgress*3.6}deg"><b>${loadingProgress}%</b></i>`:""}`;
+      card.title = loaded ? `${item.title} is loaded for editing  -  drag to reorder  -  right-click for options` : `Load ${item.title} for editing  -  drag to reorder  -  right-click for options`;
       card.draggable=true;
       card.onclick = async () => { selectedSetItemId = item.itemId; renderEditorSetBuilder();await loadEditorItem(item.itemId); };
       card.oncontextmenu=(event)=>{event.preventDefault();event.stopPropagation();showSetCardContextMenu(event.clientX,event.clientY,item.itemId,item.title);};
@@ -348,15 +349,17 @@ function renderEditorSetBuilder() {
       card.ondragend=()=>{dragSetItemId=null;strip.querySelectorAll(".dragging,.drop-before,.drop-after").forEach(element=>element.classList.remove("dragging","drop-before","drop-after"));};
       strip.append(card);
     } else {
-      const add = document.createElement("button"); add.className = "set-song-card empty add-song-card";
-      add.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><strong>+ ADD SONG</strong><small>SEARCH LIBRARY</small>`;
-      add.onclick = () => showSongLibraryPicker(); strip.append(add);
+      const add = document.createElement("div"); add.className = "set-song-card empty add-song-card add-media-card";
+      add.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span><button type="button" data-add-song>+ ADD SONG<small>SEARCH LIBRARY</small></button><button type="button" data-add-media>+ AUDIO FILE<small>FILL AUDIO</small></button>`;
+      add.querySelector<HTMLButtonElement>("[data-add-song]")!.onclick = () => showSongLibraryPicker();
+      add.querySelector<HTMLButtonElement>("[data-add-media]")!.onclick = () => void addAudioMedia();
+      strip.append(add);
     }
     if (index < 9) {
       const loaded = Boolean(items[index] && items[index + 1]);
       const transition = document.createElement("label"); transition.className = `set-transition ${loaded ? "loaded" : "empty"}`;
       const selected = items[index]?.transitionToNext?.type ?? "cue-next", definition = transitionLabels[selected as SongTransitionType];
-      transition.innerHTML = `<span>TRANSITION</span><strong>${loaded ? definition.label : "—"}</strong><small>${loaded ? definition.detail : "EMPTY"}</small>`;
+      transition.innerHTML = `<span>TRANSITION</span><strong>${loaded ? definition.label : " - "}</strong><small>${loaded ? definition.detail : "EMPTY"}</small>`;
       if (loaded) { const select = document.createElement("select"); select.title = `Transition from song ${index + 1} to song ${index + 2}`; for (const [value, option] of transitionOptions) select.add(new Option(option.label, value, false, value === selected)); select.onchange = () => void prepCommand({ action:"transition", itemId:items[index].itemId, type:select.value as SongTransitionType, continuePad:true }); transition.append(select); }
       strip.append(transition);
     }
@@ -366,11 +369,27 @@ function renderEditorSetBuilder() {
   renderEditorLoadStatus();
 }
 
+async function addAudioMedia() {
+  try {
+    const result = await withGlobalLoading("ADDING AUDIO FILE", "Selecting and preparing a plain audio setlist item.", () => window.playback.prep.addAudioMedia());
+    prepState = result;
+    if (result.cancelled) return;
+    selectedSetItemId = result.addedItemId ?? prepState.setlist.items.at(-1)?.itemId ?? null;
+    renderEditorSetBuilder();
+    if (selectedSetItemId) {
+      setSetlistStatus("Audio file added. Loading waveform...", true);
+      await loadEditorItem(selectedSetItemId);
+    }
+  } catch (error) {
+    showError(error);
+  }
+}
+
 function renderSelectedSetSongVersions(items: any[]) {
   const panel = $("#editorSongVersions"), item = items.find((candidate) => candidate.itemId === selectedSetItemId);
   panel.hidden = !item;
   if (!item) return;
-  $("#selectedSetSong").textContent = `${item.title} · ${item.artist}`;
+  $("#selectedSetSong").textContent = `${item.title}  -  ${item.artist}`;
   $("#editorSelectedArrangementName").textContent = item.arrangement;
   const registryVersions=(prepState.versionRegistry?.[item.songId] as any[]|undefined)??[];
   const versions=(registryVersions.length?registryVersions:prepState.prepared as any[])
@@ -383,7 +402,7 @@ function renderSelectedSetSongVersions(items: any[]) {
   menu.replaceChildren();
   const activeVersionId=versions.find((version)=>version.id===item.id)?.id??versions.find((version)=>version.manifestPath===item.manifestPath&&version.songIndex===item.songIndex)?.id??versions.find((version)=>version.arrangement===item.arrangement&&version.key===item.key&&version.bpm===item.bpm)?.id;
   for (const version of versions) {
-    const label = `${version.arrangement} · ${version.key} · ${version.bpm} BPM`;
+    const label = `${version.arrangement}  -  ${version.key}  -  ${version.bpm} BPM`;
     select.add(new Option(label, version.id, false, version.id === activeVersionId));
     const optionButton = document.createElement("button");
     optionButton.type = "button";
@@ -425,16 +444,16 @@ function renderEditorSelectionState(items:any[]){
     empty.querySelector("strong")!.textContent=item?"SONG NOT LOADED":"NO SONG LOADED";
     empty.querySelector("span")!.textContent=item?"Click the selected song card to load it into Edit.":"Select + ADD SONG to load an Original Song or arrangement into this set card.";
     $("#title").textContent=item?item.title:"NO SONG LOADED";
-    $("#facts").textContent=item?`${item.key} • ${item.bpm} BPM • WAITING TO LOAD`:"Select a song card to begin editing.";
+    $("#facts").textContent=item?`${item.key}  -  ${item.bpm} BPM  -  WAITING TO LOAD`:"Select a song card to begin editing.";
     return;
   }
-  $("#title").textContent=`${workspace.originalFacts.title} — ${workspace.originalFacts.artist}`;
-  $("#facts").textContent=`${workspace.draft.selectedKey} • ${workspace.draft.selectedBpm} BPM • ${workspace.draft.timeSignature.numerator}/${workspace.draft.timeSignature.denominator} • ${workspace.waveforms.stems.length} stems`;
+  $("#title").textContent=`${workspace.originalFacts.title}  -  ${workspace.originalFacts.artist}`;
+  $("#facts").textContent=`${workspace.draft.selectedKey}  -  ${workspace.draft.selectedBpm} BPM  -  ${workspace.draft.timeSignature.numerator}/${workspace.draft.timeSignature.denominator}  -  ${workspace.waveforms.stems.length} stems`;
 }
 
 async function showSongLibraryPicker() {
   ($<HTMLInputElement>("#songLibrarySearch")).value = ""; ($<HTMLSelectElement>("#songLibrarySpeed")).value = "all";
-  const dialog=$<HTMLDialogElement>("#songLibraryPicker");dialog.showModal();$("#songLibraryResults").innerHTML="<p>Loading the prepared library…</p>";try{const status=await window.playback.prep.status();catalogState=status.lastScan??catalogState;renderSongLibraryResults();if(!catalogState&&!prepState?.prepared?.length)$("#songLibraryResults").innerHTML="<p>Open Settings → Library / Analysis and run Update Metadata + Library first.</p>";}catch(error){showError(error);$("#songLibraryResults").innerHTML="<p>The prepared library could not be loaded.</p>";}($<HTMLInputElement>("#songLibrarySearch")).focus();
+  const dialog=$<HTMLDialogElement>("#songLibraryPicker");dialog.showModal();$("#songLibraryResults").innerHTML="<p>Loading the prepared library...</p>";try{const status=await window.playback.prep.status();catalogState=status.lastScan??catalogState;renderSongLibraryResults();if(!catalogState&&!prepState?.prepared?.length)$("#songLibraryResults").innerHTML="<p>Open Settings > Library / Analysis and run Update Metadata + Library first.</p>";}catch(error){showError(error);$("#songLibraryResults").innerHTML="<p>The prepared library could not be loaded.</p>";}($<HTMLInputElement>("#songLibrarySearch")).focus();
 }
 
 function renderSongLibraryResults() {
@@ -442,19 +461,19 @@ function renderSongLibraryResults() {
   const originals = (prepState?.prepared ?? []).filter((choice: any) => choice.arrangement === "Original Song").filter((choice: any, index: number, all: any[]) => all.findIndex((other) => other.songId === choice.songId) === index);
   const preparedBySong=new Map(originals.map((choice:any)=>[choice.songId,choice])),masterRows=(catalogState?.songs??[]).map((song:any)=>({...song,prepared:preparedBySong.get(song.songId)})),choices=(masterRows.length?masterRows:originals.map((choice:any)=>({...choice,readiness:"ready",prepared:choice}))).filter((choice:any) => { const text = `${choice.title} ${choice.artist}`.toLowerCase(), bpm = Number(choice.bpm), speedMatch = speed === "all" || speed === "slow" && bpm <= 80 || speed === "medium" && bpm >= 81 && bpm <= 110 || speed === "fast" && bpm >= 111; return (!search || text.includes(search)) && speedMatch; });
   results.replaceChildren();
-  for (const choice of choices) { const row = document.createElement("button"),prepared=choice.prepared,reviewable=choice.readiness==="ready"||choice.readiness==="needs-review";row.className=`library-choice ${choice.readiness}`;row.innerHTML = `<span><strong>${escapeHtml(choice.title)}</strong><small>${escapeHtml(choice.artist)} · ORIGINAL SONG</small></span><b>${escapeHtml(choice.key||"KEY REVIEW")} · ${choice.bpm} BPM</b><i>${prepared||reviewable?"LOAD":"UNAVAILABLE"}</i>`;row.disabled=!prepared&&!reviewable;row.onclick = async () => { row.disabled = true;row.querySelector("i")!.textContent=prepared?"LOADING…":"PREPARING…";try{if(prepared){await prepCommand({ action: "add", choiceId: prepared.id });selectedSetItemId=prepState.setlist.items.at(-1)?.itemId??null;}else{const result=await withGlobalLoading("PREPARING SONG",`Preparing ${choice.title} for the editor.`,()=>window.playback.prep.review(choice.songId));prepState=result;selectedSetItemId=result.addedItemId??prepState.setlist.items.at(-1)?.itemId??null;}renderEditorSetBuilder();($<HTMLDialogElement>("#songLibraryPicker")).close();setSetlistStatus(`Loading ${choice.title} Original Song…`,true);await loadEditorItem(selectedSetItemId!);}catch(error){row.disabled=false;row.querySelector("i")!.textContent="TRY AGAIN";showError(error);}};results.append(row); }
+  for (const choice of choices) { const row = document.createElement("button"),prepared=choice.prepared,reviewable=choice.readiness==="ready"||choice.readiness==="needs-review";row.className=`library-choice ${choice.readiness}`;row.innerHTML = `<span><strong>${escapeHtml(choice.title)}</strong><small>${escapeHtml(choice.artist)}  -  ORIGINAL SONG</small></span><b>${escapeHtml(choice.key||"KEY REVIEW")}  -  ${choice.bpm} BPM</b><i>${prepared||reviewable?"LOAD":"UNAVAILABLE"}</i>`;row.disabled=!prepared&&!reviewable;row.onclick = async () => { row.disabled = true;row.querySelector("i")!.textContent=prepared?"LOADING...":"PREPARING...";try{if(prepared){await prepCommand({ action: "add", choiceId: prepared.id });selectedSetItemId=prepState.setlist.items.at(-1)?.itemId??null;}else{const result=await withGlobalLoading("PREPARING SONG",`Preparing ${choice.title} for the editor.`,()=>window.playback.prep.review(choice.songId));prepState=result;selectedSetItemId=result.addedItemId??prepState.setlist.items.at(-1)?.itemId??null;}renderEditorSetBuilder();($<HTMLDialogElement>("#songLibraryPicker")).close();setSetlistStatus(`Loading ${choice.title} Original Song...`,true);await loadEditorItem(selectedSetItemId!);}catch(error){row.disabled=false;row.querySelector("i")!.textContent="TRY AGAIN";showError(error);}};results.append(row); }
   if (!choices.length) results.innerHTML = `<p>No Original Songs match this name and speed.</p>`;
 }
 
 function setupDeviceSelectors() {
   const audio = $("#audioSelect") as HTMLSelectElement;
-  audio.add(new Option("Audio · System Default", ""));
+  audio.add(new Option("Audio  -  System Default", ""));
   for (const device of data.audio.devices) {
     const selected = data.audio.selectedDevice?.type === device.type && data.audio.selectedDevice?.name === device.name;
-    audio.add(new Option(`Audio · ${device.name} · ${device.type}`, JSON.stringify(device), false, selected));
+    audio.add(new Option(`Audio  -  ${device.name}  -  ${device.type}`, JSON.stringify(device), false, selected));
   }
   const outputCount=$<HTMLSelectElement>("#audioOutputCount");
-  const renderOutputCounts=(device:any)=>{const max=Math.max(2,Number(device?.maxOutputChannels??device?.outputChannels??data.audio.outputChannels??2)),selected=Math.min(max,Number(device?.outputChannels??data.audio.selectedDevice?.outputChannels??max));outputCount.replaceChildren();const choices=[...new Set([2,4,6,8,16,32,64,128,max].filter(value=>value<=max))].sort((a,b)=>a-b);for(const count of choices)outputCount.add(new Option(count===max?`${count} · ALL AVAILABLE`:String(count),String(count),false,count===selected));outputCount.disabled=!device;};
+  const renderOutputCounts=(device:any)=>{const max=Math.max(2,Number(device?.maxOutputChannels??device?.outputChannels??data.audio.outputChannels??2)),selected=Math.min(max,Number(device?.outputChannels??data.audio.selectedDevice?.outputChannels??max));outputCount.replaceChildren();const choices=[...new Set([2,4,6,8,16,32,64,128,max].filter(value=>value<=max))].sort((a,b)=>a-b);for(const count of choices)outputCount.add(new Option(count===max?`${count}  -  ALL AVAILABLE`:String(count),String(count),false,count===selected));outputCount.disabled=!device;};
   renderOutputCounts(data.audio.selectedDevice);
   const route = $("#routeStatus");
   setRouteStatus(data.audio.routingReady, data.audio.outputChannels);
@@ -470,12 +489,12 @@ function setupDeviceSelectors() {
     let lockButton=document.querySelector<HTMLButtonElement>("#routingMatrixLock");
     if(!lockButton){lockButton=document.createElement("button");lockButton.id="routingMatrixLock";lockButton.type="button";lockButton.className="settings-wide";matrix.before(lockButton);}
     const locked=data.audio.globalBusRoutingLocked!==false;
-    lockButton.textContent=locked?"🔒 MATRIX LOCKED · CLICK TO UNLOCK":"🔓 MATRIX UNLOCKED · CLICK TO LOCK";
+    lockButton.textContent=locked?"MATRIX LOCKED - CLICK TO UNLOCK":"MATRIX UNLOCKED - CLICK TO LOCK";
     lockButton.classList.toggle("active",locked);
     lockButton.onclick=async()=>{if(locked&&!confirm("Unlock the production output matrix? Routing changes affect every song."))return;lockButton!.disabled=true;try{const state=await window.playback.audio.setGlobalBusRoutingLock(!locked);data.audio={...data.audio,...state};$("#settingsStatus").textContent=state.globalBusRoutingLocked?"Output matrix locked.":"Output matrix unlocked. Routing can now be edited.";}catch(error){showError(error);}finally{lockButton!.disabled=false;renderOutputMatrix();}};
     const activeOutputs=Math.max(2,Number(data.audio.selectedDevice?.outputChannels??data.audio.outputChannels??2));
     const danteActive=/dante/i.test(`${data.audio.selectedDevice?.type??""} ${data.audio.selectedDevice?.name??""}`),stereo=activeOutputs===2;
-    $("#outputMatrixHeading").textContent=stereo?"Choose Left, Right, or Both for every track and live bus":danteActive?`Assign stems and live buses to Dante outputs 1–${activeOutputs}`:`Assign stems and live buses to device outputs 1–${activeOutputs}`;
+    $("#outputMatrixHeading").textContent=stereo?"Choose Left, Right, or Both for every track and live bus":danteActive?`Assign stems and live buses to Dante outputs 1-${activeOutputs}`:`Assign stems and live buses to device outputs 1-${activeOutputs}`;
     const fields:any[]=PLAYBACK_OUTPUTS.map(bus=>({label:bus.appBus,key:bus.key,value:data.audio.globalBusRouting[bus.key].output,width:data.audio.globalBusRouting[bus.key].channels}));
     const grid=document.createElement("div");grid.className="dante-routing-grid";grid.style.gridTemplateColumns=`minmax(240px, 1fr) repeat(${activeOutputs}, ${activeOutputs<=8?"minmax(48px, 72px)":"36px"})`;grid.style.width=activeOutputs<=8?"100%":"max-content";
     const makeRouting=()=>structuredClone(data.audio.globalBusRouting);
@@ -489,11 +508,11 @@ function setupDeviceSelectors() {
       if(mode)mode.onclick=async()=>{if(!stereo)return;const routing:any=makeRouting();let nextWidth:1|2,nextOutput:number;if(field.width===2){nextWidth=1;nextOutput=1;}else if(field.value===1){nextWidth=1;nextOutput=2;}else{nextWidth=2;nextOutput=1;}routing[field.key]={output:nextOutput,channels:nextWidth};grid.classList.add("busy");try{const state=await window.playback.audio.setGlobalBusRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=`${field.label} global output updated.`;}catch(error){showError(error);$("#settingsStatus").textContent="Output selection could not be saved.";}renderOutputMatrix();};
       for(let output=1;output<=activeOutputs;output++){
         const cell=document.createElement("button"),selected=output===field.value||field.width===2&&output===field.value+1;
-        cell.className=selected?output===field.value?"assigned start":"assigned linked":"";cell.textContent=selected?"✓":"";cell.title=locked?"Unlock the matrix to change routing":selected?`Click to remove ${field.label} from this output`:`Assign ${field.label} to output ${field.width===2?`${output}–${output+1}`:output}`;cell.disabled=locked||field.width===2&&output===activeOutputs;
+        cell.className=selected?output===field.value?"assigned start":"assigned linked":"";cell.textContent=selected?"x":"";cell.title=locked?"Unlock the matrix to change routing":selected?`Click to remove ${field.label} from this output`:`Assign ${field.label} to output ${field.width===2?`${output}-${output+1}`:output}`;cell.disabled=locked||field.width===2&&output===activeOutputs;
         cell.onclick=async()=>{
           const routing=makeRouting();
           setRoute(routing,field,selected?0:output);
-          grid.classList.add("busy");$("#settingsStatus").textContent=selected?`Removing ${field.label} from output ${field.value}…`:`Routing ${field.label} to output ${output}…`;
+          grid.classList.add("busy");$("#settingsStatus").textContent=selected?`Removing ${field.label} from output ${field.value}...`:`Routing ${field.label} to output ${output}...`;
           try{const state=await window.playback.audio.setGlobalBusRouting(routing);data.audio={...data.audio,...state};$("#settingsStatus").textContent=selected?`${field.label} is now globally unassigned.`:`${field.label} is now globally routed to output ${output}.`;}catch(error){showError(error);$("#settingsStatus").textContent="That routing selection could not be saved.";}renderOutputMatrix();
         };
         grid.append(cell);
@@ -503,7 +522,7 @@ function setupDeviceSelectors() {
   };renderOutputMatrix();
   const midi = $("#midiSelect") as HTMLSelectElement;
   midi.add(new Option("MIDI Disabled", ""));
-  for (const output of data.midi.outputs) midi.add(new Option(`MIDI · ${output}`, output, false, output === data.midi.selectedOutput));
+  for (const output of data.midi.outputs) midi.add(new Option(`MIDI  -  ${output}`, output, false, output === data.midi.selectedOutput));
   setMidiStatus(data.midi.enabled);
   midi.onchange = async () => {
     midi.disabled = true; $("#midiStatus").textContent = "MIDI ARMING";
@@ -531,7 +550,7 @@ function setupClickSoundSettings() {
 function setupRemoteControl() {
   const dialog = $("#remoteSettings") as HTMLDialogElement;
   let control: any = null;
-  const renderLibraryStatus=(state:any)=>{const scan=state?.lastScan??catalogState;$("#librarySyncState").textContent=(state?.sync??"idle").toUpperCase();$("#librarySyncState").className=state?.sync??"idle";$("#librarySyncDetail").textContent=state?.message??"Not running";$("#libraryAnalyzerState").textContent=state?.analyzer==="scanning"?"SCANNING":state?.analyzer==="waiting"?"WAITING":"IDLE";$("#libraryAnalyzerState").className=state?.analyzer??"idle";$("#libraryAnalyzerDetail").textContent=state?.analyzer==="scanning"?"Checking analyzer metadata now":state?.analyzer==="waiting"?`${scan?.counts?.["needs-analysis"]??0} song(s) need analyzer output`:"No analyzer task running";$("#libraryReadyCount").textContent=scan?String(scan.counts.ready):"—";$("#libraryNeedsCount").textContent=scan?String(scan.counts["needs-analysis"]):"—";$("#libraryMissingCount").textContent=scan?String(scan.counts["missing-folder"]):"—";$("#libraryLastScan").textContent=scan?new Date(scan.scannedAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"NEVER";$("#libraryLastDuration").textContent=state?.finishedAt?new Date(state.finishedAt).toLocaleString():"No completed scan";($<HTMLInputElement>("#libraryRootPath")).value=state?.libraryRoot??"";($<HTMLInputElement>("#libraryWorkbookPath")).value=state?.masterWorkbookPath??"";const issues=$("#libraryIssueList"),problemSongs=(scan?.songs??[]).filter((item:any)=>item.readiness!=="ready");issues.innerHTML=problemSongs.length?problemSongs.map((item:any)=>`<div class="library-issue ${item.readiness}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.artist??"")} · ${escapeHtml(item.readiness.replaceAll("-"," ").toUpperCase())}</small></span><p>${escapeHtml(item.issues.join(" · ")||"Needs attention")}</p></div>`).join(""):`<p>${scan?"Every scanned song has complete analyzer metadata.":"Run Sync + Check Analyzer to see song readiness."}</p>`;};
+  const renderLibraryStatus=(state:any)=>{const scan=state?.lastScan??catalogState;$("#librarySyncState").textContent=(state?.sync??"idle").toUpperCase();$("#librarySyncState").className=state?.sync??"idle";$("#librarySyncDetail").textContent=state?.message??"Not running";$("#libraryAnalyzerState").textContent=state?.analyzer==="scanning"?"SCANNING":state?.analyzer==="waiting"?"WAITING":"IDLE";$("#libraryAnalyzerState").className=state?.analyzer??"idle";$("#libraryAnalyzerDetail").textContent=state?.analyzer==="scanning"?"Checking analyzer metadata now":state?.analyzer==="waiting"?`${scan?.counts?.["needs-analysis"]??0} song(s) need analyzer output`:"No analyzer task running";$("#libraryReadyCount").textContent=scan?String(scan.counts.ready):" - ";$("#libraryNeedsCount").textContent=scan?String(scan.counts["needs-analysis"]):" - ";$("#libraryMissingCount").textContent=scan?String(scan.counts["missing-folder"]):" - ";$("#libraryLastScan").textContent=scan?new Date(scan.scannedAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"NEVER";$("#libraryLastDuration").textContent=state?.finishedAt?new Date(state.finishedAt).toLocaleString():"No completed scan";($<HTMLInputElement>("#libraryRootPath")).value=state?.libraryRoot??"";($<HTMLInputElement>("#libraryWorkbookPath")).value=state?.masterWorkbookPath??"";const issues=$("#libraryIssueList"),problemSongs=(scan?.songs??[]).filter((item:any)=>item.readiness!=="ready");issues.innerHTML=problemSongs.length?problemSongs.map((item:any)=>`<div class="library-issue ${item.readiness}"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.artist??"")}  -  ${escapeHtml(item.readiness.replaceAll("-"," ").toUpperCase())}</small></span><p>${escapeHtml(item.issues.join("  -  ")||"Needs attention")}</p></div>`).join(""):`<p>${scan?"Every scanned song has complete analyzer metadata.":"Run Sync + Check Analyzer to see song readiness."}</p>`;};
   const showPage = (name: string) => {
     for (const button of dialog.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")) button.classList.toggle("active", button.dataset.settingsTab === name);
     for (const page of dialog.querySelectorAll<HTMLElement>("[data-settings-page]")) page.classList.toggle("active", page.dataset.settingsPage === name);
@@ -539,13 +558,13 @@ function setupRemoteControl() {
   const renderSettingsSummary = () => {
     $("#settingsIemStatus").textContent = data.audio.iemReady ? "PB_IEM OUTPUT 3 READY" : `${data.audio.outputChannels ?? 0} OUTPUT DEVICE`;
     $("#settingsMidiEvents").textContent = `${song.arrangement?.proPresenterMidi?.length ?? song.control?.proPresenterMidi?.length ?? 0} PREPARED`;
-    $("#settingsEngineStatus").textContent = liveState.fault ? `FAULT · ${liveState.fault}` : liveState.readiness?.ready ? "ARMED" : "NOT READY";
-    $("#settingsSetStatus").textContent = `${data.manifest.name} · ${liveState.readiness?.status ?? "Checking"}`;
+    $("#settingsEngineStatus").textContent = liveState.fault ? `FAULT  -  ${liveState.fault}` : liveState.readiness?.ready ? "ARMED" : "NOT READY";
+    $("#settingsSetStatus").textContent = `${data.manifest.name}  -  ${liveState.readiness?.status ?? "Checking"}`;
   };
   const renderHttpConnection = async (state: any) => {
     const url = state?.urls?.[0] ?? "";
     ($<HTMLInputElement>("#remoteUrl")).value = url || "Remote adapter is unavailable";
-    $("#remoteHttp").textContent = state?.address ? `Port ${state.address.httpPort} · token protected · ${state.lanEnabled ? "LAN ready" : "this computer only"}` : "Unavailable";
+    $("#remoteHttp").textContent = state?.address ? `Port ${state.address.httpPort}  -  token protected  -  ${state.lanEnabled ? "LAN ready" : "this computer only"}` : "Unavailable";
     $("#toggleLanRemote").textContent = state?.lanEnabled ? "DISABLE LAN" : "ENABLE LAN";
     $("#toggleLanRemote").classList.toggle("active", state?.lanEnabled === true);
     const card = $("#httpQrCard"), canvas = $<HTMLCanvasElement>("#httpQrCanvas"), context = canvas.getContext("2d")!;
@@ -576,7 +595,7 @@ function setupRemoteControl() {
     }
     const payload = createOscConnectionUri({ host: address.value, port: state.address.oscPort, token: state.token });
     ($("#oscQrPayload") as HTMLInputElement).value = payload;
-    $("#oscQrStatus").textContent = `${address.value}:${state.address.oscPort} · token is sent as the first OSC argument`;
+    $("#oscQrStatus").textContent = `${address.value}:${state.address.oscPort}  -  token is sent as the first OSC argument`;
     await QRCode.toCanvas(canvas, payload, { width: 210, margin: 1, color: { dark: "#071117", light: "#f4fbff" }, errorCorrectionLevel: "M" });
   };
   $("#remoteControl").onclick = async () => {
@@ -584,36 +603,36 @@ function setupRemoteControl() {
     if (!dialog.open) dialog.showModal();
     try{renderLibraryStatus(await window.playback.prep.status());}catch{}
     try{const settings=await window.playback.transitions.get();($<HTMLInputElement>("#transitionOverlapSeconds")).value=String(settings.overlapSeconds);($<HTMLInputElement>("#transitionCrossfadeSeconds")).value=String(settings.crossfadeSeconds);}catch{}
-    try { control = await window.playback.control.get(); $("#remoteStatus").textContent = control.address ? control.lanEnabled ? "HTTP REMOTE READY ON LAN" : "HTTP REMOTE READY · THIS COMPUTER ONLY" : "REMOTE ADAPTER FAULT"; $("#remoteOsc").textContent = control.oscEnabled && control.address?.oscPort ? `Port ${control.address.oscPort}${control.lanEnabled ? " · token first argument" : " · localhost"}` : "Disabled"; $("#toggleOsc").textContent = control.oscEnabled ? "OSC ON" : "OSC OFF"; $("#toggleOsc").classList.toggle("active", control.oscEnabled);const input=$("#midiInputDevice") as HTMLSelectElement;input.replaceChildren(new Option("MIDI Input Disabled",""),...control.midiInput.devices.map((name:string)=>new Option(name,name,false,name===control.midiInput.selected)));($("#footControllerProfile") as HTMLSelectElement).value=control.midiInput.profile;$("#midiInputStatus").textContent=control.midiInput.enabled?`ARMED · ${control.midiInput.selected}`:"MIDI input is disabled.";const gldOutput=$("#gldMidiOutput") as HTMLSelectElement;gldOutput.replaceChildren(new Option("GLD MIDI Output Disabled",""),...control.gld.devices.map((name:string)=>new Option(name,name,false,name===control.gld.midiOutputName)));($("#gldChannel") as HTMLInputElement).value=String(control.gld.midiChannel);renderSettingsSummary();await renderHttpConnection(control).catch(()=>{$("#httpQrStatus").textContent="Remote link is ready, but the QR code could not be drawn.";});await renderOscConnection(control).catch(()=>{$("#oscQrStatus").textContent="OSC is ready, but the QR code could not be drawn.";}); } catch (error) { showError(error); }
+    try { control = await window.playback.control.get(); $("#remoteStatus").textContent = control.address ? control.lanEnabled ? "HTTP REMOTE READY ON LAN" : "HTTP REMOTE READY  -  THIS COMPUTER ONLY" : "REMOTE ADAPTER FAULT"; $("#remoteOsc").textContent = control.oscEnabled && control.address?.oscPort ? `Port ${control.address.oscPort}${control.lanEnabled ? "  -  token first argument" : "  -  localhost"}` : "Disabled"; $("#toggleOsc").textContent = control.oscEnabled ? "OSC ON" : "OSC OFF"; $("#toggleOsc").classList.toggle("active", control.oscEnabled);const input=$("#midiInputDevice") as HTMLSelectElement;input.replaceChildren(new Option("MIDI Input Disabled",""),...control.midiInput.devices.map((name:string)=>new Option(name,name,false,name===control.midiInput.selected)));($("#footControllerProfile") as HTMLSelectElement).value=control.midiInput.profile;$("#midiInputStatus").textContent=control.midiInput.enabled?`ARMED  -  ${control.midiInput.selected}`:"MIDI input is disabled.";const gldOutput=$("#gldMidiOutput") as HTMLSelectElement;gldOutput.replaceChildren(new Option("GLD MIDI Output Disabled",""),...control.gld.devices.map((name:string)=>new Option(name,name,false,name===control.gld.midiOutputName)));($("#gldChannel") as HTMLInputElement).value=String(control.gld.midiChannel);renderSettingsSummary();await renderHttpConnection(control).catch(()=>{$("#httpQrStatus").textContent="Remote link is ready, but the QR code could not be drawn.";});await renderOscConnection(control).catch(()=>{$("#oscQrStatus").textContent="OSC is ready, but the QR code could not be drawn.";}); } catch (error) { showError(error); }
   };
   for (const button of dialog.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")) button.onclick = () => showPage(button.dataset.settingsTab!);
   $("#closeRemoteSettings").onclick = () => dialog.close();
-  $("#saveTransitionSettings").onclick=async()=>{const button=$<HTMLButtonElement>("#saveTransitionSettings");button.disabled=true;$("#transitionSettingsStatus").textContent="Saving transition presets…";try{const settings=await window.playback.transitions.set({overlapSeconds:Number(($<HTMLInputElement>("#transitionOverlapSeconds")).value),crossfadeSeconds:Number(($<HTMLInputElement>("#transitionCrossfadeSeconds")).value)});($<HTMLInputElement>("#transitionOverlapSeconds")).value=String(settings.overlapSeconds);($<HTMLInputElement>("#transitionCrossfadeSeconds")).value=String(settings.crossfadeSeconds);$("#transitionSettingsStatus").textContent=`Saved · Overlap ${settings.overlapSeconds.toFixed(1)} seconds · Crossfade ${settings.crossfadeSeconds.toFixed(1)} seconds. These values will be locked into the next Confirmed Set.`;$("#settingsStatus").textContent="Transition timing saved.";}catch(error){showError(error);$("#transitionSettingsStatus").textContent="Transition timing could not be saved.";}finally{button.disabled=false;}};
+  $("#saveTransitionSettings").onclick=async()=>{const button=$<HTMLButtonElement>("#saveTransitionSettings");button.disabled=true;$("#transitionSettingsStatus").textContent="Saving transition presets...";try{const settings=await window.playback.transitions.set({overlapSeconds:Number(($<HTMLInputElement>("#transitionOverlapSeconds")).value),crossfadeSeconds:Number(($<HTMLInputElement>("#transitionCrossfadeSeconds")).value)});($<HTMLInputElement>("#transitionOverlapSeconds")).value=String(settings.overlapSeconds);($<HTMLInputElement>("#transitionCrossfadeSeconds")).value=String(settings.crossfadeSeconds);$("#transitionSettingsStatus").textContent=`Saved  -  Overlap ${settings.overlapSeconds.toFixed(1)} seconds  -  Crossfade ${settings.crossfadeSeconds.toFixed(1)} seconds. These values will be locked into the next Confirmed Set.`;$("#settingsStatus").textContent="Transition timing saved.";}catch(error){showError(error);$("#transitionSettingsStatus").textContent="Transition timing could not be saved.";}finally{button.disabled=false;}};
   $("#openReadinessDetails").onclick = () => ($<HTMLDialogElement>("#performanceReadiness")).showModal();
   $("#runAudioCheck").onclick = () => {
     const checks = (liveState.readiness?.checks ?? []).filter((item: any) => ["engine", "routing", "assets"].includes(item.id));
     $("#audioCheckReport").innerHTML = checks.map((item: any) => `<div class="diagnostic-line ${item.level}"><b>${escapeHtml(item.label)}</b><span>${escapeHtml(item.detail)}</span></div>`).join("") || "No audio readiness information is available.";
     $("#settingsStatus").textContent = checks.some((item: any) => item.level === "blocked") ? "Audio error check found a blocking problem." : checks.some((item: any) => item.level === "warning") ? "Audio is available with warnings." : "Audio device and routing checks passed.";
   };
-  $("#refreshAudioSettings").onclick = async () => { const button=$<HTMLButtonElement>("#refreshAudioSettings");button.disabled=true;$("#settingsStatus").textContent="Scanning Windows Audio, DirectSound, and ASIO devices…";try{const state=await window.playback.audio.refresh();data.audio={...data.audio,...state};const select=$<HTMLSelectElement>("#audioSelect");select.replaceChildren(new Option("Audio · System Default",""));for(const device of state.devices){const selected=state.selectedDevice?.type===device.type&&state.selectedDevice?.name===device.name;select.add(new Option(`Audio · ${device.name} · ${device.type}`,JSON.stringify(device),false,selected));}const route=$("#routeStatus");route.className=`route-status ${state.routingReady?"ready":"fallback"}`;route.textContent=state.routingReady?"6 OUT READY":`${state.outputChannels} OUT FALLBACK`;renderSettingsSummary();$("#settingsStatus").textContent=state.fellBack?"The selected device disconnected. Playback safely fell back to the system default.":`Audio scan complete · ${state.devices.length} devices found across all installed backends.`;}catch(error){showError(error);$("#settingsStatus").textContent="Audio device scan failed.";}finally{button.disabled=false;}};
+  $("#refreshAudioSettings").onclick = async () => { const button=$<HTMLButtonElement>("#refreshAudioSettings");button.disabled=true;$("#settingsStatus").textContent="Scanning Windows Audio, DirectSound, and ASIO devices...";try{const state=await window.playback.audio.refresh();data.audio={...data.audio,...state};const select=$<HTMLSelectElement>("#audioSelect");select.replaceChildren(new Option("Audio  -  System Default",""));for(const device of state.devices){const selected=state.selectedDevice?.type===device.type&&state.selectedDevice?.name===device.name;select.add(new Option(`Audio  -  ${device.name}  -  ${device.type}`,JSON.stringify(device),false,selected));}const route=$("#routeStatus");route.className=`route-status ${state.routingReady?"ready":"fallback"}`;route.textContent=state.routingReady?"6 OUT READY":`${state.outputChannels} OUT FALLBACK`;renderSettingsSummary();$("#settingsStatus").textContent=state.fellBack?"The selected device disconnected. Playback safely fell back to the system default.":`Audio scan complete  -  ${state.devices.length} devices found across all installed backends.`;}catch(error){showError(error);$("#settingsStatus").textContent="Audio device scan failed.";}finally{button.disabled=false;}};
   $("#runSystemCheck").onclick = () => {
     const checks = liveState.readiness?.checks ?? [], report = $("#systemCheckReport");
     report.innerHTML = checks.map((item: any) => `<div class="diagnostic-line ${item.level}"><b>${escapeHtml(item.label)}</b><span>${escapeHtml(item.detail)}</span></div>`).join("") || "No readiness checks are available.";
     const blocked = checks.filter((item: any) => item.level === "blocked").length, warnings = checks.filter((item: any) => item.level === "warning").length;
-    $("#settingsStatus").textContent = blocked ? `System check failed · ${blocked} blocking error${blocked === 1 ? "" : "s"}.` : warnings ? `System check passed with ${warnings} warning${warnings === 1 ? "" : "s"}.` : "System check passed · performance ready.";
+    $("#settingsStatus").textContent = blocked ? `System check failed  -  ${blocked} blocking error${blocked === 1 ? "" : "s"}.` : warnings ? `System check passed with ${warnings} warning${warnings === 1 ? "" : "s"}.` : "System check passed  -  performance ready.";
   };
-  $("#settingsUpdateLibrary").onclick = async () => { const button = $<HTMLButtonElement>("#settingsUpdateLibrary"); button.disabled = true; $("#settingsSyncStatus").textContent = "Reading metadata and updating changed songs…"; try { const result = await window.playback.prep.update(); catalogState = result; prepState = result; if (editMode) renderEditorSetBuilder(); renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Update complete · ${result.updated} rebuilt · ${result.unchanged} unchanged · ${result.prepared.length} versions available${result.failures.length ? ` · ${result.failures.length} need attention` : ""}.`; } catch (error) { renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Update failed · ${error instanceof Error ? error.message : String(error)}`; } finally { button.disabled = false; } };
+  $("#settingsUpdateLibrary").onclick = async () => { const button = $<HTMLButtonElement>("#settingsUpdateLibrary"); button.disabled = true; $("#settingsSyncStatus").textContent = "Reading metadata and updating changed songs..."; try { const result = await window.playback.prep.update(); catalogState = result; prepState = result; if (editMode) renderEditorSetBuilder(); renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Update complete  -  ${result.updated} rebuilt  -  ${result.unchanged} unchanged  -  ${result.prepared.length} versions available${result.failures.length ? `  -  ${result.failures.length} need attention` : ""}.`; } catch (error) { renderLibraryStatus(await window.playback.prep.status()); $("#settingsSyncStatus").textContent = `Update failed  -  ${error instanceof Error ? error.message : String(error)}`; } finally { button.disabled = false; } };
   window.playback.prep.onStatus((state:any)=>renderLibraryStatus(state));
   $("#copyRemoteUrl").onclick = async () => { const input = $("#remoteUrl") as HTMLInputElement; try { await navigator.clipboard.writeText(input.value); $("#remoteStatus").textContent = "REMOTE LINK COPIED"; } catch { input.select(); document.execCommand("copy"); $("#remoteStatus").textContent = "REMOTE LINK COPIED"; } };
   $("#openHttpRemote").onclick = () => { const url=$<HTMLInputElement>("#remoteUrl").value;if(url.startsWith("http://")||url.startsWith("https://"))window.open(url,"_blank","noopener"); };
   $("#copyOscProfile").onclick = async () => { const input = $("#oscQrPayload") as HTMLInputElement;if(!input.value)return;try { await navigator.clipboard.writeText(input.value); $("#oscQrStatus").textContent = "PRIVATE OSC PROFILE COPIED"; } catch { input.select(); document.execCommand("copy"); $("#oscQrStatus").textContent = "PRIVATE OSC PROFILE COPIED"; } };
   $("#oscQrAddress").onchange = () => void renderOscConnection(control);
-  $("#toggleLanRemote").onclick = async () => { if (!control) return; $("#remoteStatus").textContent = "RESTARTING CONTROL ADAPTER…"; await window.playback.control.setSettings({ lanEnabled: !control.lanEnabled });control=await window.playback.control.get();await Promise.all([renderHttpConnection(control),renderOscConnection(control)]);$("#remoteStatus").textContent=control.lanEnabled?"HTTP REMOTE READY ON LAN":"HTTP REMOTE READY · THIS COMPUTER ONLY"; };
-  $("#toggleOsc").onclick = async () => { if (!control) return; $("#remoteStatus").textContent = "RESTARTING CONTROL ADAPTER…"; await window.playback.control.setSettings({ oscEnabled: !control.oscEnabled });control=await window.playback.control.get();await renderOscConnection(control);$("#toggleOsc").textContent=control.oscEnabled?"OSC ON":"OSC OFF";$("#toggleOsc").classList.toggle("active",control.oscEnabled);$("#remoteOsc").textContent=control.oscEnabled&&control.address?.oscPort?`Port ${control.address.oscPort}${control.lanEnabled?" · token first argument":" · localhost"}`:"Disabled"; };
-  $("#applyMidiInput").onclick = async () => {const button=$("#applyMidiInput") as HTMLButtonElement;button.disabled=true;$("#midiInputStatus").textContent="ARMING MIDI INPUT…";try{const result=await window.playback.control.setMidiInput({name:($("#midiInputDevice") as HTMLSelectElement).value||null,profile:($("#footControllerProfile") as HTMLSelectElement).value});$("#midiInputStatus").textContent=result.enabled?`ARMED · ${result.selected}`:"MIDI input is disabled.";}catch(error){showError(error);$("#midiInputStatus").textContent="MIDI INPUT FAULT";}finally{button.disabled=false;}};
-  window.playback.control.onMidiInput((event:any)=>{$("#midiInputStatus").textContent=`RECEIVED · ${event.status.toString(16).toUpperCase()} · ${event.data1} · ${event.data2}`;});
-  $("#previewGld").onclick=async()=>{try{const preview=await window.playback.control.gldPreview({midiChannel:Number(($("#gldChannel") as HTMLInputElement).value),intent:{type:"mute",strip:{kind:"input",number:1},muted:true}});$("#gldHex").textContent=preview.hex;$("#gldStatus").textContent="PREVIEW ONLY · writes remain locked";}catch(error){showError(error);}};
-  $("#testGld").onclick=async()=>{const button=$("#testGld") as HTMLButtonElement;button.disabled=true;$("#gldStatus").textContent="OPENING MIDI DEVICE · sending no data…";try{const result=await window.playback.control.gldTest({midiOutputName:($("#gldMidiOutput") as HTMLSelectElement).value,midiChannel:Number(($("#gldChannel") as HTMLInputElement).value)});$("#gldStatus").textContent=result.status==="connection-tested"?`READY · ${result.selected} · CH ${result.midiChannel} · writes locked`:"MIDI DEVICE NOT READY";}catch(error){$("#gldStatus").textContent="MIDI DEVICE TEST FAILED · no data sent";showError(error);}finally{button.disabled=false;}};
+  $("#toggleLanRemote").onclick = async () => { if (!control) return; $("#remoteStatus").textContent = "RESTARTING CONTROL ADAPTER..."; await window.playback.control.setSettings({ lanEnabled: !control.lanEnabled });control=await window.playback.control.get();await Promise.all([renderHttpConnection(control),renderOscConnection(control)]);$("#remoteStatus").textContent=control.lanEnabled?"HTTP REMOTE READY ON LAN":"HTTP REMOTE READY  -  THIS COMPUTER ONLY"; };
+  $("#toggleOsc").onclick = async () => { if (!control) return; $("#remoteStatus").textContent = "RESTARTING CONTROL ADAPTER..."; await window.playback.control.setSettings({ oscEnabled: !control.oscEnabled });control=await window.playback.control.get();await renderOscConnection(control);$("#toggleOsc").textContent=control.oscEnabled?"OSC ON":"OSC OFF";$("#toggleOsc").classList.toggle("active",control.oscEnabled);$("#remoteOsc").textContent=control.oscEnabled&&control.address?.oscPort?`Port ${control.address.oscPort}${control.lanEnabled?"  -  token first argument":"  -  localhost"}`:"Disabled"; };
+  $("#applyMidiInput").onclick = async () => {const button=$("#applyMidiInput") as HTMLButtonElement;button.disabled=true;$("#midiInputStatus").textContent="ARMING MIDI INPUT...";try{const result=await window.playback.control.setMidiInput({name:($("#midiInputDevice") as HTMLSelectElement).value||null,profile:($("#footControllerProfile") as HTMLSelectElement).value});$("#midiInputStatus").textContent=result.enabled?`ARMED  -  ${result.selected}`:"MIDI input is disabled.";}catch(error){showError(error);$("#midiInputStatus").textContent="MIDI INPUT FAULT";}finally{button.disabled=false;}};
+  window.playback.control.onMidiInput((event:any)=>{$("#midiInputStatus").textContent=`RECEIVED  -  ${event.status.toString(16).toUpperCase()}  -  ${event.data1}  -  ${event.data2}`;});
+  $("#previewGld").onclick=async()=>{try{const preview=await window.playback.control.gldPreview({midiChannel:Number(($("#gldChannel") as HTMLInputElement).value),intent:{type:"mute",strip:{kind:"input",number:1},muted:true}});$("#gldHex").textContent=preview.hex;$("#gldStatus").textContent="PREVIEW ONLY  -  writes remain locked";}catch(error){showError(error);}};
+  $("#testGld").onclick=async()=>{const button=$("#testGld") as HTMLButtonElement;button.disabled=true;$("#gldStatus").textContent="OPENING MIDI DEVICE  -  sending no data...";try{const result=await window.playback.control.gldTest({midiOutputName:($("#gldMidiOutput") as HTMLSelectElement).value,midiChannel:Number(($("#gldChannel") as HTMLInputElement).value)});$("#gldStatus").textContent=result.status==="connection-tested"?`READY  -  ${result.selected}  -  CH ${result.midiChannel}  -  writes locked`:"MIDI DEVICE NOT READY";}catch(error){$("#gldStatus").textContent="MIDI DEVICE TEST FAILED  -  no data sent";showError(error);}finally{button.disabled=false;}};
 }
 
 function setupReaperImport() {
@@ -641,8 +660,8 @@ function setupReaperImport() {
       preview = await window.playback.arrangements.previewReaper(); if (!preview) { setImportStatus("idle","CANCELLED","No Reaper project was selected.",0); dialog.close(); return; }
       setImportStatus("working","READING RPP","Parsing regions, cues, tempo, stems, and Slides MIDI.",45);
       const a = preview.arrangement;
-      $("#importSummary").textContent = `${a.name} · ${a.selectedKey ?? "Key unknown"} · ${a.selectedBpm} BPM · ${a.timeSignature.numerator}/${a.timeSignature.denominator} · ${a.regions.length} regions · ${a.proPresenterMidi.length} Slides MIDI events`;
-      $("#importDifferences").innerHTML = preview.differences.length ? `<h3>Preview Differences</h3><ul>${preview.differences.map((item: any) => `<li>${escapeHtml(item.field)}: ${escapeHtml(JSON.stringify(item.original))} → ${escapeHtml(JSON.stringify(item.arrangement))}</li>`).join("")}</ul>` : "<p>No structural differences from Original Song.</p>";
+      $("#importSummary").textContent = `${a.name}  -  ${a.selectedKey ?? "Key unknown"}  -  ${a.selectedBpm} BPM  -  ${a.timeSignature.numerator}/${a.timeSignature.denominator}  -  ${a.regions.length} regions  -  ${a.proPresenterMidi.length} Slides MIDI events`;
+      $("#importDifferences").innerHTML = preview.differences.length ? `<h3>Preview Differences</h3><ul>${preview.differences.map((item: any) => `<li>${escapeHtml(item.field)}: ${escapeHtml(JSON.stringify(item.original))} > ${escapeHtml(JSON.stringify(item.arrangement))}</li>`).join("")}</ul>` : "<p>No structural differences from Original Song.</p>";
       $("#importWarning").textContent = "Nothing is written until you choose an import action. Original Song remains unchanged.";
       setImportStatus("ready","PREVIEW READY","Review the changes, then choose how to import this arrangement.",100);
       setImportButtons(false,true);
@@ -655,7 +674,7 @@ function setupReaperImport() {
     const buttons=[...dialog.querySelectorAll<HTMLButtonElement>("[data-action]")],originalText=button.textContent;
     buttons.forEach(item=>item.disabled=true);
     setImportStatus("working","IMPORTING","Rendering stems, building cues, copying pad/click assets, and writing the arrangement.",35);
-    if(action!=="cancel")button.textContent="PREPARING PLAYABLE ARRANGEMENT…";
+    if(action!=="cancel")button.textContent="PREPARING PLAYABLE ARRANGEMENT...";
     try {
       const result = await window.playback.arrangements.commitReaper(action as "new" | "replace" | "cancel");
       dialog.close();
@@ -698,6 +717,7 @@ function setupPerformance() {
   window.playback.performance.onMeters(updateMixerMeters);
   window.playback.onTransport((state) => {
     currentPosition = state.positionSeconds;
+    nativeTransportPlaying = state.state === "playing";
     if (editMode && loopAuditionRegionId && workspace) {
       const loopSection = workspace.draft.sections.find((section: any) => section.id === loopAuditionRegionId);
       if (loopSection && state.positionSeconds >= loopSection.sourceEndSeconds - 0.01) window.playback.command("seek", loopSection.sourceStartSeconds);
@@ -705,10 +725,17 @@ function setupPerformance() {
     renderTransportPosition();
   });
   addEventListener("keydown", (event) => {
-    if (editMode || prepModeActive || event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
-    const action = keyboardAction(event.key); if (!action) return; event.preventDefault();
-    if (action === "play-pause") void liveCommand({ action: liveState.playing ? "pause" : "play" });
-    else if (action === "panic") { if (!liveState.panicActive) void liveCommand({ action: "panic" }); }
+    if (event.repeat || isTextEntryTarget(event.target)) return;
+    const action = keyboardAction(event.key) ?? keyboardAction(event.code); if (!action) return;
+    if (action === "play-pause") {
+      event.preventDefault();
+      if (editMode) window.playback.command(nativeTransportPlaying ? "pause" : "play");
+      else if (!prepModeActive) void liveCommand({ action: liveState.playing ? "pause" : "play" });
+      return;
+    }
+    if (editMode || prepModeActive) return;
+    event.preventDefault();
+    if (action === "panic") { if (!liveState.panicActive) void liveCommand({ action: "panic" }); }
     else if (action === "previous-section") navigateSection(-1);
     else if (action === "next-section") navigateSection(1);
     else if (action === "loop") void liveCommand({ action: "loop" });
@@ -716,11 +743,16 @@ function setupPerformance() {
   });
 }
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target.isContentEditable;
+}
+
 function setupMixerResize(){const stored=Number(localStorage.getItem("playback.performance.mixerHeight")),initial=Number.isFinite(stored)&&stored>=180?stored:innerWidth>=1600?310:270;document.body.style.setProperty("--performance-mixer-height",`${initial}px`);const handle=$("#mixerResizeHandle");let originY=0,originHeight=initial;handle.onpointerdown=(event:PointerEvent)=>{if(document.body.classList.contains("mixer-collapsed"))return;originY=event.clientY;originHeight=$("#performanceMixer").getBoundingClientRect().height;handle.setPointerCapture(event.pointerId);document.body.classList.add("mixer-resizing");};handle.onpointermove=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;const maximum=Math.min(520,innerHeight-330),height=Math.max(180,Math.min(maximum,originHeight+originY-event.clientY));document.body.style.setProperty("--performance-mixer-height",`${Math.round(height)}px`);};handle.onpointerup=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;handle.releasePointerCapture(event.pointerId);document.body.classList.remove("mixer-resizing");localStorage.setItem("playback.performance.mixerHeight",String(Math.round($("#performanceMixer").getBoundingClientRect().height)));};}
 
 function setupEditorSummaryMixerResize(){document.body.style.setProperty("--editor-summary-mixer-height",`${summaryMixerHeight}px`);}
 function bindEditorSummaryMixerResize(){const handle=document.querySelector<HTMLElement>("#summaryMixerResizeHandle");if(!handle)return;let originY=0,originHeight=summaryMixerHeight;handle.onpointerdown=(event:PointerEvent)=>{originY=event.clientY;originHeight=$("#summaryStemMixer").getBoundingClientRect().height;handle.setPointerCapture(event.pointerId);document.body.classList.add("mixer-resizing");};handle.onpointermove=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;const height=Math.max(150,Math.min(380,originHeight+originY-event.clientY));summaryMixerHeight=Math.round(height);document.body.style.setProperty("--editor-summary-mixer-height",`${summaryMixerHeight}px`);};handle.onpointerup=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;handle.releasePointerCapture(event.pointerId);document.body.classList.remove("mixer-resizing");localStorage.setItem("playback.editor.summaryMixerHeight",String(summaryMixerHeight));};}
-function renderEditorPanelCollapse(){const grid=document.querySelector<HTMLElement>(".editor-grid");if(!grid)return;grid.classList.toggle("arrangement-order-collapsed",arrangementOrderCollapsed);grid.classList.toggle("selected-region-collapsed",selectedRegionCollapsed);$("#toggleRegionBrowser").textContent=arrangementOrderCollapsed?"ORDER ›":"‹ ORDER";$("#toggleRegionBrowser").setAttribute("aria-expanded",String(!arrangementOrderCollapsed));$("#toggleEditorInspector").textContent=selectedRegionCollapsed?"‹ REGION":"REGION ›";$("#toggleEditorInspector").setAttribute("aria-expanded",String(!selectedRegionCollapsed));}
+function renderEditorPanelCollapse(){const grid=document.querySelector<HTMLElement>(".editor-grid");if(!grid)return;grid.classList.toggle("arrangement-order-collapsed",arrangementOrderCollapsed);grid.classList.toggle("selected-region-collapsed",selectedRegionCollapsed);$("#toggleRegionBrowser").textContent=arrangementOrderCollapsed?"ORDER >":"< ORDER";$("#toggleRegionBrowser").setAttribute("aria-expanded",String(!arrangementOrderCollapsed));$("#toggleEditorInspector").textContent=selectedRegionCollapsed?"< REGION":"REGION >";$("#toggleEditorInspector").setAttribute("aria-expanded",String(!selectedRegionCollapsed));}
 
 function setupEditorControls() {
   $("#confirmNewArrangement").onclick=async(event)=>{event.preventDefault();const input=$("#newArrangementName") as HTMLInputElement,name=input.value.trim();if(!name){input.classList.add("invalid");setSaveArrangementStatus("error","NAME REQUIRED","Enter an arrangement name before saving.",100);return;}const button=$("#confirmNewArrangement") as HTMLButtonElement;button.disabled=true;try{setSaveArrangementStatus("working","STARTING SAVE","Checking the arrangement name and editor state.",10);await saveCurrentArrangement(name);($("#arrangementNameDialog") as HTMLDialogElement).close();}catch(error){setSaveArrangementStatus("error","SAVE FAILED",error instanceof Error ? error.message : String(error),100);showError(error);}finally{button.disabled=false;}};
@@ -796,13 +828,13 @@ async function saveCurrentArrangement(name:string){
   const buttons=[$("#saveArrangement"),$("#saveArrangementTop")] as HTMLButtonElement[];
   for(const button of buttons)button.disabled=true;
   setSaveArrangementStatus("working","VERIFYING","Checking key, tempo, regions, cues, and readiness.",20);
-  setEditorStatus("Verifying arrangement…");
+  setEditorStatus("Verifying arrangement...");
   try{
     await window.playback.arrange.command({type:"set-name",name});
     workspace=await window.playback.arrange.workspace();
     renderEditor();
     if(workspace.readiness.status==="Blocked")throw new Error("This arrangement is not ready to save. Check the red readiness items.");
-    setEditorStatus("Rendering every stem and preparing the arrangement version…");
+    setEditorStatus("Rendering every stem and preparing the arrangement version...");
     setSaveArrangementStatus("working","RENDERING","Rendering every stem and preparing the playable arrangement package.",45);
     const saved=await window.playback.arrange.save(),itemId=selectedSetItemId;
     setSaveArrangementStatus("working","PUBLISHING","Adding the saved arrangement to the prepared arrangement library.",75);
@@ -835,9 +867,9 @@ async function setMode(edit: boolean) {
   $("#performanceMode").classList.toggle("active", !edit);
   $("#prepMode").classList.remove("active");
   $(".transport").hidden = false;
-  $("#title").textContent = `${song.song.title} — ${song.song.artist}`;
-  $("#facts").textContent = `${song.selectedKey} • ${song.selectedBpm} BPM • ${song.timeSignature.numerator}/${song.timeSignature.denominator} • ${song.stems.length} stems`;
-  $("#modeLabel").textContent = edit ? "EDIT · SONG MAP + ARRANGEMENT WORKSPACE" : "PERFORMANCE MODE · CONFIRMED SET";
+  $("#title").textContent = `${song.song.title}  -  ${song.song.artist}`;
+  $("#facts").textContent = `${song.selectedKey}  -  ${song.selectedBpm} BPM  -  ${song.timeSignature.numerator}/${song.timeSignature.denominator}  -  ${song.stems.length} stems`;
+  $("#modeLabel").textContent = edit ? "EDIT  -  SONG MAP + ARRANGEMENT WORKSPACE" : "PERFORMANCE MODE  -  CONFIRMED SET";
   if (edit && !prepState) {
     setSetlistStatus("Loading setlist...",true);
     void window.playback.prep.get().then((state) => {
@@ -869,7 +901,7 @@ async function enterPerformanceMode(){
     localStorage.setItem("playback.ui.mode","performance");
     const selectedIndex=Math.max(0,prepState.setlist.items.findIndex((item:any)=>item.itemId===selectedSetItemId));
     setSetlistStatus("Confirming, caching, and checking the complete set for Performance...",true);
-    const confirmStatus=$("#confirmSetProgress");confirmStatus.hidden=false;confirmStatus.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=0;$("#confirmSetProgressPercent").textContent="0%";$("#confirmSetProgressLabel").textContent="Starting Confirm Set…";
+    const confirmStatus=$("#confirmSetProgress");confirmStatus.hidden=false;confirmStatus.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=0;$("#confirmSetProgressPercent").textContent="0%";$("#confirmSetProgressLabel").textContent="Starting Confirm Set...";
     ($<HTMLButtonElement>("#performanceMode")).disabled=true;
     const result=await withGlobalLoading("CONFIRMING SET","Preparing the isolated performance package.",()=>window.playback.prep.confirm({selectedIndex}));
     applyBootstrapPayload(result.bootstrap);
@@ -908,14 +940,14 @@ function setupPrep() {
   $("#editorUpdateLibrary").onclick = () => void updateEditorLibrary();
   $("#editorExportSetlist").onclick = () => void exportCurrentSetlist();
   $("#editorImportSetlist").onclick = () => void importSetlist();
-  $("#confirmSet").onclick = async () => { const button = $("#confirmSet") as HTMLButtonElement; button.disabled = true; $("#setlistStatus").textContent = "Copying and validating the isolated performance package…"; try { localStorage.setItem("playback.ui.mode","performance"); const result = await withGlobalLoading("CONFIRMING SET","Copying and validating the isolated performance package.",()=>window.playback.prep.confirm()); applyBootstrapPayload(result.bootstrap); $("#setlistStatus").textContent = `Confirmed ${result.songs} song${result.songs === 1 ? "" : "s"}. Performance loaded.`; await setMode(false); } catch (error) { localStorage.setItem("playback.ui.mode","prep"); showError(error); button.disabled = false; $("#setlistStatus").textContent = "Confirm Set failed. Draft was preserved."; } };
+  $("#confirmSet").onclick = async () => { const button = $("#confirmSet") as HTMLButtonElement; button.disabled = true; $("#setlistStatus").textContent = "Copying and validating the isolated performance package..."; try { localStorage.setItem("playback.ui.mode","performance"); const result = await withGlobalLoading("CONFIRMING SET","Copying and validating the isolated performance package.",()=>window.playback.prep.confirm()); applyBootstrapPayload(result.bootstrap); $("#setlistStatus").textContent = `Confirmed ${result.songs} song${result.songs === 1 ? "" : "s"}. Performance loaded.`; await setMode(false); } catch (error) { localStorage.setItem("playback.ui.mode","prep"); showError(error); button.disabled = false; $("#setlistStatus").textContent = "Confirm Set failed. Draft was preserved."; } };
 }
 
 async function setPrepMode() {
   prepModeActive = true; editMode = false; localStorage.setItem("playback.ui.mode","prep"); document.body.classList.remove("edit-mode", "performance-mode");
   $("#prepWorkspace").hidden = false; $("#performanceWorkspace").hidden = true; $("#editorWorkspace").hidden = true; $("#liveControls").hidden = true; $("#performanceMixer").hidden=true; $("#editorSnap").hidden = true; $(".transport").hidden = true;
   $("#prepMode").classList.add("active"); $("#editMode").classList.remove("active"); $("#performanceMode").classList.remove("active");
-  $("#modeLabel").textContent = "PREP · LIBRARY + SETLIST + CONFIRM SET"; $("#title").textContent = "Production Preparation"; $("#facts").textContent = "Performance remains isolated while this lane scans, orders, copies, and validates.";
+  $("#modeLabel").textContent = "PREP  -  LIBRARY + SETLIST + CONFIRM SET"; $("#title").textContent = "Production Preparation"; $("#facts").textContent = "Performance remains isolated while this lane scans, orders, copies, and validates.";
   if (!prepState) prepState = await window.playback.prep.get(); renderPrep();
 }
 
@@ -1007,18 +1039,18 @@ function renderPrep() {
   if (!prepState) return;
   ($("#setlistName") as HTMLInputElement).value = prepState.setlist.name;
   const library = $("#preparedLibrary"); library.replaceChildren();
-  for (const choice of prepState.prepared) { const row = document.createElement("article"); row.innerHTML = `<div><strong>${escapeHtml(choice.title)}</strong><span>${escapeHtml(choice.artist)} · ${escapeHtml(choice.arrangement)}</span><small>${escapeHtml(choice.key)} · ${choice.bpm} BPM</small></div><button>ADD</button>`; row.querySelector("button")!.onclick = () => void prepCommand({ action: "add", choiceId: choice.id }); library.append(row); }
+  for (const choice of prepState.prepared) { const row = document.createElement("article"); row.innerHTML = `<div><strong>${escapeHtml(choice.title)}</strong><span>${escapeHtml(choice.artist)}  -  ${escapeHtml(choice.arrangement)}</span><small>${escapeHtml(choice.key)}  -  ${choice.bpm} BPM</small></div><button>ADD</button>`; row.querySelector("button")!.onclick = () => void prepCommand({ action: "add", choiceId: choice.id }); library.append(row); }
   if (!prepState.prepared.length) library.innerHTML = "<p>No prepared versions were found.</p>";
   const items = $("#setlistItems"); items.replaceChildren();
-  prepState.setlist.items.forEach((item: any, index: number) => { const row = document.createElement("article"); row.innerHTML = `<b>${String(index + 1).padStart(2, "0")}</b><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.arrangement)} · ${escapeHtml(item.key)} · ${item.bpm} BPM</span></div><button data-action="up">↑</button><button data-action="down">↓</button><button data-action="remove">×</button>`; for (const button of row.querySelectorAll<HTMLButtonElement>("button")) button.onclick = () => void prepCommand(button.dataset.action === "remove" ? { action: "remove", itemId: item.itemId } : { action: "move", itemId: item.itemId, direction: button.dataset.action === "up" ? -1 : 1 }); items.append(row); });
+  prepState.setlist.items.forEach((item: any, index: number) => { const row = document.createElement("article"); row.innerHTML = `<b>${String(index + 1).padStart(2, "0")}</b><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.arrangement)}  -  ${escapeHtml(item.key)}  -  ${item.bpm} BPM</span></div><button data-action="up">UP</button><button data-action="down">DN</button><button data-action="remove">x</button>`; for (const button of row.querySelectorAll<HTMLButtonElement>("button")) button.onclick = () => void prepCommand(button.dataset.action === "remove" ? { action: "remove", itemId: item.itemId } : { action: "move", itemId: item.itemId, direction: button.dataset.action === "up" ? -1 : 1 }); items.append(row); });
   if (!prepState.setlist.items.length) items.innerHTML = "<p class='empty-set'>Add a prepared song version to begin.</p>";
-  ($("#confirmSet") as HTMLButtonElement).disabled = !prepState.setlist.items.length; $("#setlistStatus").textContent = `${prepState.setlist.items.length} prepared song${prepState.setlist.items.length === 1 ? "" : "s"} · draft saved automatically`;
+  ($("#confirmSet") as HTMLButtonElement).disabled = !prepState.setlist.items.length; $("#setlistStatus").textContent = `${prepState.setlist.items.length} prepared song${prepState.setlist.items.length === 1 ? "" : "s"}  -  draft saved automatically`;
 }
 function renderCatalog() {
   if (!catalogState) return; const counts = catalogState.counts;
   $("#librarySummary").innerHTML = `<strong>${catalogState.songs.length} MASTER SONGS</strong><span>${counts.ready} ready</span><span>${counts["needs-review"]??0} ready for review</span><span>${counts["needs-analysis"]} need analysis</span><span>${counts["missing-folder"]} missing folder</span>`;
   const filter = ($("#libraryFilter") as HTMLInputElement).value.trim().toLowerCase(), rows = $("#catalogRows"); rows.replaceChildren();
-  for (const songRow of catalogState.songs.filter((item: any) => !filter || `${item.title} ${item.artist} ${item.vendor}`.toLowerCase().includes(filter))) { const row = document.createElement("article"); row.className = songRow.readiness; row.innerHTML = `<div><strong>${escapeHtml(songRow.title)}</strong><span>${escapeHtml(songRow.artist)} · ${escapeHtml(songRow.vendor)}</span></div><b>${escapeHtml(songRow.key || "KEY ?")} · ${songRow.bpm || "BPM ?"}</b><em>${escapeHtml(songRow.readiness.replace("-", " "))}</em>`; rows.append(row); }
+  for (const songRow of catalogState.songs.filter((item: any) => !filter || `${item.title} ${item.artist} ${item.vendor}`.toLowerCase().includes(filter))) { const row = document.createElement("article"); row.className = songRow.readiness; row.innerHTML = `<div><strong>${escapeHtml(songRow.title)}</strong><span>${escapeHtml(songRow.artist)}  -  ${escapeHtml(songRow.vendor)}</span></div><b>${escapeHtml(songRow.key || "KEY ?")}  -  ${songRow.bpm || "BPM ?"}</b><em>${escapeHtml(songRow.readiness.replace("-", " "))}</em>`; rows.append(row); }
 }
 
 async function refreshWorkspace() {
@@ -1031,25 +1063,25 @@ async function refreshWorkspace() {
 }
 
 async function arrange(command: any) {
-  try { await withGlobalLoading("SAVING EDIT","Applying the arrangement edit.",()=>window.playback.arrange.command(command)); await refreshWorkspace(); setEditorStatus(`Revision ${workspace.draft.revision} · ${workspace.draft.sections.length} regions · ${formatTime(workspace.draft.durationSeconds)}`); }
+  try { await withGlobalLoading("SAVING EDIT","Applying the arrangement edit.",()=>window.playback.arrange.command(command)); await refreshWorkspace(); setEditorStatus(`Revision ${workspace.draft.revision}  -  ${workspace.draft.sections.length} regions  -  ${formatTime(workspace.draft.durationSeconds)}`); }
   catch (error) { showError(error); }
 }
 
 function renderEditor() {
   renderEditorPanelCollapse();
   const draft = workspace.draft;
-  $("#editorSource").textContent = `${workspace.source.name} · ${workspace.source.kind.replaceAll("-", " ").toUpperCase()}`;
-  $("#editorVersion").textContent = `${workspace.source.id} · ${workspace.source.hash.slice(0, 18)}`;
+  $("#editorSource").textContent = `${workspace.source.name}  -  ${workspace.source.kind.replaceAll("-", " ").toUpperCase()}`;
+  $("#editorVersion").textContent = `${workspace.source.id}  -  ${workspace.source.hash.slice(0, 18)}`;
   $("#editorSelectedArrangementName").textContent = draft.name;
   const keySelect=$("#arrangementKey") as HTMLSelectElement;if(![...keySelect.options].some(option=>option.value===draft.selectedKey))keySelect.add(new Option(draft.selectedKey,draft.selectedKey));keySelect.value=draft.selectedKey;
   ($("#arrangementBpm") as HTMLInputElement).value = String(draft.selectedBpm);
   const clickSelect=$("#arrangementClickTemplate") as HTMLSelectElement;
   clickSelect.replaceChildren(...compatibleClickTemplates(draft.timeSignature).map(template=>new Option(template.label.toUpperCase(),template.id)));
   clickSelect.value=draft.clickTemplateId;
-  $("#originalFacts").textContent = `${workspace.originalFacts.originalKey} · ${workspace.originalFacts.originalBpm} BPM · ${workspace.originalFacts.originalTimeSignature.numerator}/${workspace.originalFacts.originalTimeSignature.denominator}`;
-  $("#arrangementDuration").textContent = `${draft.timeSignature.numerator}/${draft.timeSignature.denominator} · ${formatTime(draft.durationSeconds)}`;
+  $("#originalFacts").textContent = `${workspace.originalFacts.originalKey}  -  ${workspace.originalFacts.originalBpm} BPM  -  ${workspace.originalFacts.originalTimeSignature.numerator}/${workspace.originalFacts.originalTimeSignature.denominator}`;
+  $("#arrangementDuration").textContent = `${draft.timeSignature.numerator}/${draft.timeSignature.denominator}  -  ${formatTime(draft.durationSeconds)}`;
   $("#draftState").className = `draft-state ${workspace.dirty ? "dirty" : "saved"}`;
-  $("#draftState").textContent = workspace.dirty ? `UNSAVED · REV ${draft.revision}` : `SAVED · REV ${draft.revision}`;
+  $("#draftState").textContent = workspace.dirty ? `UNSAVED  -  REV ${draft.revision}` : `SAVED  -  REV ${draft.revision}`;
   ($("#arrangementUndo") as HTMLButtonElement).disabled = !workspace.canUndo;
   ($("#arrangementRedo") as HTMLButtonElement).disabled = !workspace.canRedo;
   renderRegionList(); renderCueList(); renderSelectedInspector(); renderReadiness(); renderEditorTimeline();
@@ -1061,7 +1093,7 @@ function renderRegionList() {
     const row = document.createElement("div");
     row.className = `region-list-item ${regionClass(section.name)} ${section.id === selectedRegionId ? "selected" : ""}`;
     row.draggable = true; row.dataset.regionId = section.id;
-    row.innerHTML = `<button class="region-list-main" title="Select ${escapeHtml(section.name)}"><i class="region-drag-handle">⋮⋮</i><span class="region-order">${index + 1}</span><span class="region-list-copy"><strong>${escapeHtml(section.name)}</strong><small>${formatMusicalLocation(section.startPosition,section.startSeconds)}–${formatMusicalLocation(section.endPosition,section.endSeconds)}</small></span></button><div class="region-list-actions"><button data-action="rename" title="Rename region">RENAME</button><button data-action="duplicate" title="Duplicate region">DUPLICATE</button><button data-action="remove" title="Remove region and close its gap">REMOVE</button></div>`;
+    row.innerHTML = `<button class="region-list-main" title="Select ${escapeHtml(section.name)}"><i class="region-drag-handle">||</i><span class="region-order">${index + 1}</span><span class="region-list-copy"><strong>${escapeHtml(section.name)}</strong><small>${formatMusicalLocation(section.startPosition,section.startSeconds)}-${formatMusicalLocation(section.endPosition,section.endSeconds)}</small></span></button><div class="region-list-actions"><button data-action="rename" title="Rename region">RENAME</button><button data-action="duplicate" title="Duplicate region">DUPLICATE</button><button data-action="remove" title="Remove region and close its gap">REMOVE</button></div>`;
     row.querySelector<HTMLButtonElement>(".region-list-main")!.onclick = () => selectRegion(section.id);
     row.querySelector<HTMLButtonElement>("[data-action='rename']")!.onclick = (event) => { event.stopPropagation(); const name = prompt("Rename region", section.name)?.trim(); if (name && name !== section.name) void arrange({ type: "rename-section", sectionId: section.id, name }); };
     row.querySelector<HTMLButtonElement>("[data-action='duplicate']")!.onclick = (event) => { event.stopPropagation(); void arrange({ type: "duplicate-section", sectionId: section.id }); };
@@ -1080,7 +1112,7 @@ function renderSelectedInspector() {
   ($("#sectionName") as HTMLInputElement).value = section.name;
   ($("#sectionStart") as HTMLInputElement).value = formatMusicalLocation(section.startPosition,section.startSeconds);
   ($("#sectionEnd") as HTMLInputElement).value = formatMusicalLocation(section.endPosition,section.endSeconds);
-  $("#sectionSource").textContent = `Source ${section.sourceRegionId} · ${formatTime(section.sourceStartSeconds)}–${formatTime(section.sourceEndSeconds)}`;
+  $("#sectionSource").textContent = `Source ${section.sourceRegionId}  -  ${formatTime(section.sourceStartSeconds)}-${formatTime(section.sourceEndSeconds)}`;
   $("#loopAudition").classList.toggle("active", loopAuditionRegionId === section.id);
   const cue = selectedCue();
   ($("#cueEnabled") as HTMLInputElement).checked = cue?.enabled ?? false;
@@ -1093,7 +1125,7 @@ function renderSelectedInspector() {
   ($("#cueEnabled") as HTMLInputElement).disabled = !cue;
   target.disabled = !cue;
   ($("#auditionArrangementCue") as HTMLButtonElement).disabled = !cue;
-  $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds)} → ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
+  $("#cueDetail").textContent = cue ? `${cue.phrase} at ${formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds)} > ${sectionById(cue.targetRegionId)?.name ?? "Missing"}` : "No cue for this region";
   const midi = $("#midiEvents"); midi.replaceChildren();
   const events = workspace.draft.midi.filter((event: any) => event.atSeconds >= section.startSeconds && event.atSeconds < section.endSeconds && (event.status & 240) === 144 && event.data2 > 0);
   if (!events.length) midi.textContent = "No Slides MIDI in this region.";
@@ -1101,7 +1133,7 @@ function renderSelectedInspector() {
     const label = document.createElement("div"); label.className = `midi-event ${event.data1 === 18 ? "automatic" : ""}`;
     const kind = midiKind(event.status, event.data2);
     const automatic = event.data1 === 18;
-    label.innerHTML = `<input data-midi-enabled type="checkbox" ${event.enabled ? "checked" : ""}><span><strong>${automatic ? "SONG POSITION · AUTO" : kind}</strong><small>${formatMusicalLocation(event.position,event.atSeconds)} · CH ${(event.status & 15) + 1} · ${automatic ? "18 / setlist position" : `${event.data1}/${event.data2}`}</small></span>${automatic ? "" : `<input data-midi-value type="number" min="1" max="127" value="${event.data2}" title="ProPresenter value">`}${event.data1 === 19 ? '<button data-midi-delete title="Delete slide command">DELETE</button>' : ""}`;
+    label.innerHTML = `<input data-midi-enabled type="checkbox" ${event.enabled ? "checked" : ""}><span><strong>${automatic ? "SONG POSITION  -  AUTO" : kind}</strong><small>${formatMusicalLocation(event.position,event.atSeconds)}  -  CH ${(event.status & 15) + 1}  -  ${automatic ? "18 / setlist position" : `${event.data1}/${event.data2}`}</small></span>${automatic ? "" : `<input data-midi-value type="number" min="1" max="127" value="${event.data2}" title="ProPresenter value">`}${event.data1 === 19 ? '<button data-midi-delete title="Delete slide command">DELETE</button>' : ""}`;
     (label.querySelector("[data-midi-enabled]") as HTMLInputElement).onchange = (change) => void arrange({ type: "set-midi-enabled", eventId: event.id, enabled: (change.currentTarget as HTMLInputElement).checked });
     const value = label.querySelector<HTMLInputElement>("[data-midi-value]");
     if (value) value.onchange = () => void arrange({ type: "set-midi-value", eventId: event.id, value: Number(value.value) });
@@ -1124,7 +1156,7 @@ function renderCueList() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = `cue-list-item ${cue.id === selectedCueId ? "selected" : ""} ${cue.enabled ? "" : "disabled"}`;
-    row.innerHTML = `<span>${cue.enabled ? "ON" : "OFF"}</span><strong>${escapeHtml(cue.phrase)}</strong><small>${escapeHtml(formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds))} → ${escapeHtml(target?.name ?? "Missing destination")}</small>`;
+    row.innerHTML = `<span>${cue.enabled ? "ON" : "OFF"}</span><strong>${escapeHtml(cue.phrase)}</strong><small>${escapeHtml(formatMusicalLocation(cueDisplayPosition(cue),cue.atSeconds))} > ${escapeHtml(target?.name ?? "Missing destination")}</small>`;
     row.onclick = () => selectCue(cue.id);
     list.append(row);
   }
@@ -1180,6 +1212,30 @@ function editorStemOrderRank(label: string) {
   return 90;
 }
 
+function preserveEditorTimelineViewport(render: () => void) {
+  const scroll = $("#editorTimelineScroll");
+  const left = scroll.scrollLeft, top = scroll.scrollTop;
+  render();
+  scroll.scrollLeft = left;
+  scroll.scrollTop = top;
+}
+
+function keepEditorPlayheadVisible(center = false) {
+  if (!workspace) return;
+  const scroll = $("#editorTimelineScroll"), timeline = $("#editorTimeline");
+  const duration = workspace.draft.durationSeconds || 0;
+  if (!duration || scroll.clientWidth <= 0) return;
+  const contentWidth = Math.max(timeline.offsetWidth, scroll.scrollWidth);
+  const playheadX = Math.max(0, Math.min(contentWidth, (currentPosition / duration) * contentWidth));
+  const maxLeft = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+  const margin = Math.min(140, Math.max(64, scroll.clientWidth * 0.18));
+  let nextLeft = scroll.scrollLeft;
+  if (center) nextLeft = playheadX - scroll.clientWidth / 2;
+  else if (playheadX < scroll.scrollLeft + margin) nextLeft = playheadX - margin;
+  else if (playheadX > scroll.scrollLeft + scroll.clientWidth - margin) nextLeft = playheadX - scroll.clientWidth + margin;
+  scroll.scrollLeft = Math.max(0, Math.min(maxLeft, nextLeft));
+}
+
 function renderEditorTimeline() {
   if (!workspace) return;
   const timeline = $("#editorTimeline");
@@ -1226,10 +1282,10 @@ function renderEditorTimeline() {
     const stemName = entry.label;
     const color = stemColor(stemName, stem.role);
     const summaryStrip=document.createElement("article");summaryStrip.className=`daw-channel editor-summary-channel ${channel.muted?"muted":""}`;summaryStrip.style.setProperty("--channel-accent",color);summaryStrip.innerHTML=`<div class="channel-console"><div class="meter-shell"><i class="meter-fill" data-editor-vertical-meter-channel="${index}"></i></div><div class="console-controls"><div class="channel-switches"><button data-summary-stem-switch="muted" class="${channel.muted?"active":""}" title="Mute ${escapeHtml(stemName)}">M</button><button data-summary-stem-switch="solo" class="${channel.solo?"active":""}" title="Solo ${escapeHtml(stemName)}">S</button></div><input class="channel-fader" data-summary-stem-fader="${index}" type="range" min="0" max="1.25" step=".01" value="${channel.gain}" aria-label="${escapeHtml(stemName)} summary fader"></div></div><output>${Math.round(channel.gain*100)}%</output><div class="channel-name" title="${escapeHtml(stemName)}">${escapeHtml(stemName)}</div>`;summaryChannelRow.append(summaryStrip);
-    for(const button of summaryStrip.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.summaryStemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.summaryStemSwitch==="solo"?!latest.solo:latest.solo});renderEditorTimeline();}catch(error){showError(error);}};
+    for(const button of summaryStrip.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.summaryStemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.summaryStemSwitch==="solo"?!latest.solo:latest.solo});preserveEditorTimelineViewport(renderEditorTimeline);}catch(error){showError(error);}};
     for(const fader of summaryStrip.querySelectorAll<HTMLInputElement>("input"))fader.oninput=()=>{const latest=workspace.mixer.channels[index],gain=Number(fader.value);workspace.mixer.channels[index]={...latest,gain};workspace.draft.stemMix=workspace.mixer.channels;const readout=summaryStrip.querySelector("output");if(readout)readout.textContent=`${Math.round(gain*100)}%`;const previous=editorMixerCommandTimers.get(index);if(previous)clearTimeout(previous);editorMixerCommandTimers.set(index,window.setTimeout(async()=>{try{await updateEditorStemMix(index,{gain:workspace.mixer.channels[index].gain});}catch(error){showError(error);}},30));};
     const label = document.createElement("label"); label.className="stem-console";label.innerHTML = `<span class="stem-console-name"><i class="stem-identifier" style="--stem-color:${color}"></i><strong title="${escapeHtml(stemName)}">${escapeHtml(stemName)}</strong></span><span class="stem-console-level"><input data-stem-fader type="range" min="0" max="1.25" step=".01" value="${channel.gain}" aria-label="${escapeHtml(stemName)} level"><span class="stem-inline-meter" title="Live signal level"><i data-editor-meter-channel="${index}"></i></span></span><span class="stem-console-switches"><button data-stem-switch="muted" class="${channel.muted?"active":""}">M</button><button data-stem-switch="solo" class="${channel.solo?"active":""}">S</button></span>`; labels.append(label);
-    for(const button of label.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.stemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.stemSwitch==="solo"?!latest.solo:latest.solo});renderEditorTimeline();}catch(error){showError(error);}};
+    for(const button of label.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.stemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.stemSwitch==="solo"?!latest.solo:latest.solo});preserveEditorTimelineViewport(renderEditorTimeline);}catch(error){showError(error);}};
     for(const fader of label.querySelectorAll<HTMLInputElement>("input"))fader.oninput=()=>{const latest=workspace.mixer.channels[index],gain=Number(fader.value);workspace.mixer.channels[index]={...latest,gain};workspace.draft.stemMix=workspace.mixer.channels;const previous=editorMixerCommandTimers.get(index);if(previous)clearTimeout(previous);editorMixerCommandTimers.set(index,window.setTimeout(async()=>{try{await updateEditorStemMix(index,{gain:workspace.mixer.channels[index].gain});}catch(error){showError(error);}},30));};
     const row = document.createElement("div"); row.className = `stem-row ${displayIndex % 2 ? "alternate" : ""}`; row.innerHTML = `<canvas></canvas>`; stems.append(row);
     row.style.setProperty("--stem-color", color);
@@ -1246,10 +1302,10 @@ function renderMarkers() {
   const cueLane = $("#editorCueLane"); cueLane.querySelectorAll("i").forEach((item) => item.remove());
   for (const cue of workspace.draft.cues) {
     const marker=document.createElement("i"),target=sectionById(cue.targetRegionId);let dragged=false,dragAt=cue.atSeconds;
-    marker.className=cue.enabled?"":"disabled";marker.style.left=`${(cue.atSeconds/workspace.draft.durationSeconds)*100}%`;marker.title=`Drag ${cue.phrase} left or right · announces ${target?.name}`;marker.innerHTML=`<span>${escapeHtml(cue.phrase)}</span>`;
+    marker.className=cue.enabled?"":"disabled";marker.style.left=`${(cue.atSeconds/workspace.draft.durationSeconds)*100}%`;marker.title=`Drag ${cue.phrase} left or right  -  announces ${target?.name}`;marker.innerHTML=`<span>${escapeHtml(cue.phrase)}</span>`;
     const position=(event:PointerEvent)=>{const rect=$("#editorTimeline").getBoundingClientRect(),raw=((event.clientX-rect.left)/rect.width)*workspace.draft.durationSeconds;return Math.max(0,Math.min(target?.startSeconds??workspace.draft.durationSeconds,snapToGrid(raw)));};
     marker.onpointerdown=(event)=>{event.preventDefault();event.stopPropagation();dragged=false;dragAt=cue.atSeconds;marker.setPointerCapture(event.pointerId);marker.classList.add("dragging");selectedCueId=cue.id;selectedRegionId=cue.targetRegionId;renderRegionList();renderCueList();renderSelectedInspector();};
-    marker.onpointermove=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;const next=position(event);dragged=dragged||Math.abs(next-cue.atSeconds)>.0001;dragAt=next;marker.style.left=`${(next/workspace.draft.durationSeconds)*100}%`;marker.title=`${cue.phrase} · ${formatGridLocation(next,editorGrid())}`;};
+    marker.onpointermove=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;const next=position(event);dragged=dragged||Math.abs(next-cue.atSeconds)>.0001;dragAt=next;marker.style.left=`${(next/workspace.draft.durationSeconds)*100}%`;marker.title=`${cue.phrase}  -  ${formatGridLocation(next,editorGrid())}`;};
     marker.onpointerup=(event)=>{if(!marker.hasPointerCapture(event.pointerId))return;marker.releasePointerCapture(event.pointerId);marker.classList.remove("dragging");if(dragged)void arrange({type:"set-cue-time",cueId:cue.id,atPosition:editorPosition(dragAt)});};
     marker.onpointercancel=()=>{marker.classList.remove("dragging");marker.style.left=`${(cue.atSeconds/workspace.draft.durationSeconds)*100}%`;};
     marker.onclick=(event)=>{event.stopPropagation();if(!dragged)selectCue(cue.id);};cueLane.append(marker);
@@ -1261,18 +1317,18 @@ function renderMarkers() {
     marker.className = `${event.enabled ? "" : "disabled"} note-${event.data1}`;
     marker.style.left = `${(event.atSeconds / workspace.draft.durationSeconds) * 100}%`;
     marker.innerHTML = `<span>${event.data1 === 18 ? "18/AUTO" : `${event.data1}/${event.data2}`}</span>`;
-    marker.title = event.data1 === 18 ? "Song position is assigned automatically from the confirmed set" : editable ? "Drag to move · double-click to change slide value" : `Fixed ProPresenter command ${event.data1}/${event.data2}`;
+    marker.title = event.data1 === 18 ? "Song position is assigned automatically from the confirmed set" : editable ? "Drag to move  -  double-click to change slide value" : `Fixed ProPresenter command ${event.data1}/${event.data2}`;
     const position = (pointer: PointerEvent) => { const rect = $("#editorTimeline").getBoundingClientRect(), raw = Math.max(0, Math.min(workspace.draft.durationSeconds, ((pointer.clientX - rect.left) / rect.width) * workspace.draft.durationSeconds)); return pointer.shiftKey ? raw : snapToGrid(raw); };
     if (editable) {
       marker.onpointerdown = (pointer) => { pointer.preventDefault(); pointer.stopPropagation(); dragged = false; dragAt = event.atSeconds; marker.setPointerCapture(pointer.pointerId); marker.classList.add("dragging"); };
       marker.onpointermove = (pointer) => { if (!marker.hasPointerCapture(pointer.pointerId)) return; dragAt = position(pointer); dragged = dragged || Math.abs(dragAt - event.atSeconds) > .0001; marker.style.left = `${(dragAt / workspace.draft.durationSeconds) * 100}%`; };
       marker.onpointerup = (pointer) => { if (!marker.hasPointerCapture(pointer.pointerId)) return; marker.releasePointerCapture(pointer.pointerId); marker.classList.remove("dragging"); if (dragged) void arrange({ type: "set-midi-time", eventId: event.id, atPosition: editorPosition(dragAt) }); };
-      marker.ondblclick = (pointer) => { pointer.preventDefault(); pointer.stopPropagation(); const next = prompt("ProPresenter slide value (1–127)", String(event.data2)); if (next !== null) void arrange({ type: "set-midi-value", eventId: event.id, value: Number(next) }); };
+      marker.ondblclick = (pointer) => { pointer.preventDefault(); pointer.stopPropagation(); const next = prompt("ProPresenter slide value (1-127)", String(event.data2)); if (next !== null) void arrange({ type: "set-midi-value", eventId: event.id, value: Number(next) }); };
     }
     marker.onclick = (pointer) => { pointer.stopPropagation(); const section = workspace.draft.sections.find((candidate: any) => event.atSeconds >= candidate.startSeconds && event.atSeconds < candidate.endSeconds); if (section) selectRegion(section.id); };
     midiLane.append(marker);
   }
-  midiLane.ondblclick = (pointer) => { if ((pointer.target as HTMLElement).closest("i")) return; pointer.preventDefault(); pointer.stopPropagation(); const rect = $("#editorTimeline").getBoundingClientRect(), raw = Math.max(0, Math.min(workspace.draft.durationSeconds, ((pointer.clientX - rect.left) / rect.width) * workspace.draft.durationSeconds)), at = pointer.shiftKey ? raw : snapToGrid(raw), next = prompt("New ProPresenter slide value (1–127)", "1"); if (next !== null) void arrange({ type: "add-slide-midi", atPosition: editorPosition(at), value: Number(next) }); };
+  midiLane.ondblclick = (pointer) => { if ((pointer.target as HTMLElement).closest("i")) return; pointer.preventDefault(); pointer.stopPropagation(); const rect = $("#editorTimeline").getBoundingClientRect(), raw = Math.max(0, Math.min(workspace.draft.durationSeconds, ((pointer.clientX - rect.left) / rect.width) * workspace.draft.durationSeconds)), at = pointer.shiftKey ? raw : snapToGrid(raw), next = prompt("New ProPresenter slide value (1-127)", "1"); if (next !== null) void arrange({ type: "add-slide-midi", atPosition: editorPosition(at), value: Number(next) }); };
 }
 
 function bindEditorTimelinePointer() {
@@ -1290,7 +1346,7 @@ function updateSelectionOverlay() {
   const overlay = $("#editorSelection");
   const valid = selectionStart !== null && selectionEnd !== null && selectionEnd - selectionStart > 0.0001;
   overlay.hidden = !valid;
-  if (valid) { overlay.style.left = `${(selectionStart! / workspace.draft.durationSeconds) * 100}%`; overlay.style.width = `${((selectionEnd! - selectionStart!) / workspace.draft.durationSeconds) * 100}%`; $("#selectionLocation").textContent = `Selection ${formatGridLocation(selectionStart!, editorGrid())}–${formatGridLocation(selectionEnd!, editorGrid())}`; }
+  if (valid) { overlay.style.left = `${(selectionStart! / workspace.draft.durationSeconds) * 100}%`; overlay.style.width = `${((selectionEnd! - selectionStart!) / workspace.draft.durationSeconds) * 100}%`; $("#selectionLocation").textContent = `Selection ${formatGridLocation(selectionStart!, editorGrid())}-${formatGridLocation(selectionEnd!, editorGrid())}`; }
   else $("#selectionLocation").textContent = "Drag in the waveform to create a grid-aligned selection.";
   $("#editorPlayhead").style.left = `${(currentPosition / workspace.draft.durationSeconds) * 100}%`;
   $("#playheadLocation").textContent = formatGridLocation(currentPosition, editorGrid());
@@ -1337,7 +1393,7 @@ function renderTransportPosition(){
   $("#position").textContent=formatGridLocation(safePosition,grid);
   $("#playhead").style.left=`${performanceDuration?Math.max(0,Math.min(100,(safePosition/performanceDuration)*100)):0}%`;
   updatePerformanceProgress();
-  if(workspace){$("#editorPlayhead").style.left=`${workspace.draft.durationSeconds?Math.max(0,Math.min(100,(safePosition/workspace.draft.durationSeconds)*100)):0}%`;$("#playheadLocation").textContent=formatGridLocation(safePosition,editorGrid());}
+  if(workspace){$("#editorPlayhead").style.left=`${workspace.draft.durationSeconds?Math.max(0,Math.min(100,(safePosition/workspace.draft.durationSeconds)*100)):0}%`;$("#playheadLocation").textContent=formatGridLocation(safePosition,editorGrid());if(editMode)keepEditorPlayheadVisible();}
 }
 
 function renderLiveState() {
@@ -1345,8 +1401,8 @@ function renderLiveState() {
   const transitionRegion = song.regions.find((region: any) => region.id === liveState.recoveryRegionId);
   const currentRegionIndex = song.regions.findIndex((region: any) => region.id === liveState.currentRegionId);
   const nextRegion = currentRegionIndex >= 0 ? song.regions[currentRegionIndex + 1] : null;
-  $("#currentSection").textContent = currentRegion?.name ?? "—";
-  $("#upNextSection").textContent = `NEXT · ${nextRegion?.name ?? "END OF SONG"}`;
+  $("#currentSection").textContent = currentRegion?.name ?? " - ";
+  $("#upNextSection").textContent = `NEXT  -  ${nextRegion?.name ?? "END OF SONG"}`;
   $("#pad").textContent = `PAD ${song.selectedKey}`; $("#pad").classList.toggle("active", liveState.channels.pad);
   const slidesMidi = $<HTMLButtonElement>("#slidesMidi"), slidesMidiEnabled = Boolean(liveState.slidesMidiEnabled);
   slidesMidi.textContent = slidesMidiEnabled ? "PRO-PRESENTER ON" : "PRO-PRESENTER OFF";
@@ -1364,12 +1420,12 @@ function renderLiveState() {
   for (const region of document.querySelectorAll<HTMLElement>("#regions .region")) { region.classList.toggle("current", region.dataset.regionId === liveState.currentRegionId); region.classList.toggle("armed", region.dataset.regionId === liveState.recoveryRegionId); }
   for (const region of document.querySelectorAll<HTMLElement>("#regions .region")) region.classList.toggle("selected",performanceRegionSelectionExplicit&&region.dataset.regionId===selectedRegionId);
   const jump = $("#jumpState"); jump.hidden = liveState.panicActive || !transitionRegion; jump.querySelector("span")!.textContent = transitionRegion ? `${transitionRegion.name} will be announced, then entered at its boundary` : "";
-  const panic = $("#panicState"); panic.hidden = !liveState.panicActive; panic.querySelector("span")!.textContent = transitionRegion ? `${transitionRegion.name} will be announced, then entered at its boundary` : "Tracks faded down · click and timeline continue · choose a section";
+  const panic = $("#panicState"); panic.hidden = !liveState.panicActive; panic.querySelector("span")!.textContent = transitionRegion ? `${transitionRegion.name} will be announced, then entered at its boundary` : "Tracks faded down  -  click and timeline continue  -  choose a section";
   $("#panic").classList.toggle("active", liveState.panicActive); $("#panic").textContent = liveState.panicActive ? "PANIC ACTIVE" : "PANIC";
   const actionCard = $("#performanceActionCard"); actionCard.className = "performance-action-card";
   let action = liveState.playing ? "FOLLOW TIMELINE" : "READY TO PLAY";
   let actionDetail = liveState.playing ? "No transition is armed" : "Transport is stopped";
-  if (liveState.panicActive) { actionCard.classList.add("panic-active"); action = transitionRegion ? `RECOVER TO ${transitionRegion.name}` : "SELECT RECOVERY SECTION"; actionDetail = transitionRegion ? "Announcement and recovery are armed" : "Tracks down · click and timeline continue"; }
+  if (liveState.panicActive) { actionCard.classList.add("panic-active"); action = transitionRegion ? `RECOVER TO ${transitionRegion.name}` : "SELECT RECOVERY SECTION"; actionDetail = transitionRegion ? "Announcement and recovery are armed" : "Tracks down  -  click and timeline continue"; }
   else if (liveState.loopRegionId) { actionCard.classList.add("loop-active"); action = `LOOP ${song.regions.find((region: any) => region.id === liveState.loopRegionId)?.name ?? "SECTION"}`; actionDetail = transitionRegion ? "Repeat cue and return are armed" : "Continuous loop is selected"; }
   else if (transitionRegion) { actionCard.classList.add("armed"); action = `ENTER ${transitionRegion.name}`; actionDetail = "Destination cue and boundary transition are armed"; }
   $("#performanceAction").textContent = action;
@@ -1431,7 +1487,7 @@ function renderDawMixer(){
   if(signature!==mixerRenderSignature){
     mixerRenderSignature=signature;container.replaceChildren();
     for(const channel of mixer.channels){
-      const label=channel.kind==="stem"?(data.stemLabels?.[channel.index]??song.stems[channel.index]?.role??`Stem ${channel.index+1}`):channel.kind.toUpperCase(),strip=document.createElement("article");strip.className=`daw-channel ${channel.kind}`;strip.dataset.mixerIndex=String(channel.index);strip.innerHTML=`<div class="channel-head"><strong title="${escapeHtml(label)}">${escapeHtml(label)}</strong><b data-meter-readout="${channel.index}">−∞</b></div><div class="channel-console"><div class="meter-shell"><i class="meter-fill" data-meter-channel="${channel.index}"></i></div><div class="console-controls"><div class="channel-switches"><button data-mixer-switch="muted" title="Mute ${escapeHtml(label)}">M</button><button data-mixer-switch="solo" title="Solo ${escapeHtml(label)}">S</button><button data-mixer-switch="iem" title="Send ${escapeHtml(label)} to PB_IEM output 3">IEM</button></div><input class="channel-fader" data-mixer-fader="${channel.index}" type="range" min="0" max="1.25" step="0.01" value="${channel.gain}" aria-label="${escapeHtml(label)} fader"></div></div><output data-mixer-output="${channel.index}">${Math.round(channel.gain*100)}%</output><div class="channel-name">${escapeHtml(label)}</div><small>${String(channel.index+1).padStart(2,"0")} · ${channel.kind==="stem"?"MUSIC":channel.kind.toUpperCase()}</small>`;container.append(strip);
+      const label=channel.kind==="stem"?(data.stemLabels?.[channel.index]??song.stems[channel.index]?.role??`Stem ${channel.index+1}`):channel.kind.toUpperCase(),strip=document.createElement("article");strip.className=`daw-channel ${channel.kind}`;strip.dataset.mixerIndex=String(channel.index);strip.innerHTML=`<div class="channel-head"><strong title="${escapeHtml(label)}">${escapeHtml(label)}</strong><b data-meter-readout="${channel.index}">-inf</b></div><div class="channel-console"><div class="meter-shell"><i class="meter-fill" data-meter-channel="${channel.index}"></i></div><div class="console-controls"><div class="channel-switches"><button data-mixer-switch="muted" title="Mute ${escapeHtml(label)}">M</button><button data-mixer-switch="solo" title="Solo ${escapeHtml(label)}">S</button><button data-mixer-switch="iem" title="Send ${escapeHtml(label)} to PB_IEM output 3">IEM</button></div><input class="channel-fader" data-mixer-fader="${channel.index}" type="range" min="0" max="1.25" step="0.01" value="${channel.gain}" aria-label="${escapeHtml(label)} fader"></div></div><output data-mixer-output="${channel.index}">${Math.round(channel.gain*100)}%</output><div class="channel-name">${escapeHtml(label)}</div><small>${String(channel.index+1).padStart(2,"0")}  -  ${channel.kind==="stem"?"MUSIC":channel.kind.toUpperCase()}</small>`;container.append(strip);
       for(const button of strip.querySelectorAll<HTMLButtonElement>("[data-mixer-switch]"))button.onclick=()=>{const active=liveState.mixer.channels[channel.index],key=button.dataset.mixerSwitch!;void liveCommand({action:"mixer-channel",index:active.index,gain:active.gain,muted:key==="muted"?!active.muted:active.muted,solo:key==="solo"?!active.solo:active.solo,iem:key==="iem"?!active.iem:active.iem});};
       const fader=strip.querySelector<HTMLInputElement>("[data-mixer-fader]")!,levelLocked=channel.kind==="click"||channel.kind==="cue";fader.disabled=levelLocked;fader.title=levelLocked?`${label} level is locked in Performance mode`:`${label} level`;strip.classList.toggle("level-locked",levelLocked);if(!levelLocked)fader.oninput=()=>{const requested=Number(fader.value);strip.querySelector<HTMLOutputElement>("output")!.value=`${Math.round(requested*100)}%`;const previous=mixerCommandTimers.get(channel.index);if(previous)clearTimeout(previous);mixerCommandTimers.set(channel.index,window.setTimeout(()=>{const active=liveState.mixer.channels[channel.index];void liveCommand({action:"mixer-channel",index:active.index,gain:requested,muted:active.muted,solo:active.solo,iem:active.iem});},30));};
     }
@@ -1451,7 +1507,7 @@ function renderDawMixer(){
 }
 
 function updateMixerMeters(meters:{master:number;channels:readonly number[]}){setMeter(document.querySelector<HTMLElement>("[data-meter-master]"),document.querySelector<HTMLElement>("[data-meter-master-readout]"),meters.master);for(const group of performanceMeterGroups){const value=Math.max(0,...group.indices.map(index=>Number(meters.channels[index])||0));setMeter(document.querySelector<HTMLElement>(`[data-meter-channel="${group.id}"]`),document.querySelector<HTMLElement>(`[data-meter-readout="${group.id}"]`),value);}meters.channels.forEach((value,index)=>{document.querySelectorAll<HTMLElement>(`[data-editor-meter-channel="${index}"]`).forEach((meter)=>setHorizontalMeter(meter,value));document.querySelectorAll<HTMLElement>(`[data-editor-vertical-meter-channel="${index}"]`).forEach((meter)=>setVerticalMeter(meter,value));});}
-function setMeter(fill:HTMLElement|null,readout:HTMLElement|null,amplitude:number){if(!fill||!readout)return;const safe=Math.max(0,Number(amplitude)||0),db=safe>0?20*Math.log10(safe):-Infinity,percent=Number.isFinite(db)?Math.max(0,Math.min(100,(db+60)/66*100)):0;fill.style.height=`${percent}%`;fill.classList.toggle("hot",db>=-6);readout.textContent=Number.isFinite(db)?`${Math.max(-60,db).toFixed(0)}`:"−∞";}
+function setMeter(fill:HTMLElement|null,readout:HTMLElement|null,amplitude:number){if(!fill||!readout)return;const safe=Math.max(0,Number(amplitude)||0),db=safe>0?20*Math.log10(safe):-Infinity,percent=Number.isFinite(db)?Math.max(0,Math.min(100,(db+60)/66*100)):0;fill.style.height=`${percent}%`;fill.classList.toggle("hot",db>=-6);readout.textContent=Number.isFinite(db)?`${Math.max(-60,db).toFixed(0)}`:"-inf";}
 function setVerticalMeter(fill:HTMLElement,amplitude:number){const safe=Math.max(0,Number(amplitude)||0),db=safe>0?20*Math.log10(safe):-Infinity,percent=Number.isFinite(db)?Math.max(0,Math.min(100,(db+60)/66*100)):0;fill.style.height=`${percent}%`;fill.classList.toggle("hot",db>=-6);}
 function setHorizontalMeter(fill:HTMLElement,amplitude:number){const safe=Math.max(0,Number(amplitude)||0),db=safe>0?20*Math.log10(safe):-Infinity,percent=Number.isFinite(db)?Math.max(0,Math.min(100,(db+60)/66*100)):0;fill.style.width=`${percent}%`;fill.classList.toggle("hot",db>=-6);}
 
@@ -1459,9 +1515,9 @@ function renderPerformanceReadiness(report: any) {
   if (!report) return;
   const badge = $("#ready"), blocked = report.checks.filter((item: any) => item.level === "blocked").length, warnings = report.checks.filter((item: any) => item.level === "warning").length;
   badge.className = `ready ${report.status === "Blocked" ? "blocked" : report.status === "Ready with warnings" ? "warning" : ""}`;
-  badge.textContent = report.status === "Blocked" ? `PERFORMANCE LOCKED · ${blocked}` : report.status === "Ready with warnings" ? `READY · ${warnings} WARNING${warnings === 1 ? "" : "S"}` : "PERFORMANCE READY";
+  badge.textContent = report.status === "Blocked" ? `PERFORMANCE LOCKED  -  ${blocked}` : report.status === "Ready with warnings" ? `READY  -  ${warnings} WARNING${warnings === 1 ? "" : "S"}` : "PERFORMANCE READY";
   const audioProblem=audioHealth&&!audioHealthIsHealthy();
-  if(report.status!=="Blocked"&&audioProblem)badge.textContent="READY · AUDIO CHECK";else if(report.status!=="Blocked"&&report.status!=="Ready with warnings"&&audioHealth)badge.textContent="PERFORMANCE READY · AUDIO OK";
+  if(report.status!=="Blocked"&&audioProblem)badge.textContent="READY  -  AUDIO CHECK";else if(report.status!=="Blocked"&&report.status!=="Ready with warnings"&&audioHealth)badge.textContent="PERFORMANCE READY  -  AUDIO OK";
   badge.classList.toggle("audio-warning",Boolean(audioProblem));badge.title=audioHealth?audioHealthSummary():"Audio health is starting";
   $("#performanceReadinessTitle").textContent = report.status.toUpperCase();
   const checks = $("#performanceReadinessChecks"); checks.replaceChildren();
@@ -1475,7 +1531,7 @@ function renderPerformanceReadiness(report: any) {
 }
 
 function audioHealthIsHealthy(){return Boolean(audioHealth)&&audioHealth.sampleRate===48000&&audioHealth.blockFrames===512&&audioHealth.xruns===0&&audioHealth.deadlineMisses===0&&!audioHealth.deviceError&&!audioHealthStalled&&!audioHealth.iemClips;}
-function audioHealthSummary(){if(!audioHealth)return liveState.fault?`FAULT · ${liveState.fault}`:liveState.readiness?.ready?"ARMED · CHECKING AUDIO":"NOT READY";if(audioHealthIsHealthy())return"AUDIO OK · 48 kHz · 512";const issues:string[]=[];if(audioHealth.sampleRate!==48000)issues.push(`${audioHealth.sampleRate||0} Hz`);if(audioHealth.blockFrames!==512)issues.push(`${audioHealth.blockFrames||0} samples`);if(audioHealth.xruns)issues.push(`${audioHealth.xruns} dropout${audioHealth.xruns===1?"":"s"}`);if(audioHealth.deadlineMisses)issues.push(`${audioHealth.deadlineMisses} overrun${audioHealth.deadlineMisses===1?"":"s"}`);if(audioHealthStalled)issues.push("clock stopped");if(audioHealth.deviceError)issues.push("device error");if(audioHealth.iemClips)issues.push("PB_IEM overload");return`AUDIO CHECK · ${issues.join(" · ")||"unknown"}`;}
+function audioHealthSummary(){if(!audioHealth)return liveState.fault?`FAULT  -  ${liveState.fault}`:liveState.readiness?.ready?"ARMED  -  CHECKING AUDIO":"NOT READY";if(audioHealthIsHealthy())return"AUDIO OK  -  48 kHz  -  512";const issues:string[]=[];if(audioHealth.sampleRate!==48000)issues.push(`${audioHealth.sampleRate||0} Hz`);if(audioHealth.blockFrames!==512)issues.push(`${audioHealth.blockFrames||0} samples`);if(audioHealth.xruns)issues.push(`${audioHealth.xruns} dropout${audioHealth.xruns===1?"":"s"}`);if(audioHealth.deadlineMisses)issues.push(`${audioHealth.deadlineMisses} overrun${audioHealth.deadlineMisses===1?"":"s"}`);if(audioHealthStalled)issues.push("clock stopped");if(audioHealth.deviceError)issues.push("device error");if(audioHealth.iemClips)issues.push("PB_IEM overload");return`AUDIO CHECK  -  ${issues.join("  -  ")||"unknown"}`;}
 
 async function liveCommand(command: any) {
   try {
@@ -1490,7 +1546,7 @@ async function liveCommand(command: any) {
 }
 function navigateSection(offset: number) { if (!liveState.panicActive) { void liveCommand({ action: offset < 0 ? "previous-section" : "next-section" }); return; } const anchor = liveState.recoveryRegionId ?? liveState.currentRegionId; const index = song.regions.findIndex((item: any) => item.id === anchor); const target = song.regions[Math.max(0, Math.min(song.regions.length - 1, index + offset))]; if (target) void liveCommand({ action: "recover", regionId: target.id }); }
 function moveSelected(offset: number) { const index = workspace.draft.sections.findIndex((item: any) => item.id === selectedRegionId); const destination = index + offset; if (destination >= 0 && destination < workspace.draft.sections.length) void arrange({ type: "move-section", sectionId: selectedRegionId, toIndex: destination }); }
-function renderEditorTimelineAtTransport(){renderEditorTimeline();const scroll=$("#editorTimelineScroll"),ratio=workspace?.draft.durationSeconds?Math.max(0,Math.min(1,currentPosition/workspace.draft.durationSeconds)):0;scroll.scrollLeft=Math.max(0,Math.min(scroll.scrollWidth-scroll.clientWidth,ratio*scroll.scrollWidth-scroll.clientWidth/2));}
+function renderEditorTimelineAtTransport(){renderEditorTimeline();keepEditorPlayheadVisible(true);}
 function stepEditorWidth(amount: number) { const control = $("#editorZoom") as HTMLInputElement; control.value = String(Math.max(Number(control.min), Math.min(Number(control.max), Number(control.value) + amount))); localStorage.setItem("playback.editor.zoom", control.value); renderEditorTimelineAtTransport(); }
 function stepStemHeight(amount: number) { stemRowHeight = Math.max(92, Math.min(320, stemRowHeight + amount)); localStorage.setItem("playback.editor.stemHeight.v2", String(stemRowHeight)); renderEditorTimeline(); }
 function selectRegion(id: string) {
@@ -1532,7 +1588,7 @@ function commitCuePosition() {
 function createRegionFromSelection() { if (selectionStart === null || selectionEnd === null || selectionEnd <= selectionStart) { setEditorStatus("Drag a selection inside one source section first."); return; } const name = prompt("New region name", "New Section"); if (name) void arrange({ type: "create-region-from-selection", startPosition: editorPosition(selectionStart), endPosition: editorPosition(selectionEnd), name }); }
 function auditionSelectedSource() { const section = selectedSection(); if (!section) return; loopAuditionRegionId = null; $("#loopAudition").classList.remove("active"); window.playback.command("seek", section.sourceStartSeconds); window.playback.command("play"); setEditorStatus(`Auditioning source audio for ${section.name}. Render the arrangement to hear reordered boundaries exactly.`); }
 function toggleLoopAudition() { const section = selectedSection(); if (!section) return; loopAuditionRegionId = loopAuditionRegionId === section.id ? null : section.id; $("#loopAudition").classList.toggle("active", loopAuditionRegionId !== null); if (loopAuditionRegionId) { window.playback.command("seek", section.sourceStartSeconds); window.playback.command("play"); setEditorStatus(`Looping the source slice for ${section.name}.`); } else setEditorStatus("Source audition loop released."); }
-function auditionSelectedBoundary() { const section = selectedSection(); if (!section) return; const index = workspace.draft.sections.findIndex((item: any) => item.id === section.id), next = workspace.draft.sections[index + 1]; if (!next) { setEditorStatus("The selected region is the end of the arrangement."); return; } if (Math.abs(section.sourceEndSeconds - next.sourceStartSeconds) > .01) { setEditorStatus("This boundary is reordered. Render the arrangement to audition that exact transition."); return; } loopAuditionRegionId = null; window.playback.command("seek", Math.max(section.sourceStartSeconds, section.sourceEndSeconds - 2)); window.playback.command("play"); setEditorStatus(`Auditioning the ${section.name} → ${next.name} boundary.`); }
+function auditionSelectedBoundary() { const section = selectedSection(); if (!section) return; const index = workspace.draft.sections.findIndex((item: any) => item.id === section.id), next = workspace.draft.sections[index + 1]; if (!next) { setEditorStatus("The selected region is the end of the arrangement."); return; } if (Math.abs(section.sourceEndSeconds - next.sourceStartSeconds) > .01) { setEditorStatus("This boundary is reordered. Render the arrangement to audition that exact transition."); return; } loopAuditionRegionId = null; window.playback.command("seek", Math.max(section.sourceStartSeconds, section.sourceEndSeconds - 2)); window.playback.command("play"); setEditorStatus(`Auditioning the ${section.name} > ${next.name} boundary.`); }
 function editorGrid() { return buildZeroBasedGrid(workspace.draft.selectedBpm, workspace.draft.timeSignature, workspace.draft.durationSeconds); }
 function snapToGrid(at: number) { return snapEditorPosition(editorGrid(), at, editorSnapMode); }
 function editorPosition(at: number) { return secondsToMusicalPosition(snapToGrid(at), workspace.draft.selectedBpm, workspace.draft.timeSignature); }

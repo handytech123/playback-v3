@@ -52,6 +52,6 @@ function decodeSlides(track:Node,bpm:number):ProPresenterMidiEvent[]{const resul
 function midiItemLabel(track:Node){return children(track,"ITEM").map(item=>(value(item,"NAME")?.join(" ")??"").trim()).find(name=>/^\d+\s*-\s*midi$/i.test(name))??"MIDI";}
 function isProPresenterMidiItemTrack(track:Node,bpm:number){if(!midiItemLabel(track).match(/^\d+\s*-\s*midi$/i))return false;const notes=new Set(decodeSlides(track,bpm).filter(event=>event.kind==="note-on").map(event=>event.data1));return[17,18,19].every(note=>notes.has(note));}
 function inferArrangementIdentity(path:string,bpm:number){const folder=basename(dirname(path)),file=basename(path).replace(/\.rpp$/i,"");const candidate=file||folder;const match=candidate.match(/(?:^|[\s_-])([A-G](?:#|b)?)(?=[\s_-]|$)/i),raw=match?.[1];return{name:candidate,key:raw?`${raw[0]!.toUpperCase()}${raw.slice(1)}`:null,bpm};}
-export function reaperTitle(value:string):string{const cleaned=value.trim().replace(/^reaper\s*[·:|\-]\s*/i,"");return `REAPER · ${cleaned||"Imported Arrangement"}`;}
+export function reaperTitle(value:string):string{const cleaned=value.trim().replace(/^reaper\s*[.:|\-]\s*/i,"");return `REAPER - ${cleaned||"Imported Arrangement"}`;}
 function num(raw:string|undefined,fallback:number){const result=Number(raw);return Number.isFinite(result)?result:fallback;}
 function emptyNode():Node{return{tag:"",args:[],lines:[],children:[]};}

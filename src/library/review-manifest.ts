@@ -182,7 +182,7 @@ export async function prepareCandidateReview(input: {
   const manifest = {
     schemaVersion: 1,
     id: `review-${safeId(input.catalogId)}`,
-    name: `Review · ${input.master.title}`,
+    name: `Review - ${input.master.title}`,
     confirmedAt: new Date().toISOString(),
     songs: [song, ...arrangementSongs],
     show: DEFAULT_SHOW_STATE,

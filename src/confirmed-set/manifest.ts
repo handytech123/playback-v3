@@ -47,6 +47,7 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
 
   for (const prepared of manifest.songs) {
     const songTitle = prepared.song.title;
+    const audioMedia = prepared.song.vendor === "Playback Media" || String(prepared.song.id).startsWith("media-");
     const requiresMusicalLocations = Number((manifest as any).review?.songMapVersion ?? 0) >= 8;
     if (!prepared.cacheFingerprint) issues.push({ songTitle, message: "Prepared cache fingerprint is missing" });
     if(prepared.loudnessNormalization){const level=prepared.loudnessNormalization;if(level.version!==1||!Number.isFinite(level.measuredLufs)||!Number.isFinite(level.measuredTruePeakDbtp)||!Number.isFinite(level.appliedGainDb)||level.appliedGainDb < -6||level.appliedGainDb > 6)issues.push({songTitle,message:"Song loudness normalization is invalid"});}
@@ -55,8 +56,9 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
     if (prepared.selectedBpm <= 0) issues.push({ songTitle, message: "Selected BPM must be positive" });
     if (!prepared.selectedKey) issues.push({ songTitle, message: "Selected key is missing" });
     if (!prepared.waveformPath) issues.push({ songTitle, message: "Prepared waveform is missing" });
-    if (!prepared.liveAssets) issues.push({ songTitle, message: "Prepared live assets are missing" });
-    else {
+    if (!prepared.liveAssets) {
+      if (!audioMedia) issues.push({ songTitle, message: "Prepared live assets are missing" });
+    } else {
       if (!prepared.liveAssets.click.regularPath || !prepared.liveAssets.click.accentPath || prepared.liveAssets.click.events.length === 0) issues.push({ songTitle, message: "Dynamic click plan is incomplete" });
       if (prepared.liveAssets.click.events[0]?.atSeconds !== 0) issues.push({ songTitle, message: "Dynamic click must begin at measure 1 beat 1" });
       if (prepared.liveAssets.cues.length === 0) issues.push({ songTitle, message: "Dynamic cue plan is empty" });
