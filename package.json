@@ -1,6 +1,6 @@
 {
   "name": "playback-v3",
-  "version": "0.1.48",
+  "version": "0.1.52",
   "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
