@@ -1813,6 +1813,7 @@ async function createWindow(): Promise<void> {
         transitionSettings,
         clickRegularPath: clickSoundSettings.normalPath,
         clickAccentPath: clickSoundSettings.accentPath,
+        ffmpegPath: runtimeFfmpegPath,
         onProgress: (status) => sendToRenderer("prep:confirm-status", status),
         ...(manifest.show ? { show: manifest.show } : {}),
       });
