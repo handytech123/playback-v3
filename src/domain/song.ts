@@ -59,6 +59,7 @@ export interface Cue {
 }
 
 export interface PreparedSong {
+  readonly mediaOnly?: boolean;
   readonly song: OriginalSongFacts;
   readonly selectedKey: string;
   readonly selectedBpm: number;
@@ -74,6 +75,10 @@ export interface PreparedSong {
   readonly liveAssets?: LiveAssetPlan;
   readonly control?: PreparedControlMetadata;
   readonly arrangement?: PreparedArrangementMetadata;
+}
+
+export function isMediaOnlySong(song: PreparedSong | undefined): boolean {
+  return song?.mediaOnly === true;
 }
 
 export interface PreparedMidiEvent { readonly position?: MusicalPosition; readonly atSeconds: number; readonly status: number; readonly data1: number; readonly data2: number; }

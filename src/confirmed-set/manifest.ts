@@ -1,4 +1,4 @@
-import type { PreparedSong } from "../domain/song.js";
+import { isMediaOnlySong, type PreparedSong } from "../domain/song.js";
 import { validateSongTransition, type SongTransitionPlan } from "../live/song-transition.js";
 
 export const CONFIRMED_SET_SCHEMA_VERSION = 1;
@@ -47,29 +47,32 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
 
   for (const prepared of manifest.songs) {
     const songTitle = prepared.song.title;
+    const mediaOnly = isMediaOnlySong(prepared);
     const requiresMusicalLocations = Number((manifest as any).review?.songMapVersion ?? 0) >= 8;
     if (!prepared.cacheFingerprint) issues.push({ songTitle, message: "Prepared cache fingerprint is missing" });
     if(prepared.loudnessNormalization){const level=prepared.loudnessNormalization;if(level.version!==1||!Number.isFinite(level.measuredLufs)||!Number.isFinite(level.measuredTruePeakDbtp)||!Number.isFinite(level.appliedGainDb)||level.appliedGainDb < -6||level.appliedGainDb > 6)issues.push({songTitle,message:"Song loudness normalization is invalid"});}
     if (prepared.stems.length === 0) issues.push({ songTitle, message: "No playable music stems" });
     if (prepared.durationSeconds <= 0) issues.push({ songTitle, message: "Song duration must be positive" });
-    if (prepared.selectedBpm <= 0) issues.push({ songTitle, message: "Selected BPM must be positive" });
+    if (!mediaOnly && prepared.selectedBpm <= 0) issues.push({ songTitle, message: "Selected BPM must be positive" });
     if (!prepared.selectedKey) issues.push({ songTitle, message: "Selected key is missing" });
     if (!prepared.waveformPath) issues.push({ songTitle, message: "Prepared waveform is missing" });
-    if (!prepared.liveAssets) issues.push({ songTitle, message: "Prepared live assets are missing" });
+    if (!prepared.liveAssets && !mediaOnly) issues.push({ songTitle, message: "Prepared live assets are missing" });
     else {
-      if (!prepared.liveAssets.click.regularPath || !prepared.liveAssets.click.accentPath || prepared.liveAssets.click.events.length === 0) issues.push({ songTitle, message: "Dynamic click plan is incomplete" });
-      if (prepared.liveAssets.click.events[0]?.atSeconds !== 0) issues.push({ songTitle, message: "Dynamic click must begin at measure 1 beat 1" });
-      if (prepared.liveAssets.cues.length === 0) issues.push({ songTitle, message: "Dynamic cue plan is empty" });
-      if (!prepared.liveAssets.repeatCuePath) issues.push({ songTitle, message: "Repeat cue is missing" });
-      if (!prepared.liveAssets.pad.audioPath || prepared.liveAssets.pad.key !== prepared.selectedKey) issues.push({ songTitle, message: "Dynamic pad does not match selected key" });
-      if (prepared.liveAssets.cues.some((cue) => cue.atSeconds < 0 || cue.atSeconds > prepared.durationSeconds || !cue.audioPath)) issues.push({ songTitle, message: "Dynamic cue plan contains an invalid event" });
-      if (prepared.liveAssets.countIn?.some((event) => event.atSeconds < 0 || event.atSeconds > prepared.durationSeconds || !event.audioPath)) issues.push({ songTitle, message: "Dynamic count-in plan contains an invalid event" });
+      if (prepared.liveAssets) {
+        if (!prepared.liveAssets.click.regularPath || !prepared.liveAssets.click.accentPath || prepared.liveAssets.click.events.length === 0) issues.push({ songTitle, message: "Dynamic click plan is incomplete" });
+        if (prepared.liveAssets.click.events[0]?.atSeconds !== 0) issues.push({ songTitle, message: "Dynamic click must begin at measure 1 beat 1" });
+        if (prepared.liveAssets.cues.length === 0) issues.push({ songTitle, message: "Dynamic cue plan is empty" });
+        if (!prepared.liveAssets.repeatCuePath) issues.push({ songTitle, message: "Repeat cue is missing" });
+        if (!prepared.liveAssets.pad.audioPath || prepared.liveAssets.pad.key !== prepared.selectedKey) issues.push({ songTitle, message: "Dynamic pad does not match selected key" });
+        if (prepared.liveAssets.cues.some((cue) => cue.atSeconds < 0 || cue.atSeconds > prepared.durationSeconds || !cue.audioPath)) issues.push({ songTitle, message: "Dynamic cue plan contains an invalid event" });
+        if (prepared.liveAssets.countIn?.some((event) => event.atSeconds < 0 || event.atSeconds > prepared.durationSeconds || !event.audioPath)) issues.push({ songTitle, message: "Dynamic count-in plan contains an invalid event" });
+      }
     }
     for (const stem of prepared.stems) {
       if (!stem.sourcePath) issues.push({ songTitle, message: `Stem ${stem.role} has no cache path` });
     }
-    if (requiresMusicalLocations && prepared.regions.some(region => !region.startPosition || !region.endPosition)) issues.push({ songTitle, message: "A region is missing its measure-and-beat boundary" });
-    if (requiresMusicalLocations && prepared.cues.some(cue => !cue.position)) issues.push({ songTitle, message: "A cue is missing its measure-and-beat location" });
+    if (!mediaOnly && requiresMusicalLocations && prepared.regions.some(region => !region.startPosition || !region.endPosition)) issues.push({ songTitle, message: "A region is missing its measure-and-beat boundary" });
+    if (!mediaOnly && requiresMusicalLocations && prepared.cues.some(cue => !cue.position)) issues.push({ songTitle, message: "A cue is missing its measure-and-beat location" });
   }
   return { ready: issues.length === 0, issues };
 }

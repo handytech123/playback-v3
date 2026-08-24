@@ -24,11 +24,23 @@ test("confirmed-set position rewrites only note 18 note-ons for each occurrence"
       { atSeconds: .3, status: 0x90, data1: 19, data2: 12 },
     ] },
   };
-  const first = resolveSetlistPositionMidi(base, 0).control!.proPresenterMidi;
-  const fourth = resolveSetlistPositionMidi(base, 3).control!.proPresenterMidi;
+  const first = resolveSetlistPositionMidi(base, 1).control!.proPresenterMidi;
+  const fourth = resolveSetlistPositionMidi(base, 4).control!.proPresenterMidi;
   assert.deepEqual(first.map(event => event.data2), [7, 1, 0, 12]);
   assert.deepEqual(fourth.map(event => event.data2), [7, 4, 0, 12]);
   assert.equal(base.control!.proPresenterMidi[1]!.data2, 99);
+});
+
+test("confirmed-set position leaves media-only cards out of ProPresenter numbering", () => {
+  const base: PreparedSong = {
+    song: { id: songId("media"), title: "Media", artist: "A", vendor: "V", originalKey: "C", originalBpm: 120, originalTimeSignature: { numerator: 4, denominator: 4 } },
+    selectedKey: "C", selectedBpm: 120, timeSignature: { numerator: 4, denominator: 4 }, durationSeconds: 2, stems: [], regions: [], cues: [], cacheFingerprint: "media", mediaOnly: true,
+    control: { sourceType: "app-edit", sourceSha256: "x", midiOutputName: null, proPresenterMidi: [
+      { atSeconds: 0, status: 0x90, data1: 18, data2: 99 },
+    ] },
+  };
+  const media = resolveSetlistPositionMidi(base, null).control!.proPresenterMidi;
+  assert.deepEqual(media.map(event => event.data2), [99]);
 });
 
 test("Confirm Set copies, verifies, and atomically publishes a ready package", async () => {

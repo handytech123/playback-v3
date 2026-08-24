@@ -49,6 +49,7 @@ import {
   PerformanceSession,
   type LiveBus,
   type PerformanceEffects,
+  type PerformanceSnapshot,
 } from "../live/performance-session.js";
 import { evaluatePerformanceReadiness } from "../live/performance-readiness.js";
 import {
@@ -56,6 +57,12 @@ import {
   type ConfirmedSetManifest,
 } from "../confirmed-set/manifest.js";
 import { buildDynamicClickEvents } from "../domain/grid.js";
+import {
+  isMediaOnlySong,
+  preparedControl,
+  type PreparedMidiEvent,
+  type PreparedSong,
+} from "../domain/song.js";
 import { importReaperProject } from "../reaper/rpp-import.js";
 import { saveArrangementVersion } from "../reaper/arrangement-persistence.js";
 import { prepareArrangementCache } from "../reaper/arrangement-cache.js";
@@ -102,9 +109,11 @@ import {
   prepareCandidateReview,
 } from "../library/review-manifest.js";
 import {
+  addMediaFile,
   addPreparedSong,
   confirmOperatorSet,
   discoverPreparedLibrary,
+  isMediaSetlistItem,
   loadOperatorSetlist,
   movePreparedSong,
   reorderPreparedSong,
@@ -460,9 +469,9 @@ async function createWindow(): Promise<void> {
     const activeManifest = await activeConfirmedManifestPath();
     if (activeManifest) manifestPath = activeManifest;
     else {
-      const candidates = operatorSetlist.items.map((item) =>
-        resolve(item.manifestPath),
-      );
+      const candidates = operatorSetlist.items
+        .filter((item): item is Exclude<typeof item, { readonly kind: "media" }> => !isMediaSetlistItem(item))
+        .map((item) => resolve(item.manifestPath));
       let recovered: string | null = null;
       for (const candidate of candidates) {
         if (!candidate || !isPreparedManifestPath(candidate)) continue;
@@ -936,6 +945,14 @@ async function createWindow(): Promise<void> {
       stemLabels: performanceStemDisplayLabels(activeSong),
     };
   };
+  let controlSettings = await loadOrCreateControlSettings();
+  let activeProPresenterSetlist: ProPresenterSyncedSetlist | null = null;
+  const proPresenterApiSlides = new ProPresenterApiSlideScheduler(() => ({
+    settings: controlSettings.proPresenterApi,
+    songs: manifest.songs,
+    performance: performance?.snapshot ?? null,
+    syncedSetlist: activeProPresenterSetlist,
+  }));
   const applyPreparedSongMixer = (song: any) => {
     for (const channel of createMixerState(song).channels)
       engine.setMixerChannel(
@@ -982,6 +999,7 @@ async function createWindow(): Promise<void> {
     armedManifestPath = resolve(manifestPath);
     armedSongIndex = index;
     applyPreparedSongMixer(manifest.songs[index]!);
+    void primeProPresenterApiSong(controlSettings.proPresenterApi, manifest.songs, index, activeProPresenterSetlist);
     await saveDeviceSettings();
     await writeFile(
       selectedSongPath,
@@ -1017,6 +1035,7 @@ async function createWindow(): Promise<void> {
       armedManifestPath = resolve(manifestPath);
       armedSongIndex = index;
       applyPreparedSongMixer(manifest.songs[index]!);
+      void primeProPresenterApiSong(controlSettings.proPresenterApi, manifest.songs, index, activeProPresenterSetlist);
       await saveDeviceSettings();
       await writeFile(
         selectedSongPath,
@@ -1111,7 +1130,6 @@ async function createWindow(): Promise<void> {
         sendToRenderer("performance:state", performance!.snapshot);
         controlBus?.publishState();
       });
-  let controlSettings = await loadOrCreateControlSettings();
   midiInputRouter = new MidiInputRouter(
     controlBus,
     FOOT_CONTROLLER_PROFILES[controlSettings.footControllerProfile],
@@ -1234,6 +1252,7 @@ async function createWindow(): Promise<void> {
     const readyState = await armSourceSong(manifestPath, selectedSongIndex);
     currentReady = readyState;
     applyPreparedSongMixer(manifest.songs[selectedSongIndex]!);
+    void primeProPresenterApiSong(controlSettings.proPresenterApi, manifest.songs, selectedSongIndex, activeProPresenterSetlist);
     if (manifest.show)
       for (const [bus, gain] of Object.entries(manifest.show.mixer))
         engine.setBusGain(bus as LiveBus, gain);
@@ -1494,7 +1513,29 @@ async function createWindow(): Promise<void> {
       );
       if (!choice)
         throw new Error("Prepared song version is no longer available");
-      operatorSetlist = addPreparedSong(operatorSetlist, choice);
+      const index =
+        Number.isInteger(command.index) && command.index >= 0
+          ? Number(command.index)
+          : operatorSetlist.items.length;
+      operatorSetlist = addPreparedSong(operatorSetlist, choice, index);
+    } else if (command.action === "add-media") {
+      let sourcePath =
+        typeof command.sourcePath === "string" ? command.sourcePath : "";
+      if (!sourcePath) {
+        const chosen = await dialog.showOpenDialog(window!, {
+          title: "Add WAV Media",
+          properties: ["openFile"],
+          filters: [{ name: "WAV audio", extensions: ["wav"] }],
+        });
+        if (chosen.canceled || !chosen.filePaths[0])
+          return prepResponse({ cancelled: true });
+        sourcePath = chosen.filePaths[0];
+      }
+      const index =
+        Number.isInteger(command.index) && command.index >= 0
+          ? Number(command.index)
+          : operatorSetlist.items.length;
+      operatorSetlist = addMediaFile(operatorSetlist, sourcePath, index);
     } else if (command.action === "replace") {
       const choice = (await preparedChoices()).find(
         (item) => item.id === command.choiceId,
@@ -1537,9 +1578,23 @@ async function createWindow(): Promise<void> {
       };
     else throw new Error("Unknown setlist command");
     await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
+    activeProPresenterSetlist = null;
     editorContexts.clear();
     await pruneRuntimeDataForSetlist(operatorSetlist);
     return prepResponse();
+  });
+  ipcMain.handle("prep:send-propresenter", async () => {
+    activeProPresenterSetlist = await syncProPresenterApiDraftSetlist(
+      controlSettings.proPresenterApi,
+      operatorSetlist,
+    );
+    if (!activeProPresenterSetlist)
+      throw new Error("ProPresenter setlist was not sent. Check API settings and ProPresenter TCP/IP.");
+    return {
+      playlistId: activeProPresenterSetlist.playlistId,
+      songs: activeProPresenterSetlist.songIndexes.size,
+      placeholders: activeProPresenterSetlist.placeholders,
+    };
   });
   ipcMain.handle("prep:export-setlist", async () => {
     const exportPath = await exportOperatorSetlist(operatorSetlist);
@@ -1565,6 +1620,7 @@ async function createWindow(): Promise<void> {
     );
     operatorSetlist = relinkImportedSetlist(imported, prepared);
     await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
+    activeProPresenterSetlist = null;
     editorContexts.clear();
     editorContext = null;
     editor = null;
@@ -1580,6 +1636,8 @@ async function createWindow(): Promise<void> {
         (candidate) => candidate.itemId === itemId,
       );
     if (!item) throw new Error("Set song is no longer available");
+    if (isMediaSetlistItem(item))
+      throw new Error("WAV media items do not open in the arrangement editor");
     const choice: any = await repairLegacyReviewCues(item);
     const repairedItem = {
       ...item,
@@ -2123,6 +2181,7 @@ async function createWindow(): Promise<void> {
       devices: await listMidiOutputs(),
       writesLocked: true,
     },
+    proPresenterApi: controlSettings.proPresenterApi,
   }));
   ipcMain.handle(
     "control:command",
@@ -2134,11 +2193,14 @@ async function createWindow(): Promise<void> {
   );
   ipcMain.handle(
     "control:set-settings",
-    async (_event, next: { lanEnabled?: boolean; oscEnabled?: boolean }) => {
+    async (_event, next: { lanEnabled?: boolean; oscEnabled?: boolean; proPresenterApi?: Partial<ProPresenterApiSettings> }) => {
       const updated = {
         ...controlSettings,
         lanEnabled: next.lanEnabled ?? controlSettings.lanEnabled,
         oscEnabled: next.oscEnabled ?? controlSettings.oscEnabled,
+        proPresenterApi: next.proPresenterApi
+          ? normalizeProPresenterApiSettings({ ...controlSettings.proPresenterApi, ...next.proPresenterApi })
+          : controlSettings.proPresenterApi,
         updatedAt: new Date().toISOString(),
       };
       await writeControlSettings(updated);
@@ -2300,6 +2362,7 @@ async function createWindow(): Promise<void> {
     operatorSetlist = {
       ...operatorSetlist,
       items: operatorSetlist.items.map((item) =>
+        !isMediaSetlistItem(item) &&
         resolve(item.manifestPath) === editorContext.sourceManifestPath &&
         item.songIndex === editorContext.songIndex
           ? { ...item, stemMix: channels }
@@ -3041,6 +3104,395 @@ function sendMidiBytes(name: string, bytes: readonly number[]): Promise<void> {
     ),
   );
 }
+
+interface ProPresenterApiSlideSchedulerState {
+  readonly settings: ProPresenterApiSettings;
+  readonly songs: readonly PreparedSong[];
+  readonly performance: PerformanceSnapshot | null;
+  readonly syncedSetlist: ProPresenterSyncedSetlist | null;
+}
+
+class ProPresenterApiSlideScheduler {
+  private readonly fired = new Set<string>();
+  private readonly timer: NodeJS.Timeout;
+  private lastSongIndex: number | null = null;
+  private lastPositionSeconds = 0;
+  private inFlight = false;
+
+  constructor(private readonly state: () => ProPresenterApiSlideSchedulerState) {
+    this.timer = setInterval(() => void this.tick(), 75);
+    this.timer.unref?.();
+  }
+
+  stop(): void {
+    clearInterval(this.timer);
+  }
+
+  private async tick(): Promise<void> {
+    if (this.inFlight) return;
+    const state = this.state(),
+      snapshot = state.performance;
+    if (
+      !snapshot?.playing ||
+      !snapshot.slidesMidiEnabled ||
+      !state.settings.enabled ||
+      !state.syncedSetlist
+    )
+      return;
+    const song = state.songs[snapshot.songIndex];
+    if (!song || isMediaOnlySong(song)) return;
+    if (this.lastSongIndex !== snapshot.songIndex) {
+      this.fired.clear();
+      this.lastSongIndex = snapshot.songIndex;
+    } else if (snapshot.positionSeconds < this.lastPositionSeconds - 0.25) {
+      this.fired.clear();
+    }
+    this.lastPositionSeconds = snapshot.positionSeconds;
+    const events = proPresenterApiSlideEvents(song);
+    if (!events.length) return;
+    const due = events.find(({ event, key }) => {
+      if (this.fired.has(key)) return false;
+      return (
+        event.atSeconds >= snapshot.positionSeconds - 0.2 &&
+        event.atSeconds <= snapshot.positionSeconds + 0.18
+      );
+    });
+    if (!due) return;
+    this.fired.add(due.key);
+    this.inFlight = true;
+    try {
+      await triggerProPresenterApiSlide(
+        state.settings,
+        state.songs,
+        snapshot.songIndex,
+        due.event,
+        state.syncedSetlist,
+      );
+    } finally {
+      this.inFlight = false;
+    }
+  }
+}
+
+function proPresenterApiSlideEvents(
+  song: PreparedSong,
+): { readonly event: PreparedMidiEvent; readonly key: string }[] {
+  return (preparedControl(song)?.proPresenterMidi ?? [])
+    .map((event, index) => ({ event, index }))
+    .filter(({ event }) => isProPresenterSlideMidiEvent(event))
+    .sort((left, right) => left.event.atSeconds - right.event.atSeconds)
+    .map(({ event, index }) => ({
+      event,
+      key: `${index}:${event.atSeconds.toFixed(3)}:${event.status}:${event.data1}:${event.data2}`,
+    }));
+}
+
+function isProPresenterSlideMidiEvent(event: PreparedMidiEvent): boolean {
+  return (event.status & 0xf0) === 0x90 && event.data1 === 19 && event.data2 > 0;
+}
+
+async function triggerProPresenterApiSlide(
+  settings: ProPresenterApiSettings,
+  songs: readonly PreparedSong[],
+  songIndex: number,
+  event: PreparedMidiEvent,
+  syncedSetlist: ProPresenterSyncedSetlist,
+): Promise<void> {
+  const playlistId = settings.playlistId ?? syncedSetlist.playlistId,
+    apiIndex =
+      syncedSetlist.songIndexes.get(songIndex) ??
+      (settings.playlistId ? proPresenterApiSongIndex(songs, songIndex) : null);
+  if (!playlistId || apiIndex === null) return;
+  const cueIndex = Math.max(0, Math.trunc(event.data2) - 1),
+    path = `/v1/playlist/${encodeURIComponent(playlistId)}/${apiIndex}/${cueIndex}/trigger`;
+  try {
+    await proPresenterTrigger(proPresenterApiBase(settings), path);
+  } catch (error) {
+    console.warn(
+      `ProPresenter API slide trigger failed for song ${songIndex + 1}, slide ${event.data2}`,
+      error,
+    );
+  }
+}
+
+async function proPresenterTrigger(base: string, path: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1000);
+  try {
+    const response = await fetch(`${base}${path}`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function primeProPresenterApiSong(
+  settings: ProPresenterApiSettings,
+  songs: readonly PreparedSong[],
+  songIndex: number,
+  syncedSetlist: ProPresenterSyncedSetlist | null,
+): Promise<void> {
+  if (!settings.enabled) return;
+  const playlistId = settings.playlistId ?? syncedSetlist?.playlistId ?? null;
+  if (!playlistId) return;
+  const apiIndex =
+    syncedSetlist?.songIndexes.get(songIndex) ??
+    (settings.playlistId ? proPresenterApiSongIndex(songs, songIndex) : null);
+  if (apiIndex === null) return;
+  const host = settings.host.trim() || DEFAULT_PROPRESENTER_API.host;
+  const base = `http://${host}:${settings.port}`;
+  const path = `/v1/playlist/${encodeURIComponent(playlistId)}/${apiIndex}/trigger`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch(`${base}${path}`, { method: "GET", signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    console.warn(`ProPresenter API selection failed for song ${songIndex + 1}`, error);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function syncProPresenterApiSetlist(
+  settings: ProPresenterApiSettings,
+  manifest: ConfirmedSetManifest,
+): Promise<ProPresenterSyncedSetlist | null> {
+  return syncProPresenterApiItems(
+    settings,
+    manifest.name,
+    manifest.songs.map((song, index) => ({
+      title: song.song.title,
+      sourceIndex: index,
+      mediaOnly: isMediaOnlySong(song),
+    })),
+  );
+}
+
+async function syncProPresenterApiDraftSetlist(
+  settings: ProPresenterApiSettings,
+  setlist: OperatorSetlist,
+): Promise<ProPresenterSyncedSetlist | null> {
+  return syncProPresenterApiItems(
+    settings,
+    setlist.name,
+    setlist.items.map((item, index) => ({
+      title: item.title,
+      sourceIndex: index,
+      mediaOnly: isMediaSetlistItem(item),
+    })),
+  );
+}
+
+async function syncProPresenterApiItems(
+  settings: ProPresenterApiSettings,
+  setName: string,
+  sourceItems: readonly ProPresenterSyncSourceItem[],
+): Promise<ProPresenterSyncedSetlist | null> {
+  if (!settings.enabled) return null;
+  try {
+    const base = proPresenterApiBase(settings);
+    const songs = sourceItems.filter((item) => !item.mediaOnly);
+    if (!songs.length) return null;
+    const library = await proPresenterLibraryPresentations(base);
+    const used = new Set<string>();
+    const items: ProPresenterPlaylistItem[] = [];
+    const songIndexes = new Map<number, number>();
+    let placeholders = 0;
+    for (const song of songs) {
+      const presentation = matchProPresenterPresentation(song.title, library, used);
+      songIndexes.set(song.sourceIndex, items.length);
+      if (!presentation) {
+        placeholders += 1;
+        items.push(proPresenterMissingSongPlaceholder(song.title, items.length));
+        continue;
+      }
+      used.add(presentation.uuid);
+      items.push({
+        id: {
+          index: items.length,
+          name: presentation.name,
+          uuid: presentation.uuid,
+        },
+        type: "presentation",
+        is_hidden: false,
+        is_pco: false,
+      });
+    }
+    const playlistId =
+      settings.playlistId ??
+      (await findOrCreateProPresenterPlaylist(base, settings.playlistName || setName));
+    await proPresenterFetch(base, `/v1/playlist/${encodeURIComponent(playlistId)}`, {
+      method: "PUT",
+      body: JSON.stringify(items),
+    });
+    await proPresenterFetch(base, `/v1/playlist/${encodeURIComponent(playlistId)}/focus`);
+    return { playlistId, songIndexes, placeholders };
+  } catch (error) {
+    console.warn("ProPresenter API setlist sync failed", error);
+    return null;
+  }
+}
+
+function proPresenterApiSongIndex(songs: readonly PreparedSong[], songIndex: number): number | null {
+  if (!songs[songIndex] || isMediaOnlySong(songs[songIndex])) return null;
+  let index = 0;
+  for (let current = 0; current < songIndex; current++) {
+    if (!isMediaOnlySong(songs[current])) index += 1;
+  }
+  return index;
+}
+
+function proPresenterMissingSongPlaceholder(
+  title: string,
+  index: number,
+): ProPresenterPlaylistItem {
+  return {
+    id: {
+      index,
+      name: `MISSING: ${title}`,
+      uuid: null,
+    },
+    type: "header",
+    header_color: {
+      red: 0.95,
+      green: 0.64,
+      blue: 0.1,
+      alpha: 1,
+    },
+    is_hidden: false,
+    is_pco: false,
+  };
+}
+
+function proPresenterApiBase(settings: ProPresenterApiSettings): string {
+  const host = settings.host.trim() || DEFAULT_PROPRESENTER_API.host;
+  return `http://${host}:${settings.port}`;
+}
+
+async function proPresenterFetch<T = any>(
+  base: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has("content-type"))
+    headers.set("content-type", "application/json");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function proPresenterLibraryPresentations(base: string): Promise<ProPresenterPresentation[]> {
+  const libraries = await proPresenterFetch<ProPresenterLibrary[]>(base, "/v1/libraries");
+  const presentations: ProPresenterPresentation[] = [];
+  for (const library of libraries) {
+    const id =
+      library.id?.uuid ||
+      library.uuid ||
+      library.id?.name ||
+      library.name ||
+      String(library.id?.index ?? library.index ?? "");
+    if (!id) continue;
+    const data = await proPresenterFetch<{ items?: ProPresenterPresentation[] }>(
+      base,
+      `/v1/library/${encodeURIComponent(id)}`,
+    );
+    for (const item of data.items ?? [])
+      if (item.uuid && item.name) presentations.push(item);
+  }
+  return presentations;
+}
+
+async function findOrCreateProPresenterPlaylist(base: string, name: string): Promise<string> {
+  const playlists = flattenProPresenterPlaylists(
+    await proPresenterFetch<ProPresenterPlaylist[]>(base, "/v1/playlists"),
+  );
+  const expectedName = normalizeProPresenterPlaylistName(name);
+  const existing = playlists.find(
+    (playlist) =>
+      proPresenterPlaylistKind(playlist) === "playlist" &&
+      normalizeProPresenterPlaylistName(playlist.id?.name ?? "") === expectedName,
+  );
+  if (existing?.id) return existing.id.uuid || existing.id.name || String(existing.id.index);
+  const created = await proPresenterFetch<ProPresenterPlaylist>(base, "/v1/playlists", {
+    method: "POST",
+    body: JSON.stringify({ name, type: "playlist" }),
+  });
+  if (!created.id) throw new Error("ProPresenter did not return a playlist id");
+  return created.id.uuid || created.id.name || String(created.id.index);
+}
+
+function normalizeProPresenterPlaylistName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function flattenProPresenterPlaylists(items: readonly ProPresenterPlaylist[]): ProPresenterPlaylist[] {
+  return items.flatMap((item) => [
+    item,
+    ...flattenProPresenterPlaylists(item.playlists ?? item.children ?? []),
+  ]);
+}
+
+function proPresenterPlaylistKind(item: ProPresenterPlaylist): string {
+  return item.type ?? item.field_type ?? "";
+}
+
+function matchProPresenterPresentation(
+  title: string,
+  presentations: readonly ProPresenterPresentation[],
+  used: ReadonlySet<string>,
+): ProPresenterPresentation | null {
+  const expectedTitles = proPresenterTitleCandidates(title);
+  const available = presentations
+    .filter((item) => !used.has(item.uuid))
+    .map((item) => ({ item, title: normalizeProPresenterTitle(item.name) }));
+  return (
+    available.find(({ title: libraryTitle }) =>
+      expectedTitles.some((expected) => libraryTitle === expected),
+    )?.item ??
+    available.find(({ title: libraryTitle }) =>
+      expectedTitles.some(
+        (expected) =>
+          expected.length >= 5 &&
+          libraryTitle.length >= 5 &&
+          (libraryTitle.includes(expected) || expected.includes(libraryTitle)),
+      ),
+    )?.item ??
+    null
+  );
+}
+
+function proPresenterTitleCandidates(value: string): string[] {
+  const pieces = [
+    value,
+    value.split(/\s+-\s+|\s+–\s+|\s+—\s+/)[0] ?? value,
+    value.replace(/\b(feat|featuring|ft)\.?\b.*$/i, ""),
+  ];
+  return [...new Set(pieces.map(normalizeProPresenterTitle).filter(Boolean))];
+}
+
+function normalizeProPresenterTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
 function execFileText(
   file: string,
   args: readonly string[],
@@ -3069,6 +3521,7 @@ type ControlSettings = {
   lanEnabled: boolean;
   oscEnabled: boolean;
   footControllerProfile: FootControllerProfileId;
+  proPresenterApi: ProPresenterApiSettings;
   gld: {
     host: string;
     port: number;
@@ -3077,6 +3530,65 @@ type ControlSettings = {
     writesEnabled: boolean;
   };
   updatedAt: string;
+};
+type ProPresenterApiSettings = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  playlistName: string;
+  playlistId: string | null;
+};
+type ProPresenterId = {
+  index?: number;
+  name?: string;
+  uuid?: string;
+};
+type ProPresenterLibrary = {
+  id?: ProPresenterId;
+  index?: number;
+  name?: string;
+  uuid?: string;
+};
+type ProPresenterPresentation = {
+  index?: number;
+  name: string;
+  uuid: string;
+};
+type ProPresenterPlaylist = {
+  id?: ProPresenterId;
+  type?: "playlist" | "group" | string;
+  field_type?: "playlist" | "group" | string;
+  playlists?: ProPresenterPlaylist[];
+  children?: ProPresenterPlaylist[];
+};
+type ProPresenterPlaylistItem = {
+  id: { index: number; name: string; uuid: string | null };
+  type: "presentation" | "header";
+  header_color?: {
+    red: number;
+    green: number;
+    blue: number;
+    alpha: number;
+  };
+  is_hidden: boolean;
+  is_pco: boolean;
+};
+type ProPresenterSyncSourceItem = {
+  title: string;
+  sourceIndex: number;
+  mediaOnly: boolean;
+};
+type ProPresenterSyncedSetlist = {
+  playlistId: string;
+  songIndexes: Map<number, number>;
+  placeholders: number;
+};
+const DEFAULT_PROPRESENTER_API: ProPresenterApiSettings = {
+  enabled: true,
+  host: "127.0.0.1",
+  port: 51365,
+  playlistName: "Worship",
+  playlistId: null,
 };
 async function loadOrCreateControlSettings(): Promise<ControlSettings> {
   const path = join(projectRoot, ".playback-data", "control-settings.json");
@@ -3093,6 +3605,7 @@ async function loadOrCreateControlSettings(): Promise<ControlSettings> {
           value.footControllerProfile === "basic-notes"
             ? "basic-notes"
             : "disabled",
+        proPresenterApi: normalizeProPresenterApiSettings(value.proPresenterApi),
         gld: {
           host: typeof value.gld?.host === "string" ? value.gld.host : "",
           port: 51325,
@@ -3118,6 +3631,7 @@ async function loadOrCreateControlSettings(): Promise<ControlSettings> {
     lanEnabled: false,
     oscEnabled: true,
     footControllerProfile: "disabled",
+    proPresenterApi: DEFAULT_PROPRESENTER_API,
     gld: {
       host: "",
       port: 51325,
@@ -3129,6 +3643,19 @@ async function loadOrCreateControlSettings(): Promise<ControlSettings> {
   };
   await writeControlSettings(settings);
   return settings;
+}
+
+function normalizeProPresenterApiSettings(value: any): ProPresenterApiSettings {
+  return {
+    enabled: value?.enabled !== false,
+    host: typeof value?.host === "string" && value.host.trim() ? value.host.trim() : DEFAULT_PROPRESENTER_API.host,
+    port: Number.isInteger(value?.port) && value.port > 0 ? value.port : DEFAULT_PROPRESENTER_API.port,
+    playlistName:
+      typeof value?.playlistName === "string" && value.playlistName.trim()
+        ? value.playlistName.trim()
+        : DEFAULT_PROPRESENTER_API.playlistName,
+    playlistId: typeof value?.playlistId === "string" && value.playlistId.trim() ? value.playlistId.trim() : null,
+  };
 }
 async function writeControlSettings(settings: ControlSettings): Promise<void> {
   await mkdir(join(projectRoot, ".playback-data"), { recursive: true });
@@ -3231,7 +3758,9 @@ async function allPreparedManifestPaths(
   return [
     ...new Set(
       [
-        ...(setlist?.items ?? []).map((item) => resolve(item.manifestPath)),
+        ...(setlist?.items ?? [])
+          .filter((item): item is Exclude<typeof item, { readonly kind: "media" }> => !isMediaSetlistItem(item))
+          .map((item) => resolve(item.manifestPath)),
         ...(await localArrangementManifestPaths()),
         ...(await sourceArrangementManifestPaths()),
         ...(await sharedArrangementManifestPaths()),
@@ -3246,7 +3775,11 @@ async function ensureSetlistOriginalVersions(
   ffmpegPath: string,
 ): Promise<PreparedLibraryChoice[]> {
   const setSongIds = [
-    ...new Set(setlist.items.map((item) => String(item.songId))),
+    ...new Set(
+      setlist.items
+        .filter((item): item is Exclude<typeof item, { readonly kind: "media" }> => !isMediaSetlistItem(item))
+        .map((item) => String(item.songId)),
+    ),
   ];
   if (!setSongIds.length) return prepared;
   const catalog = await importMasterCatalog(
@@ -3395,6 +3928,7 @@ function relinkImportedSetlist(
   prepared: readonly PreparedLibraryChoice[],
 ): OperatorSetlist {
   const items = imported.items.map((item) => {
+    if (isMediaSetlistItem(item)) return item;
     const match =
       prepared.find(
         (choice) =>
@@ -3454,7 +3988,9 @@ async function pruneRuntimeDataForSetlist(
   const cacheRoot = resolve(projectRoot, ".playback-cache"),
     dataRoot = resolve(projectRoot, ".playback-data"),
     allowedManifests = new Set(
-      setlist.items.map((item) => resolve(item.manifestPath).toLowerCase()),
+      setlist.items
+        .filter((item): item is Exclude<typeof item, { readonly kind: "media" }> => !isMediaSetlistItem(item))
+        .map((item) => resolve(item.manifestPath).toLowerCase()),
     );
   await mkdir(cacheRoot, { recursive: true });
   await mkdir(dataRoot, { recursive: true });
@@ -3508,6 +4044,7 @@ async function pruneEditorWaveforms(setlist: OperatorSetlist): Promise<void> {
   const root = join(projectRoot, ".playback-cache", "editor-waveforms"),
     allowed = new Set<string>();
   for (const item of setlist.items) {
+    if (isMediaSetlistItem(item)) continue;
     try {
       const manifest = JSON.parse(
           await readFile(item.manifestPath, "utf8"),

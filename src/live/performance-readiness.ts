@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { validateConfirmedSet, type ConfirmedSetManifest } from "../confirmed-set/manifest.js";
-import { preparedControl, type PreparedSong } from "../domain/song.js";
+import { isMediaOnlySong, preparedControl, type PreparedSong } from "../domain/song.js";
 import { positionToGridBeats } from "../domain/grid.js";
 import type { NativeReadyState } from "./native-engine-client.js";
 
@@ -36,9 +36,9 @@ export async function evaluatePerformanceReadiness(input: PerformanceReadinessIn
     checks.push(check("next", "Next-song preload", input.manifest.songs.length > input.songIndex + 1 ? "blocked" : "ready", input.manifest.songs.length > input.songIndex + 1 ? "Next song is not armed" : "End of confirmed set"));
     return report(checks);
   }
-  const expectedClick = active.liveAssets?.click.events.length ?? 0, expectedCues = (active.liveAssets?.cues.length ?? 0) + (active.liveAssets?.countIn?.length ?? 0);
-  const engineIssues = [input.native.stems !== active.stems.length ? `stems ${input.native.stems}/${active.stems.length}` : null, input.native.clickEvents !== expectedClick ? `click events ${input.native.clickEvents ?? 0}/${expectedClick}` : null, input.native.cueEvents !== expectedCues ? `cue events ${input.native.cueEvents ?? 0}/${expectedCues}` : null, input.native.padKey !== active.selectedKey ? `pad ${input.native.padKey ?? "none"}/${active.selectedKey}` : null].filter((value): value is string => value !== null);
-  checks.push(check("engine", "Native audio engine", engineIssues.length ? "blocked" : "ready", engineIssues.length ? `Armed-state mismatch: ${engineIssues.join(", ")}` : `${input.native.stems} stems, ${expectedClick} click events, ${expectedCues} cues, ${active.selectedKey} pad armed in ${input.native.armMs.toFixed(1)} ms`));
+  const mediaOnly=isMediaOnlySong(active),expectedClick = active.liveAssets?.click.events.length ?? 0, expectedCues = (active.liveAssets?.cues.length ?? 0) + (active.liveAssets?.countIn?.length ?? 0);
+  const engineIssues = [input.native.stems !== active.stems.length ? `stems ${input.native.stems}/${active.stems.length}` : null, !mediaOnly&&input.native.clickEvents !== expectedClick ? `click events ${input.native.clickEvents ?? 0}/${expectedClick}` : null, !mediaOnly&&input.native.cueEvents !== expectedCues ? `cue events ${input.native.cueEvents ?? 0}/${expectedCues}` : null, !mediaOnly&&input.native.padKey !== active.selectedKey ? `pad ${input.native.padKey ?? "none"}/${active.selectedKey}` : null].filter((value): value is string => value !== null);
+  checks.push(check("engine", "Native audio engine", engineIssues.length ? "blocked" : "ready", engineIssues.length ? `Armed-state mismatch: ${engineIssues.join(", ")}` : mediaOnly?`${input.native.stems} media stem armed in ${input.native.armMs.toFixed(1)} ms`:`${input.native.stems} stems, ${expectedClick} click events, ${expectedCues} cues, ${active.selectedKey} pad armed in ${input.native.armMs.toFixed(1)} ms`));
   const channels = input.native.outputChannels ?? 0;
   checks.push(check("routing", "Performance routing", channels < 2 ? "blocked" : input.native.routingReady ? "ready" : "warning", channels < 2 ? "Audio device has fewer than two active outputs" : input.native.routingReady ? `${channels} outputs armed for music/click/cue/pad` : `${channels}-output stereo fallback is active`));
   const expectedMidi = preparedControl(active)?.proPresenterMidi.length ?? 0;
@@ -58,6 +58,7 @@ export function manifestReadiness(manifest: ConfirmedSetManifest): PerformanceRe
 }
 function validatePreparedStructure(song: PreparedSong): string[] {
   const issues: string[] = [];
+  if (isMediaOnlySong(song)) return issues;
   if (!song.regions.length) issues.push("no regions");
   if (song.regions[0] && Math.abs(song.regions[0].startSeconds) > .001&&!hasValidMusicalPreroll(song)) issues.push("first region has no valid measure-and-beat preroll");
   for (let index = 0; index < song.regions.length; index += 1) { const region = song.regions[index]!; if (!region.id || !region.name.trim() || region.endSeconds <= region.startSeconds) issues.push(`invalid region ${index + 1}`); const next = song.regions[index + 1]; if (next && Math.abs(region.endSeconds - next.startSeconds) > .001) issues.push(`gap or overlap after ${region.name}`); }

@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { CONFIRMED_SET_SCHEMA_VERSION, DEFAULT_SHOW_STATE, validateConfirmedSet, type ConfirmedSetManifest, type ConfirmedSetShowState, type ReadinessReport } from "./manifest.js";
-import type { MusicalPosition, PreparedMidiEvent, PreparedSong } from "../domain/song.js";
+import { isMediaOnlySong, type MusicalPosition, type PreparedMidiEvent, type PreparedSong } from "../domain/song.js";
 import { writeCombinedWaveformSummary } from "../prep/wav-waveform.js";
 import { prepareAudioSource, preparedAudioFilename } from "../prep/audio-source.js";
 import type { SongTransitionPlan } from "../live/song-transition.js";
@@ -66,6 +66,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
 
   try {
     const songs: PreparedSong[] = [];
+    let proPresenterSongPosition = 0;
     for (const [songIndex, inputSong] of input.songs.entries()) {
       report(`Caching ${inputSong.preparedSong.song.title}`);
       const songDirectory = join(temporaryDirectory, "songs", String(songIndex).padStart(3, "0"));
@@ -99,7 +100,9 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
       const loudnessNormalization=await measureSongLoudness({stemPaths:cachedStems.map(stem=>stem.sourcePath),...(inputSong.preparedSong.stemMix?{stemMix:inputSong.preparedSong.stemMix}:{}),...(input.ffmpegPath?{ffmpegPath:input.ffmpegPath}:{})});
       const liveAssets = inputSong.liveAssets ? await prepareLiveAssets(inputSong.liveAssets, inputSong.preparedSong, songDirectory, input.ffmpegPath) : undefined;
       completedUnits+=1;report(`Preparing ${inputSong.preparedSong.song.title} click, cues, and pad`);
-      songs.push(resolveSetlistPositionMidi({ ...inputSong.preparedSong, stems: cachedStems, waveformPath, loudnessNormalization, ...(liveAssets ? { liveAssets } : {}) }, songIndex));
+      const preparedSong = { ...inputSong.preparedSong, stems: cachedStems, waveformPath, loudnessNormalization, ...(liveAssets ? { liveAssets } : {}) };
+      const proPresenterPosition = isMediaOnlySong(preparedSong) ? null : ++proPresenterSongPosition;
+      songs.push(resolveSetlistPositionMidi(preparedSong, proPresenterPosition));
     }
 
     const draftManifest: ConfirmedSetManifest = {
@@ -132,9 +135,10 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
   }
 }
 
-/** Note 18 selects the presentation by its current one-based setlist position. */
-export function resolveSetlistPositionMidi(song: PreparedSong, songIndex: number): PreparedSong {
-  const position = songIndex + 1;
+/** Note 18 selects the presentation by its one-based ProPresenter song position. Media-only Playback cards do not count. */
+export function resolveSetlistPositionMidi(song: PreparedSong, proPresenterPosition: number | null): PreparedSong {
+  if (proPresenterPosition === null) return song;
+  const position = proPresenterPosition;
   if (!Number.isInteger(position) || position < 1 || position > 127) throw new Error("ProPresenter setlist position must be between 1 and 127");
   const rewrite = (events: readonly PreparedMidiEvent[]) => events.map((event) =>
     (event.status & 0xf0) === 0x90 && event.data1 === 18 && event.data2 > 0
