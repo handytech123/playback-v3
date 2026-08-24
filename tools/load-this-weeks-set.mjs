@@ -16,7 +16,7 @@ let setlist = createOperatorSetlist("This Week's Set");
 for (const catalogId of requested) {
   const master = catalog.songs.find(song => song.catalogId === catalogId);
   if (!master) throw new Error(`Master song is missing: ${catalogId}`);
-  console.log(`Preparing ${master.title}...`);
+  console.log(`Preparing ${master.title}…`);
   const prepared = await prepareCandidateReview({
     catalogId,
     master,
@@ -32,7 +32,7 @@ for (const catalogId of requested) {
   const choice = (await discoverPreparedLibrary([prepared.manifestPath]))[0];
   if (!choice) throw new Error(`${master.title} did not produce an Editor-ready Original Song`);
   setlist = addPreparedSong(setlist, choice);
-  console.log(`Added ${choice.title} - ${choice.key} - ${choice.bpm} BPM`);
+  console.log(`Added ${choice.title} · ${choice.key} · ${choice.bpm} BPM`);
 }
 
 await saveOperatorSetlist(resolve(".playback-data", "draft-setlist.json"), setlist);

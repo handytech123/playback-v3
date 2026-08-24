@@ -36,7 +36,7 @@ for (const song of manifest.songs ?? []) {
   for (const cue of live.cues ?? []) cue.audioPath = await canonical(cue.audioPath);
 }
 manifest.id = `${manifest.id}-engine-v3-silent-test`;
-manifest.name = `${manifest.name} - Engine V3 Silent Test`;
+manifest.name = `${manifest.name} — Engine V3 Silent Test`;
 manifest.confirmedAt = new Date().toISOString();
 manifest.testPackage = { sourceManifestPath, canonicalFormat: "PCM24/48000", productionSetUnchanged: true };
 const destinationManifest = join(outputRoot, "confirmed-set.json");

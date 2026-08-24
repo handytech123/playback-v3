@@ -76,7 +76,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
       for (const source of inputSong.stems) {
         const sourcePath = source.sourcePath ?? join(inputSong.sourceFolder, source.relativePath);
         const sourceName = basename(sourcePath);
-        const destinationName = extname(sourceName).toLowerCase() === ".wav" ? sourceName : preparedAudioFilename(sourceName);
+        const destinationName = extname(sourceName).toLowerCase() === ".m4a" ? preparedAudioFilename(sourceName) : sourceName;
         if (destinationNames.has(destinationName.toLowerCase())) throw new Error(`Prepared stem filename collision: ${destinationName}`);
         destinationNames.add(destinationName.toLowerCase());
         const destinationPath = join(songDirectory, destinationName);
@@ -88,7 +88,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
         await prepareAudioSource(sourcePath, destinationPath, input.ffmpegPath);
         copiedBytes += before.size;
         cachedStems.push({ role: source.role, sourcePath: destinationPath, durationSeconds: source.durationSeconds, ...(source.displayName ? { displayName: source.displayName } : {}) });
-        completedUnits+=1;report(`Caching ${inputSong.preparedSong.song.title} - ${source.role}`);
+        completedUnits+=1;report(`Caching ${inputSong.preparedSong.song.title} · ${source.role}`);
       }
 
       const waveformPath = join(songDirectory, "waveform.json");
@@ -125,7 +125,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
     const manifest = replacePathPrefix(draftManifest, temporaryDirectory, finalDirectory);
     const manifestPath = join(finalDirectory, "confirmed-set.json");
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
-    report("Confirmed Set ready - opening Performance",100);return { manifestPath, manifest, readiness: validateConfirmedSet(manifest), copiedBytes };
+    report("Confirmed Set ready · opening Performance",100);return { manifestPath, manifest, readiness: validateConfirmedSet(manifest), copiedBytes };
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true });
     throw error;

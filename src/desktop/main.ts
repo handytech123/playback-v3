@@ -7,7 +7,6 @@ import {
   type MenuItemConstructorOptions,
 } from "electron";
 import { execFile } from "node:child_process";
-import { createReadStream } from "node:fs";
 import {
   cp,
   mkdir,
@@ -21,7 +20,6 @@ import {
 import {
   basename,
   dirname,
-  extname,
   isAbsolute,
   join,
   relative,
@@ -51,7 +49,6 @@ import {
   PerformanceSession,
   type LiveBus,
   type PerformanceEffects,
-  type PerformanceSnapshot,
 } from "../live/performance-session.js";
 import { evaluatePerformanceReadiness } from "../live/performance-readiness.js";
 import {
@@ -65,7 +62,6 @@ import { prepareArrangementCache } from "../reaper/arrangement-cache.js";
 import { renderArrangementTracks } from "../reaper/arrangement-renderer.js";
 import { confirmArrangement } from "../reaper/arrangement-confirm.js";
 import type { ArrangementImportPreview } from "../reaper/arrangement.js";
-import type { StemMixSetting } from "../domain/song.js";
 import {
   ArrangementEditorHistory,
   createArrangementDraft,
@@ -107,7 +103,6 @@ import {
 } from "../library/review-manifest.js";
 import {
   addPreparedSong,
-  AUDIO_MEDIA_VENDOR,
   confirmOperatorSet,
   discoverPreparedLibrary,
   loadOperatorSetlist,
@@ -128,7 +123,7 @@ import {
   type SongTransitionType,
 } from "../live/song-transition.js";
 import { runTimedSongTransition } from "../live/timed-song-transition.js";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   PlaybackCommandBus,
   type PlaybackCommand,
@@ -941,87 +936,6 @@ async function createWindow(): Promise<void> {
       stemLabels: performanceStemDisplayLabels(activeSong),
     };
   };
-  let engineerMixSaveQueue: Promise<void> = Promise.resolve(),
-    lastEngineerMixSignature = "";
-  const stemMixFromPerformance = (
-    snapshot: PerformanceSnapshot,
-  ): StemMixSetting[] =>
-    snapshot.mixer.channels
-      .filter((channel) => channel.kind === "stem")
-      .map((channel) => ({
-        index: channel.index,
-        gain: channel.gain,
-        muted: channel.muted,
-        solo: channel.solo,
-        iem: channel.iem,
-      }));
-  const persistEngineerMixNow = async (
-    snapshot: PerformanceSnapshot,
-    reason: string,
-  ) => {
-    const song = manifest.songs[snapshot.songIndex];
-    if (!song || song.song.id === EMPTY_SONG_ID) return;
-    const stemMix = stemMixFromPerformance(snapshot);
-    if (!stemMix.length) return;
-    const signature = `${snapshot.songIndex}:${JSON.stringify(stemMix)}`;
-    if (signature === lastEngineerMixSignature) return;
-    lastEngineerMixSignature = signature;
-    const songs = [...manifest.songs];
-    songs[snapshot.songIndex] = { ...song, stemMix };
-    (manifest as unknown as { songs: typeof songs }).songs = songs;
-    const temporary = `${manifestPath}.${process.pid}.engineer-mix.tmp`;
-    await writeFile(temporary, JSON.stringify(manifest, null, 2), "utf8");
-    await rename(temporary, manifestPath);
-    const setItem = operatorSetlist.items[snapshot.songIndex],
-      arrangementName = song.arrangement?.name ?? "Original Song";
-    if (
-      setItem &&
-      String(setItem.songId) === String(song.song.id) &&
-      setItem.arrangement === arrangementName
-    ) {
-      operatorSetlist = {
-        ...operatorSetlist,
-        items: operatorSetlist.items.map((item, index) =>
-          index === snapshot.songIndex ? { ...item, stemMix } : item,
-        ),
-        updatedAt: new Date().toISOString(),
-      };
-      await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
-    }
-    console.info(`Engineer mix saved for ${song.song.title} (${reason})`);
-  };
-  const queueEngineerMixSave = (
-    snapshot: PerformanceSnapshot | undefined,
-    reason: string,
-  ) => {
-    if (!snapshot) return;
-    engineerMixSaveQueue = engineerMixSaveQueue
-      .then(() => persistEngineerMixNow(snapshot, reason))
-      .catch((error) =>
-        console.warn(
-          "Engineer mix auto-save failed",
-          error instanceof Error ? error.message : error,
-        ),
-      );
-  };
-  const observeEngineerMixAutosave = (
-    before: PerformanceSnapshot | undefined,
-    after: PerformanceSnapshot | undefined,
-  ) => {
-    if (!before || !after) return;
-    if (before.songIndex !== after.songIndex) {
-      queueEngineerMixSave(before, "song changed");
-      return;
-    }
-    const song = manifest.songs[after.songIndex];
-    if (
-      song &&
-      before.playing &&
-      !after.playing &&
-      after.positionSeconds >= song.durationSeconds - 0.05
-    )
-      queueEngineerMixSave(after, "song ended");
-  };
   const applyPreparedSongMixer = (song: any) => {
     for (const channel of createMixerState(song).channels)
       engine.setMixerChannel(
@@ -1176,12 +1090,7 @@ async function createWindow(): Promise<void> {
     selectedSongIndex,
   );
   controlBus = new PlaybackCommandBus(performance, manifest.name);
-  let lastObservedPerformanceState = performance.snapshot;
-  controlBus.onState((state) => {
-    observeEngineerMixAutosave(lastObservedPerformanceState, state.performance);
-    lastObservedPerformanceState = state.performance;
-    sendToRenderer("control:state", state);
-  });
+  controlBus.onState((state) => sendToRenderer("control:state", state));
   if (!emptyStartup)
     void armSourceSong(manifestPath, selectedSongIndex)
       .then(async (readyState) => {
@@ -1445,7 +1354,7 @@ async function createWindow(): Promise<void> {
       startedAt: new Date().toISOString(),
       finishedAt: null,
       message:
-        "Reading the master workbook, Analyzer metadata, and song folders...",
+        "Reading the master workbook, Analyzer metadata, and song folders…",
     };
     sendToRenderer("prep:status", libraryActivity);
     try {
@@ -1470,7 +1379,7 @@ async function createWindow(): Promise<void> {
       for (const [index, record] of reviewSongs.entries()) {
         libraryActivity = {
           ...libraryActivity,
-          message: `Updating ${record.master.title} (${index + 1}/${reviewSongs.length})...`,
+          message: `Updating ${record.master.title} (${index + 1}/${reviewSongs.length})…`,
         };
         sendToRenderer("prep:status", libraryActivity);
         try {
@@ -1631,31 +1540,6 @@ async function createWindow(): Promise<void> {
     editorContexts.clear();
     await pruneRuntimeDataForSetlist(operatorSetlist);
     return prepResponse();
-  });
-  ipcMain.handle("prep:add-audio-media", async () => {
-    const chosen = await dialog.showOpenDialog(window!, {
-      title: "Add Audio File To Setlist",
-      properties: ["openFile"],
-      filters: [
-        {
-          name: "Audio files",
-          extensions: ["wav", "m4a", "mp3", "aac", "flac"],
-        },
-      ],
-    });
-    if (chosen.canceled || !chosen.filePaths[0])
-      return prepResponse({ cancelled: true });
-    const manifestPath = await createAudioMediaManifest(chosen.filePaths[0]);
-    const choice = (await discoverPreparedLibrary([manifestPath]))[0];
-    if (!choice) throw new Error("Audio file could not be prepared");
-    operatorSetlist = addPreparedSong(operatorSetlist, choice);
-    await saveOperatorSetlist(operatorSetlistPath, operatorSetlist);
-    editorContexts.clear();
-    await pruneRuntimeDataForSetlist(operatorSetlist);
-    return prepResponse({
-      addedItemId: operatorSetlist.items.at(-1)?.itemId,
-      manifestPath,
-    });
   });
   ipcMain.handle("prep:export-setlist", async () => {
     const exportPath = await exportOperatorSetlist(operatorSetlist);
@@ -2632,7 +2516,7 @@ async function createWindow(): Promise<void> {
   if (process.env.PLAYBACK_E2E_PREP) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 600));
     const result = await window.webContents.executeJavaScript(
-      `(async()=>{const wait=ms=>new Promise(r=>setTimeout(r,ms));document.querySelector('#editMode').click();const update=await window.playback.prep.update();for(let i=0;i<100&&!document.querySelector('.add-song-card');i++)await wait(100);document.querySelector('.add-song-card').click();for(let i=0;i<300&&document.querySelectorAll('#songLibraryResults .library-choice').length<134;i++)await wait(100);const prep=await window.playback.prep.get();return{visible:!document.querySelector('#editorWorkspace').hidden,prepared:prep.prepared.length,catalog:document.querySelectorAll('#songLibraryResults .library-choice').length,summary:update.counts.ready+' ready  -  '+(update.counts['needs-review']??0)+' ready for review',setName:prep.setlist.name,confirmDisabled:prep.setlist.items.length===0};})()`,
+      `(async()=>{const wait=ms=>new Promise(r=>setTimeout(r,ms));document.querySelector('#editMode').click();const update=await window.playback.prep.update();for(let i=0;i<100&&!document.querySelector('.add-song-card');i++)await wait(100);document.querySelector('.add-song-card').click();for(let i=0;i<300&&document.querySelectorAll('#songLibraryResults .library-choice').length<134;i++)await wait(100);const prep=await window.playback.prep.get();return{visible:!document.querySelector('#editorWorkspace').hidden,prepared:prep.prepared.length,catalog:document.querySelectorAll('#songLibraryResults .library-choice').length,summary:update.counts.ready+' ready · '+(update.counts['needs-review']??0)+' ready for review',setName:prep.setlist.name,confirmDisabled:prep.setlist.items.length===0};})()`,
     );
     console.log(`PREP_WORKFLOW_E2E ${JSON.stringify(result)}`);
     app.quit();
@@ -3341,101 +3225,6 @@ async function listPreparedArrangements(
       array.findIndex((other) => other.path === item.path) === index,
   );
 }
-
-async function createAudioMediaManifest(sourcePath: string): Promise<string> {
-  const extension = extname(sourcePath).toLowerCase();
-  if (![".wav", ".m4a", ".mp3", ".aac", ".flac"].includes(extension))
-    throw new Error(`Unsupported audio media format: ${extension || "none"}`);
-  const [hash, durationSeconds] = await Promise.all([
-    sha256Path(sourcePath),
-    probeAudioDurationSeconds(sourcePath),
-  ]);
-  const safeId = `media-${hash.slice(0, 16)}`,
-    title = basename(sourcePath, extname(sourcePath)),
-    directory = join(projectRoot, ".playback-data", "audio-media", safeId),
-    manifestPath = join(directory, "confirmed-set.json"),
-    now = new Date().toISOString();
-  await mkdir(directory, { recursive: true });
-  const manifest: ConfirmedSetManifest = {
-    schemaVersion: 1,
-    id: `prepared-${safeId}`,
-    name: title,
-    confirmedAt: now,
-    songs: [
-      {
-        song: {
-          id: safeId as any,
-          title,
-          artist: "Audio File",
-          vendor: AUDIO_MEDIA_VENDOR,
-          originalKey: "--",
-          originalBpm: 120,
-          originalTimeSignature: { numerator: 4, denominator: 4 },
-        },
-        selectedKey: "--",
-        selectedBpm: 120,
-        timeSignature: { numerator: 4, denominator: 4 },
-        durationSeconds,
-        stems: [
-          {
-            role: "other",
-            sourcePath,
-            durationSeconds,
-            displayName: title,
-          },
-        ],
-        regions: [],
-        cues: [],
-        cacheFingerprint: `sha256:${hash}`,
-        arrangement: {
-          id: "audio-file",
-          name: "Audio File",
-          sourceType: "app-edit",
-          sourceSha256: hash,
-          proPresenterMidi: [],
-          midiOutputName: null,
-        },
-      },
-    ],
-    show: DEFAULT_SHOW_STATE,
-  };
-  const temporary = `${manifestPath}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  await rename(temporary, manifestPath);
-  return manifestPath;
-}
-
-async function sha256Path(path: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
-  return hash.digest("hex");
-}
-
-async function probeAudioDurationSeconds(path: string): Promise<number> {
-  const output = await new Promise<string>((resolvePromise, rejectPromise) => {
-    execFile(
-      runtimeFfmpegPath,
-      ["-hide_banner", "-i", path],
-      { windowsHide: true, maxBuffer: 1024 * 1024 },
-      (error, _stdout, stderr) => {
-        const text = String(stderr ?? "");
-        if (text.includes("Duration:")) resolvePromise(text);
-        else
-          rejectPromise(
-            error ?? new Error(`Could not read audio duration for ${path}`),
-          );
-      },
-    );
-  });
-  const match = output.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-  if (!match) throw new Error(`Could not read audio duration for ${path}`);
-  const seconds =
-    Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-  if (!Number.isFinite(seconds) || seconds <= 0)
-    throw new Error(`Audio file has invalid duration: ${path}`);
-  return seconds;
-}
-
 async function allPreparedManifestPaths(
   setlist?: OperatorSetlist,
 ): Promise<string[]> {

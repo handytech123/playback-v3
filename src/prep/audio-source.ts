@@ -4,7 +4,7 @@ import { extname } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
-const SUPPORTED_LIBRARY_AUDIO = new Set([".wav", ".m4a", ".mp3", ".aac", ".flac"]);
+const SUPPORTED_LIBRARY_AUDIO = new Set([".wav", ".m4a"]);
 
 export function isSupportedLibraryAudio(path: string): boolean {
   return SUPPORTED_LIBRARY_AUDIO.has(extname(path).toLowerCase());
