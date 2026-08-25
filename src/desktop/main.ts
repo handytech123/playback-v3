@@ -121,6 +121,10 @@ import {
   type PreparedLibraryChoice,
 } from "../prep/operator-workflow.js";
 import {
+  exportRehearsalSong,
+  rehearsalExportFilename,
+} from "../prep/rehearsal-export.js";
+import {
   normalizeSongTransitionSettings,
   transitionDuration,
   type SongTransitionSettings,
@@ -243,6 +247,7 @@ let libraryActivity: {
 };
 
 const SETLIST_EXPORT_DIRECTORY = "D:\\Dropbox\\Worship\\Setlists";
+const REHEARSAL_EXPORT_DIRECTORY = "D:\\Dropbox\\Worship\\Rehearsal Exports";
 const EMPTY_SONG_ID = "__playback_empty__";
 const emptyWaveform = {
   schemaVersion: 1,
@@ -252,6 +257,10 @@ const emptyWaveform = {
   durationSeconds: 1,
   buckets: [],
 };
+const runtimeWaveformCache = new Map<
+  string,
+  { readonly mtimeMs: number; readonly size: number; readonly payload: unknown }
+>();
 function emptyStartupManifest(): ConfirmedSetManifest {
   return {
     schemaVersion: 1,
@@ -944,7 +953,21 @@ async function createWindow(): Promise<void> {
     if (activeSong.song.id === EMPTY_SONG_ID || !activeSong.waveformPath)
       return emptyWaveform;
     try {
-      return JSON.parse(await readFile(activeSong.waveformPath, "utf8"));
+      const info = await stat(activeSong.waveformPath),
+        cached = runtimeWaveformCache.get(activeSong.waveformPath);
+      if (
+        cached &&
+        cached.mtimeMs === info.mtimeMs &&
+        cached.size === info.size
+      )
+        return cached.payload;
+      const payload = JSON.parse(await readFile(activeSong.waveformPath, "utf8"));
+      runtimeWaveformCache.set(activeSong.waveformPath, {
+        mtimeMs: info.mtimeMs,
+        size: info.size,
+        payload,
+      });
+      return payload;
     } catch {
       return emptyWaveform;
     }
@@ -2119,6 +2142,29 @@ async function createWindow(): Promise<void> {
     },
   );
   ipcMain.handle("performance:get", () => performance!.snapshot);
+  ipcMain.handle("performance:export-song", async () => {
+    const songIndex = performance?.snapshot.songIndex ?? selectedSongIndex;
+    const activeSong = manifest.songs[songIndex];
+    if (!activeSong || activeSong.song.id === EMPTY_SONG_ID)
+      throw new Error("Select a confirmed song before exporting rehearsal audio");
+    await mkdir(REHEARSAL_EXPORT_DIRECTORY, { recursive: true });
+    const chosen = await dialog.showSaveDialog(window!, {
+      title: "Export Rehearsal Song",
+      defaultPath: join(
+        REHEARSAL_EXPORT_DIRECTORY,
+        rehearsalExportFilename(activeSong, songIndex),
+      ),
+      filters: [{ name: "WAV audio", extensions: ["wav"] }],
+    });
+    if (chosen.canceled || !chosen.filePath) return { cancelled: true };
+    return exportRehearsalSong({
+      song: activeSong,
+      setName: manifest.name,
+      songIndex,
+      destinationPath: chosen.filePath,
+      ffmpegPath: runtimeFfmpegPath,
+    });
+  });
   ipcMain.handle("set:get-song", async (_event, index: number) =>
     performanceSongPayload(index),
   );

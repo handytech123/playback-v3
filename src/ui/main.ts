@@ -100,6 +100,11 @@ root.innerHTML = `
 </div></dialog>`;
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
+const performanceExportSongButton = document.createElement("button");
+performanceExportSongButton.id = "performanceExportSong";
+performanceExportSongButton.className = "settings-menu-button";
+performanceExportSongButton.textContent = "EXPORT WAV";
+$("#remoteControl").before(performanceExportSongButton);
 const setDurationClock=document.createElement("div");
 setDurationClock.className="set-duration-clock";
 setDurationClock.innerHTML='<span>FULL SET DURATION</span><strong id="fullSetDuration">0:00</strong><small id="fullSetSongs">0 SONGS</small>';
@@ -697,6 +702,24 @@ function setupPerformance() {
   $("#pad").onclick = () => void liveCommand({ action: "bus", bus: "pad", enabled: !liveState.channels.pad });
   $("#slidesMidi").onclick = () => void liveCommand({ action: "slides-midi", enabled: !liveState.slidesMidiEnabled });
   $("#surfaceMidi").onclick = () => void liveCommand({ action: "surface-midi", enabled: liveState.surfaceMixerMidiEnabled === false });
+  $("#performanceExportSong").onclick = async () => {
+    const button = $<HTMLButtonElement>("#performanceExportSong");
+    button.disabled = true;
+    try {
+      const result = await withGlobalLoading(
+        "EXPORTING SONG",
+        "Rendering the current song as a rehearsal WAV.",
+        () => window.playback.performance.exportSong(),
+      );
+      if (result?.cancelled) setSetlistStatus("Song export cancelled.");
+      else setSetlistStatus(`Song exported: ${result.path}`);
+    } catch (error) {
+      showError(error);
+      setSetlistStatus("Song export failed.");
+    } finally {
+      button.disabled = false;
+    }
+  };
   $("#previousSection").onclick = () => navigateSection(-1);
   $("#nextSection").onclick = () => navigateSection(1);
   $("#loopSection").onclick = () => void liveCommand({ action: "loop", regionId: performanceRegionSelectionExplicit ? selectedRegionId : liveState.currentRegionId });

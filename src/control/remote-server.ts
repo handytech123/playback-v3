@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createSocket, type Socket } from "node:dgram";
 import { timingSafeEqual } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { PlaybackCommandBus, parsePlaybackCommand, type ControlState } from "./command-bus.js";
 import { decodeOscMessage, oscToPlaybackCommand } from "./osc.js";
 import { REMOTE_CONTROL_PAGE } from "./remote-page.js";
@@ -12,6 +12,7 @@ export interface RemoteControlAddress { readonly host: string; readonly httpPort
 
 export class RemoteControlServer {
   private http: Server | null = null; private udp: Socket | null = null; private readonly streams = new Set<ServerResponse>(); private unsubscribe: (() => void) | null = null;
+  private readonly waveformCache = new Map<string, { readonly mtimeMs: number; readonly size: number; readonly payload: unknown }>();
   constructor(private readonly bus: PlaybackCommandBus, private readonly options: RemoteControlOptions) { if (options.token.length < 16) throw new Error("Remote control token must contain at least 16 characters"); }
   async start(): Promise<RemoteControlAddress> {
     if (this.http) throw new Error("Remote control server is already running");
@@ -31,13 +32,20 @@ export class RemoteControlServer {
     const url = new URL(request.url ?? "/", "http://playback.local");
     if (request.method === "GET" && url.pathname === "/") { response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'" }); response.end(REMOTE_CONTROL_PAGE); return; }
     if (request.method === "GET" && url.pathname === "/api/state") { json(response, 200, this.bus.state()); return; }
-    if (request.method === "GET" && url.pathname === "/api/waveform") { try { const index=Number(url.searchParams.get("index")??0),song=this.bus.state().songs[index]; if(!song?.waveformPath)throw new Error("Waveform is not prepared for this song"); json(response,200,JSON.parse(await readFile(song.waveformPath,"utf8"))); } catch(error) { json(response,404,{error:error instanceof Error?error.message:String(error),buckets:[]}); } return; }
+    if (request.method === "GET" && url.pathname === "/api/waveform") { try { const index=Number(url.searchParams.get("index")??0),song=this.bus.state().songs[index]; if(!song?.waveformPath)throw new Error("Waveform is not prepared for this song"); json(response,200,await this.loadWaveform(song.waveformPath)); } catch(error) { json(response,404,{error:error instanceof Error?error.message:String(error),buckets:[]}); } return; }
     if (request.method === "GET" && url.pathname === "/api/events") { response.writeHead(200, { "Content-Type": "text/event-stream", Connection: "keep-alive" }); response.write(`event: state\ndata: ${JSON.stringify(this.bus.state())}\n\n`); this.streams.add(response); request.on("close", () => this.streams.delete(response)); return; }
     if (request.method === "POST" && url.pathname === "/api/command") { try { const command = parsePlaybackCommand(JSON.parse(await body(request))); const result = await this.bus.dispatch(command, "remote"); json(response, result.ok ? 200 : 409, result); } catch (error) { json(response, 400, { error: error instanceof Error ? error.message : String(error) }); } return; }
     json(response, 404, { error: "Not found" });
   }
   private authorized(request: IncomingMessage): boolean { const header = request.headers.authorization, candidate = header?.startsWith("Bearer ") ? header.slice(7) : new URL(request.url ?? "/", "http://playback.local").searchParams.get("token") ?? ""; const expected = Buffer.from(this.options.token), actual = Buffer.from(candidate); return expected.length === actual.length && timingSafeEqual(expected, actual); }
   private broadcast(state: ControlState): void { const event = `event: state\ndata: ${JSON.stringify(state)}\n\n`; for (const stream of this.streams) stream.write(event); }
+  private async loadWaveform(path: string): Promise<unknown> {
+    const info = await stat(path), cached = this.waveformCache.get(path);
+    if (cached && cached.mtimeMs === info.mtimeMs && cached.size === info.size) return cached.payload;
+    const payload = JSON.parse(await readFile(path, "utf8"));
+    this.waveformCache.set(path, { mtimeMs: info.mtimeMs, size: info.size, payload });
+    return payload;
+  }
 }
 
 function safeToken(value: unknown, expectedValue: string): boolean { if(typeof value!=="string")return false;const expected=Buffer.from(expectedValue),actual=Buffer.from(value);return expected.length===actual.length&&timingSafeEqual(expected,actual); }

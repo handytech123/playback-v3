@@ -317,10 +317,11 @@ body:not(.expanded-editor) .editor-selection-readout{background:#081017}
 
 /* Central production settings window. */
 .settings-menu-button{min-width:112px;border-color:#536979!important;background:#182631!important;color:#eef7fc!important;font-size:10px!important;font-weight:900;letter-spacing:.08em}
+.arrangement-tools #performanceExportSong{min-width:108px;border-color:#3f7b62!important;background:#163929!important;color:#dfffee!important}
 .arrangement-tools #slidesMidi,.arrangement-tools #surfaceMidi{min-width:118px;border:1px solid #b94b5d!important;border-radius:5px;background:#4d1f28!important;color:#ffd8df!important;padding:7px 9px!important;font-size:8px!important;font-weight:900;letter-spacing:.08em}
 .arrangement-tools #slidesMidi.active,.arrangement-tools #surfaceMidi.active{border-color:#43d69c!important;background:#17684f!important;color:#eafff7!important;box-shadow:0 0 10px #35e0a044}
 .arrangement-tools #slidesMidi.manual,.arrangement-tools #surfaceMidi.manual{box-shadow:0 0 8px #ff5b7133}
-.edit-mode .arrangement-tools #slidesMidi,.edit-mode .arrangement-tools #surfaceMidi{display:none}
+.edit-mode .arrangement-tools #slidesMidi,.edit-mode .arrangement-tools #surfaceMidi,.edit-mode .arrangement-tools #performanceExportSong{display:none}
 #remoteSettings.settings-window{width:min(1120px,calc(100vw - 56px));max-width:none;height:min(800px,calc(100vh - 56px));max-height:none;border:2px solid #455a69;border-radius:10px;background:#0c131a;box-shadow:0 28px 90px #000e;overflow:hidden}
 #remoteSettings.settings-window>header{min-height:82px;padding:14px 20px;background:linear-gradient(180deg,#17242e,#111a22)}
 #remoteSettings.settings-window>header h2{font-size:25px}

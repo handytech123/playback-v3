@@ -7,7 +7,7 @@ declare global {
       command(command: string, value?: number): void;
       onTransport(listener: (state: NativeTransportState) => void): void;
       windows: { onMenuAction(listener: (action: string) => void): void };
-      performance: { get(): Promise<any>; command(value: any): Promise<any>; onState(listener: (state: any) => void): void; onMeters(listener: (meters: { master: number; channels: readonly number[] }) => void): void };
+      performance: { get(): Promise<any>; command(value: any): Promise<any>; exportSong(): Promise<any>; onState(listener: (state: any) => void): void; onMeters(listener: (meters: { master: number; channels: readonly number[] }) => void): void };
       set: { getSong(index: number): Promise<any>; selectSong(index: number): Promise<any> };
       control: { get(): Promise<any>; command(command: any): Promise<any>; setSettings(settings: any): Promise<any>; setMidiInput(settings: any): Promise<any>; gldPreview(settings: any): Promise<any>; gldTest(settings: any): Promise<any>; onState(listener: (state: any) => void): void; onMidiInput(listener: (state: any) => void): void };
       arrangements: { previewReaper(): Promise<any>; commitReaper(action: "new" | "replace" | "cancel"): Promise<any> };
