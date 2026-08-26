@@ -3,9 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as asar from '@electron/asar';
 import { verifyRuntime,sha256 } from './runtime-contract.mjs';
+import { verifyProgramming } from './verify-programming.mjs';
 export async function verifyPackage(appDirectory){
  const resources=path.join(appDirectory,'resources'),archive=path.join(resources,'app.asar');
  const manifest=JSON.parse(await fs.readFile('release-runtime/manifest.json','utf8'));
+ const programmingFiles=await verifyProgramming(archive);
  const actualEntries=asar.listPackage(archive).map(n=>n.replaceAll('\\','/').replace(/^\//,''));
  for(const [name,expected] of Object.entries(manifest.files)){
   if(sha256(asar.extractFile(archive,path.normalize(name)))!==expected)throw Error(`Release programming missing or changed: ${name}`);
@@ -16,7 +18,7 @@ export async function verifyPackage(appDirectory){
  const pkg=JSON.parse(asar.extractFile(archive,'package.json'));
  for(const dependency of Object.keys(pkg.dependencies))asar.statFile(archive,path.normalize(`node_modules/${dependency}/package.json`));
  const runtime=await verifyRuntime(resources);
- const result={version:pkg.version,archiveSha256:sha256(await fs.readFile(archive)),preservedProgrammingFiles:Object.keys(manifest.files).length,runtime};
+ const result={version:pkg.version,archiveSha256:sha256(await fs.readFile(archive)),preservedProgrammingFiles:Object.keys(manifest.files).length,programmingFiles,runtime};
  await fs.writeFile(path.join(resources,'release-integrity.json'),JSON.stringify(result,null,2)+'\n');
  console.log(`Verified complete ${pkg.version} package: release code, production modules, native engine, DLLs, and audio tools.`);
  return result;
