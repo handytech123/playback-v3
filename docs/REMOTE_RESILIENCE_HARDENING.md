@@ -81,14 +81,16 @@ distributed during this pass.
 - Command bus, remote server, and legacy/modern tablet tests in Electron 43.2.0:
   38 passed. Legacy tests verify ES5 parsing, authenticated XHR, touch gestures,
   and invalid-token behavior; modern tests retain pointer events and reconnects.
-- The same 38 Electron tests passed 25 consecutive runs (950 test executions)
-  to exercise connection timing and cleanup repeatedly.
+- The same 38 Electron tests passed batches of 25 and 100 consecutive runs
+  (4,750 test executions) to exercise connection timing and cleanup repeatedly.
 - Both existing native CTest suites passed; native code is unchanged.
 - A smoke test loaded the actual ASAR's remote server, command bus, and session
   through the packaged executable. Authenticated HTTP, unauthorized rejection,
   live SSE updates, mock Play, and restart while mock playback remained active
   all passed with zero Stop calls. Packaged remote and command-bus bytes match
   the compiled modules used by the regression suite and long soak.
+- The destination-PC PowerShell verifier also passed against the independently
+  built candidate's archive and bundled runtime dependencies.
 - Real HTTP tests cover live events after the initial response, slow TCP output,
   chunked/multibyte oversize bodies, partial request aborts, bind failures,
   restarts, queue rejection, invalid waveforms, and cache retirement.
