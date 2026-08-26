@@ -104,7 +104,15 @@ const performanceExportSongButton = document.createElement("button");
 performanceExportSongButton.id = "performanceExportSong";
 performanceExportSongButton.className = "settings-menu-button";
 performanceExportSongButton.textContent = "EXPORT WAV";
-$("#remoteControl").before(performanceExportSongButton);
+const exportSettingsRow=document.createElement("section");
+exportSettingsRow.className="settings-export-song";
+exportSettingsRow.append(performanceExportSongButton);
+const exportSettingsHelp=document.createElement("p");
+exportSettingsHelp.textContent="Export the current song as a WAV file.";
+exportSettingsRow.append(exportSettingsHelp);
+$('[data-settings-page="audio"] .settings-section-heading').after(exportSettingsRow);
+let performanceWaveResizeObserver:ResizeObserver|null=null;
+let editorWaveResizeObserver:ResizeObserver|null=null;
 const setDurationClock=document.createElement("div");
 setDurationClock.className="set-duration-clock";
 setDurationClock.innerHTML='<span>FULL SET DURATION</span><strong id="fullSetDuration">0:00</strong><small id="fullSetSongs">0 SONGS</small>';
@@ -474,15 +482,16 @@ function setupDeviceSelectors() {
   const outputCount=$<HTMLSelectElement>("#audioOutputCount");
   const renderOutputCounts=(device:any)=>{const max=Math.max(2,Number(device?.maxOutputChannels??device?.outputChannels??data.audio.outputChannels??2)),selected=Math.min(max,Number(device?.outputChannels??data.audio.selectedDevice?.outputChannels??max));outputCount.replaceChildren();const choices=[...new Set([2,4,6,8,16,32,64,128,max].filter(value=>value<=max))].sort((a,b)=>a-b);for(const count of choices)outputCount.add(new Option(count===max?`${count} · ALL AVAILABLE`:String(count),String(count),false,count===selected));outputCount.disabled=!device;};
   renderOutputCounts(data.audio.selectedDevice);
+    audio.addEventListener("playback-audio-refreshed", () => { renderOutputCounts(data.audio.selectedDevice); renderOutputMatrix(); });
   const route = $("#routeStatus");
   setRouteStatus(data.audio.routingReady, data.audio.outputChannels);
   audio.onchange = async () => {
     audio.disabled = true; route.textContent = "OPENING AUDIO DEVICE";
-    try { const choice=audio.value?JSON.parse(audio.value):null,device=choice?{...choice,outputChannels:choice.maxOutputChannels}:null;const state = await window.playback.audio.setDevice(device); data.audio={...data.audio,...state};renderOutputCounts(device);setRouteStatus(state.routingReady,state.outputChannels);renderOutputMatrix();renderDawMixer(); }
+    try { const choice=audio.value?JSON.parse(audio.value):null,device=choice?{...choice,outputChannels:choice.maxOutputChannels}:null;data.audio = { ...data.audio, selectedDevice: device }; renderOutputCounts(device); renderOutputMatrix(); const state = await window.playback.audio.setDevice(device); data.audio={...data.audio,...state};renderOutputCounts(device);setRouteStatus(state.routingReady,state.outputChannels);renderOutputMatrix();renderDawMixer(); }
     catch (error) { route.className = "route-status fault"; route.textContent = "AUDIO FAULT"; showError(error); }
     finally { audio.disabled = false; }
   };
-  outputCount.onchange=async()=>{if(!audio.value)return;outputCount.disabled=true;route.textContent="OPENING AUDIO DEVICE";try{const device={...JSON.parse(audio.value),outputChannels:Number(outputCount.value)};const state=await window.playback.audio.setDevice(device);data.audio={...data.audio,...state,selectedDevice:device};setRouteStatus(state.routingReady,state.outputChannels);renderOutputMatrix();renderDawMixer();}catch(error){route.className="route-status fault";route.textContent="AUDIO FAULT";showError(error);}finally{outputCount.disabled=false;}};
+  outputCount.onchange=async()=>{if(!audio.value)return;outputCount.disabled=true;route.textContent="OPENING AUDIO DEVICE";try{const device={...JSON.parse(audio.value),outputChannels:Number(outputCount.value)};data.audio = { ...data.audio, selectedDevice: device }; renderOutputCounts(device); renderOutputMatrix(); const state = await window.playback.audio.setDevice(device);data.audio={...data.audio,...state,selectedDevice:device};setRouteStatus(state.routingReady,state.outputChannels);renderOutputMatrix();renderDawMixer();}catch(error){route.className="route-status fault";route.textContent="AUDIO FAULT";showError(error);}finally{outputCount.disabled=false;}};
   const renderOutputMatrix=()=>{
     const matrix=$("#outputMatrix");matrix.replaceChildren();
     let lockButton=document.querySelector<HTMLButtonElement>("#routingMatrixLock");
@@ -494,7 +503,7 @@ function setupDeviceSelectors() {
     const activeOutputs=Math.max(2,Number(data.audio.selectedDevice?.outputChannels??data.audio.outputChannels??2));
     const danteActive=/dante/i.test(`${data.audio.selectedDevice?.type??""} ${data.audio.selectedDevice?.name??""}`),stereo=activeOutputs===2;
     $("#outputMatrixHeading").textContent=stereo?"Choose Left, Right, or Both for every track and live bus":danteActive?`Assign stems and live buses to Dante outputs 1–${activeOutputs}`:`Assign stems and live buses to device outputs 1–${activeOutputs}`;
-    const fields:any[]=PLAYBACK_OUTPUTS.map(bus=>({label:bus.appBus,key:bus.key,value:data.audio.globalBusRouting[bus.key].output,width:data.audio.globalBusRouting[bus.key].channels}));
+    const fields:any[]=PLAYBACK_OUTPUTS.slice().sort((a,b)=>["drums","bass","acoustic","electric","keys","strings","vocals","other","pad","click","cue","iem"].indexOf(a.key)-["drums","bass","acoustic","electric","keys","strings","vocals","other","pad","click","cue","iem"].indexOf(b.key)).map(bus=>({label:bus.appBus,key:bus.key,value:data.audio.globalBusRouting[bus.key].output,width:data.audio.globalBusRouting[bus.key].channels}));
     const grid=document.createElement("div");grid.className="dante-routing-grid";grid.style.gridTemplateColumns=`minmax(240px, 1fr) repeat(${activeOutputs}, ${activeOutputs<=8?"minmax(48px, 72px)":"36px"})`;grid.style.width=activeOutputs<=8?"100%":"max-content";
     const makeRouting=()=>structuredClone(data.audio.globalBusRouting);
     const setRoute=(routing:any,field:any,output:number)=>{routing[field.key]={...routing[field.key],output};};
@@ -613,7 +622,7 @@ function setupRemoteControl() {
     $("#audioCheckReport").innerHTML = checks.map((item: any) => `<div class="diagnostic-line ${item.level}"><b>${escapeHtml(item.label)}</b><span>${escapeHtml(item.detail)}</span></div>`).join("") || "No audio readiness information is available.";
     $("#settingsStatus").textContent = checks.some((item: any) => item.level === "blocked") ? "Audio error check found a blocking problem." : checks.some((item: any) => item.level === "warning") ? "Audio is available with warnings." : "Audio device and routing checks passed.";
   };
-  $("#refreshAudioSettings").onclick = async () => { const button=$<HTMLButtonElement>("#refreshAudioSettings");button.disabled=true;$("#settingsStatus").textContent="Scanning Windows Audio, DirectSound, and ASIO devices…";try{const state=await window.playback.audio.refresh();data.audio={...data.audio,...state};const select=$<HTMLSelectElement>("#audioSelect");select.replaceChildren(new Option("Audio · System Default",""));for(const device of state.devices){const selected=state.selectedDevice?.type===device.type&&state.selectedDevice?.name===device.name;select.add(new Option(`Audio · ${device.name} · ${device.type}`,JSON.stringify(device),false,selected));}const route=$("#routeStatus");route.className=`route-status ${state.routingReady?"ready":"fallback"}`;route.textContent=state.routingReady?"6 OUT READY":`${state.outputChannels} OUT FALLBACK`;renderSettingsSummary();$("#settingsStatus").textContent=state.fellBack?"The selected device disconnected. Playback safely fell back to the system default.":`Audio scan complete · ${state.devices.length} devices found across all installed backends.`;}catch(error){showError(error);$("#settingsStatus").textContent="Audio device scan failed.";}finally{button.disabled=false;}};
+  $("#refreshAudioSettings").onclick = async () => { const button=$<HTMLButtonElement>("#refreshAudioSettings");button.disabled=true;$("#settingsStatus").textContent="Scanning Windows Audio, DirectSound, and ASIO devices…";try{const state=await window.playback.audio.refresh();data.audio={...data.audio,...state};const select=$<HTMLSelectElement>("#audioSelect");select.replaceChildren(new Option("Audio · System Default",""));for(const device of state.devices){const selected=state.selectedDevice?.type===device.type&&state.selectedDevice?.name===device.name;select.add(new Option(`Audio · ${device.name} · ${device.type}`,JSON.stringify(device),false,selected));}select.dispatchEvent(new Event("playback-audio-refreshed")); const route=$("#routeStatus");route.className=`route-status ${state.routingReady?"ready":"fallback"}`;route.textContent=state.routingReady?`${state.outputChannels} OUT READY`:`${state.outputChannels} OUT FALLBACK`;renderSettingsSummary();$("#settingsStatus").textContent=state.fellBack?"The selected device disconnected. Playback safely fell back to the system default.":`Audio scan complete · ${state.devices.length} devices found across all installed backends.`;}catch(error){showError(error);$("#settingsStatus").textContent="Audio device scan failed.";}finally{button.disabled=false;}};
   $("#runSystemCheck").onclick = () => {
     const checks = liveState.readiness?.checks ?? [], report = $("#systemCheckReport");
     report.innerHTML = checks.map((item: any) => `<div class="diagnostic-line ${item.level}"><b>${escapeHtml(item.label)}</b><span>${escapeHtml(item.detail)}</span></div>`).join("") || "No readiness checks are available.";
@@ -756,7 +765,35 @@ function setupPerformance() {
 function setupMixerResize(){const stored=Number(localStorage.getItem("playback.performance.mixerHeight")),initial=Number.isFinite(stored)&&stored>=180?stored:innerWidth>=1600?310:270;document.body.style.setProperty("--performance-mixer-height",`${initial}px`);const handle=$("#mixerResizeHandle");let originY=0,originHeight=initial;handle.onpointerdown=(event:PointerEvent)=>{if(document.body.classList.contains("mixer-collapsed"))return;originY=event.clientY;originHeight=$("#performanceMixer").getBoundingClientRect().height;handle.setPointerCapture(event.pointerId);document.body.classList.add("mixer-resizing");};handle.onpointermove=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;const maximum=Math.min(520,innerHeight-330),height=Math.max(180,Math.min(maximum,originHeight+originY-event.clientY));document.body.style.setProperty("--performance-mixer-height",`${Math.round(height)}px`);};handle.onpointerup=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;handle.releasePointerCapture(event.pointerId);document.body.classList.remove("mixer-resizing");localStorage.setItem("playback.performance.mixerHeight",String(Math.round($("#performanceMixer").getBoundingClientRect().height)));};}
 
 function setupEditorSummaryMixerResize(){document.body.style.setProperty("--editor-summary-mixer-height",`${summaryMixerHeight}px`);}
-function bindEditorSummaryMixerResize(){const handle=document.querySelector<HTMLElement>("#summaryMixerResizeHandle");if(!handle)return;let originY=0,originHeight=summaryMixerHeight;handle.onpointerdown=(event:PointerEvent)=>{originY=event.clientY;originHeight=$("#summaryStemMixer").getBoundingClientRect().height;handle.setPointerCapture(event.pointerId);document.body.classList.add("mixer-resizing");};handle.onpointermove=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;const height=Math.max(150,Math.min(380,originHeight+originY-event.clientY));summaryMixerHeight=Math.round(height);document.body.style.setProperty("--editor-summary-mixer-height",`${summaryMixerHeight}px`);};handle.onpointerup=(event:PointerEvent)=>{if(!handle.hasPointerCapture(event.pointerId))return;handle.releasePointerCapture(event.pointerId);document.body.classList.remove("mixer-resizing");localStorage.setItem("playback.editor.summaryMixerHeight",String(summaryMixerHeight));};}
+function bindEditorSummaryMixerResize() {
+    const handle=document.querySelector<HTMLElement>('#summaryMixerResizeHandle');if(!handle)return;
+    const collapse=document.querySelector<HTMLButtonElement>('#summaryMixerCollapse')!;
+    const setCollapsed=(collapsed:boolean)=>{
+        document.body.classList.toggle('editor-mixer-collapsed',collapsed);
+        collapse.textContent=collapsed?'EXPAND':'COLLAPSE';collapse.setAttribute('aria-expanded',String(!collapsed));
+    };
+    setCollapsed(localStorage.getItem('playback.editor.mixerCollapsed')==='1');
+    collapse.onclick=()=>{const collapsed=!document.body.classList.contains('editor-mixer-collapsed');setCollapsed(collapsed);localStorage.setItem('playback.editor.mixerCollapsed',collapsed?'1':'0');};
+    let originY=0,originHeight=summaryMixerHeight;
+    handle.onpointerdown=(event)=>{
+        if(document.body.classList.contains('editor-mixer-collapsed'))return;
+        originY=event.clientY;originHeight=document.querySelector('#summaryStemMixer')!.getBoundingClientRect().height;
+        handle.setPointerCapture(event.pointerId);document.body.classList.add('mixer-resizing');
+    };
+    handle.onpointermove=(event)=>{
+        if(!handle.hasPointerCapture(event.pointerId))return;
+        const available=document.querySelector('.editor-stage')!.getBoundingClientRect().height;
+        const maximum=Math.max(110,Math.min(380,available-265));
+        summaryMixerHeight=Math.round(Math.max(110,Math.min(maximum,originHeight+originY-event.clientY)));
+        document.body.style.setProperty('--editor-summary-mixer-height',`${summaryMixerHeight}px`);
+    };
+    const finish=(event:PointerEvent)=>{
+        if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);
+        document.body.classList.remove('mixer-resizing');
+        localStorage.setItem('playback.editor.summaryMixerHeight',String(summaryMixerHeight));
+    };
+    handle.onpointerup=finish;handle.onpointercancel=finish;handle.onlostpointercapture=finish;
+}
 function renderEditorPanelCollapse(){const grid=document.querySelector<HTMLElement>(".editor-grid");if(!grid)return;grid.classList.toggle("arrangement-order-collapsed",arrangementOrderCollapsed);grid.classList.toggle("selected-region-collapsed",selectedRegionCollapsed);$("#toggleRegionBrowser").textContent=arrangementOrderCollapsed?"ORDER ›":"‹ ORDER";$("#toggleRegionBrowser").setAttribute("aria-expanded",String(!arrangementOrderCollapsed));$("#toggleEditorInspector").textContent=selectedRegionCollapsed?"‹ REGION":"REGION ›";$("#toggleEditorInspector").setAttribute("aria-expanded",String(!selectedRegionCollapsed));}
 
 function setupEditorControls() {
@@ -1252,6 +1289,7 @@ function editorStemOrderRank(label: string) {
 }
 
 function renderEditorTimeline() {
+ const editorWaveJobs:Parameters<typeof drawWaveform>[]=[];const drawEditorWave:typeof drawWaveform=(...args)=>{editorWaveJobs.push(args);drawWaveform(...args);};
   if (!workspace) return;
   const timeline = $("#editorTimeline");
   const zoom = Number(($<HTMLInputElement>("#editorZoom")).value);
@@ -1284,10 +1322,10 @@ function renderEditorTimeline() {
     lane.append(button);
   }
   renderMarkers();
-  drawWaveform($("#summaryWaveform canvas") as HTMLCanvasElement, workspace.waveforms.summary, "#63d8ff");
+  drawEditorWave($("#summaryWaveform canvas") as HTMLCanvasElement, workspace.waveforms.summary, "#63d8ff");
   const summaryMixer = $("#summaryStemMixer"); summaryMixer.replaceChildren();
   const summaryResize=document.createElement("div");summaryResize.id="summaryMixerResizeHandle";summaryResize.className="summary-mixer-resize-handle";summaryResize.title="Drag to resize editor mixer";summaryMixer.append(summaryResize);
-  const summaryHeader = document.createElement("div"); summaryHeader.className = "summary-stem-mixer-heading"; summaryHeader.innerHTML = "<strong>STEM MIXER</strong><span>Mute choices follow Confirm Set.</span>"; summaryMixer.append(summaryHeader);
+  const summaryHeader = document.createElement("div"); summaryHeader.className = "summary-stem-mixer-heading"; summaryHeader.innerHTML = "<strong>STEM MIXER</strong><span>Mute choices follow Confirm Set.</span><button id='summaryMixerCollapse' type='button'>COLLAPSE</button>"; summaryMixer.append(summaryHeader);
   const summaryChannelRow = document.createElement("div"); summaryChannelRow.className = "summary-stem-channel-row"; summaryMixer.append(summaryChannelRow);
   const stems = $("#stemWaveforms"); stems.replaceChildren();
   const labels = $("#stemLabelItems"); labels.replaceChildren();
@@ -1296,21 +1334,21 @@ function renderEditorTimeline() {
     const channel=workspace.mixer?.channels[index]??{index,gain:1,muted:false,solo:false,iem:false};
     const stemName = entry.label;
     const color = stemColor(stemName, stem.role);
-    const summaryStrip=document.createElement("article");summaryStrip.className=`daw-channel editor-summary-channel ${channel.muted?"muted":""}`;summaryStrip.style.setProperty("--channel-accent",color);summaryStrip.innerHTML=`<div class="channel-console"><div class="meter-shell"><i class="meter-fill" data-editor-vertical-meter-channel="${index}"></i></div><div class="console-controls"><div class="channel-switches"><button data-summary-stem-switch="muted" class="${channel.muted?"active":""}" title="Mute ${escapeHtml(stemName)}">M</button><button data-summary-stem-switch="solo" class="${channel.solo?"active":""}" title="Solo ${escapeHtml(stemName)}">S</button></div><input class="channel-fader" data-summary-stem-fader="${index}" type="range" min="0" max="1.25" step=".01" value="${channel.gain}" aria-label="${escapeHtml(stemName)} summary fader"></div></div><output>${Math.round(channel.gain*100)}%</output><div class="channel-name" title="${escapeHtml(stemName)}">${escapeHtml(stemName)}</div>`;summaryChannelRow.append(summaryStrip);
-    for(const button of summaryStrip.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.summaryStemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.summaryStemSwitch==="solo"?!latest.solo:latest.solo});renderEditorTimeline();}catch(error){showError(error);}};
+    const summaryStrip=document.createElement("article");summaryStrip.className=`daw-channel editor-summary-channel ${channel.muted?"muted":""}`;summaryStrip.style.setProperty("--channel-accent",color);summaryStrip.innerHTML=`<div class="channel-console"><div class="meter-shell"><i class="meter-fill" data-editor-vertical-meter-channel="${index}"></i></div><div class="console-controls"><div class="channel-switches"><button data-summary-stem-switch="muted" class="${channel.muted?"active":""}" title="Mute ${escapeHtml(stemName)}">M</button><button data-summary-stem-switch="solo" class="${channel.solo?"active":""}" title="Solo ${escapeHtml(stemName)}">S</button></div><input class="channel-fader" data-summary-stem-fader="${index}" type="range" min="0" max="1.25" step=".01" value="${channel.gain}" aria-label="${escapeHtml(stemName)} summary fader"></div></div><output>${Math.round(channel.gain*100)}%</output><div class="channel-name" title="${escapeHtml(stemName)}">${escapeHtml(stemName)}</div>`;summaryStrip.dataset.editorChannel=String(index);summaryChannelRow.append(summaryStrip);
+    for(const button of summaryStrip.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.summaryStemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.summaryStemSwitch==="solo"?!latest.solo:latest.solo});refreshEditorStemControls(index);}catch(error){showError(error);}};
     for(const fader of summaryStrip.querySelectorAll<HTMLInputElement>("input"))fader.oninput=()=>{const latest=workspace.mixer.channels[index],gain=Number(fader.value);workspace.mixer.channels[index]={...latest,gain};workspace.draft.stemMix=workspace.mixer.channels;const readout=summaryStrip.querySelector("output");if(readout)readout.textContent=`${Math.round(gain*100)}%`;const previous=editorMixerCommandTimers.get(index);if(previous)clearTimeout(previous);editorMixerCommandTimers.set(index,window.setTimeout(async()=>{try{await updateEditorStemMix(index,{gain:workspace.mixer.channels[index].gain});}catch(error){showError(error);}},30));};
-    const label = document.createElement("label"); label.className="stem-console";label.innerHTML = `<span class="stem-console-name"><i class="stem-identifier" style="--stem-color:${color}"></i><strong title="${escapeHtml(stemName)}">${escapeHtml(stemName)}</strong></span><span class="stem-console-level"><input data-stem-fader type="range" min="0" max="1.25" step=".01" value="${channel.gain}" aria-label="${escapeHtml(stemName)} level"><span class="stem-inline-meter" title="Live signal level"><i data-editor-meter-channel="${index}"></i></span></span><span class="stem-console-switches"><button data-stem-switch="muted" class="${channel.muted?"active":""}">M</button><button data-stem-switch="solo" class="${channel.solo?"active":""}">S</button></span>`; labels.append(label);
-    for(const button of label.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.stemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.stemSwitch==="solo"?!latest.solo:latest.solo});renderEditorTimeline();}catch(error){showError(error);}};
+    const label = document.createElement("label"); label.className="stem-console";label.innerHTML = `<span class="stem-console-name"><i class="stem-identifier" style="--stem-color:${color}"></i><strong title="${escapeHtml(stemName)}">${escapeHtml(stemName)}</strong></span><span class="stem-console-level"><input data-stem-fader type="range" min="0" max="1.25" step=".01" value="${channel.gain}" aria-label="${escapeHtml(stemName)} level"><span class="stem-inline-meter" title="Live signal level"><i data-editor-meter-channel="${index}"></i></span></span><span class="stem-console-switches"><button data-stem-switch="muted" class="${channel.muted?"active":""}">M</button><button data-stem-switch="solo" class="${channel.solo?"active":""}">S</button></span>`; label.dataset.editorChannel=String(index);labels.append(label);
+    for(const button of label.querySelectorAll<HTMLButtonElement>("button"))button.onclick=async()=>{try{const latest=workspace.mixer.channels[index];await updateEditorStemMix(index,{muted:button.dataset.stemSwitch==="muted"?!latest.muted:latest.muted,solo:button.dataset.stemSwitch==="solo"?!latest.solo:latest.solo});refreshEditorStemControls(index);}catch(error){showError(error);}};
     for(const fader of label.querySelectorAll<HTMLInputElement>("input"))fader.oninput=()=>{const latest=workspace.mixer.channels[index],gain=Number(fader.value);workspace.mixer.channels[index]={...latest,gain};workspace.draft.stemMix=workspace.mixer.channels;const previous=editorMixerCommandTimers.get(index);if(previous)clearTimeout(previous);editorMixerCommandTimers.set(index,window.setTimeout(async()=>{try{await updateEditorStemMix(index,{gain:workspace.mixer.channels[index].gain});}catch(error){showError(error);}},30));};
     const row = document.createElement("div"); row.className = `stem-row ${displayIndex % 2 ? "alternate" : ""}`; row.innerHTML = `<canvas></canvas>`; stems.append(row);
-    row.style.setProperty("--stem-color", color);
-    drawWaveform(row.querySelector("canvas")!, stem.buckets, color,{ visualGain: 3.4, verticalScale: .96, alpha: .98, lineWidth: 2 });
+    row.style.setProperty("--stem-color", color);row.style.setProperty("--wave-lane-background",editorWaveLaneBackground(color));
+    drawEditorWave(row.querySelector("canvas")!, stem.buckets, color,{ visualGain: 3.4, verticalScale: .96, alpha: .98, lineWidth: 2, outline: ["#202020","#0000FF","#8C0099"].includes(color) ? "#8a98a6" : undefined });
   }
   const scroll = $("#editorTimelineScroll");
   scroll.onscroll = () => { labels.style.transform = `translateY(${-scroll.scrollTop}px)`; };
   updateSelectionOverlay();
   bindEditorTimelinePointer();
-  bindEditorSummaryMixerResize();
+  bindEditorSummaryMixerResize();observeEditorWaveforms(editorWaveJobs);
 }
 
 function renderMarkers() {
@@ -1382,7 +1420,9 @@ function renderPerformanceTimeline() {
   for (const cue of song.cues ?? []) { const marker = document.createElement("i"); marker.style.left = `${(cue.atSeconds / performanceDuration) * 100}%`; marker.title = cue.phrase; marker.innerHTML = `<span>${escapeHtml(cue.phrase)}</span>`; cues.append(marker); }
   $("#performanceTimeline").onclick = (event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); window.playback.command("seek", ((event.clientX - rect.left) / rect.width) * performanceDuration); };
   updatePerformanceProgress();
-  addEventListener("resize", () => { drawWaveform(canvas, data.waveform.buckets, "#63d8ff"); drawWaveform(progressCanvas, data.waveform.buckets, "#ffffff"); });
+  performanceWaveResizeObserver?.disconnect();
+    performanceWaveResizeObserver=new ResizeObserver(() => { drawWaveform(canvas, data.waveform.buckets, "#63d8ff"); drawWaveform(progressCanvas, data.waveform.buckets, "#ffffff"); });
+    performanceWaveResizeObserver.observe(canvas);
 }
 
 function updatePerformanceProgress() {
@@ -1459,12 +1499,12 @@ function renderPerformanceBusMixer(){
     for(const group of groups){
       const strip=document.createElement("article");strip.className=`daw-channel ${group.className}`;strip.dataset.mixerGroup=group.id;strip.style.setProperty("--channel-accent",group.accent);strip.innerHTML=`<div class="channel-head"><b data-meter-readout="${escapeHtml(group.id)}">-inf</b></div><div class="channel-console"><div class="meter-shell"><i class="meter-fill" data-meter-channel="${escapeHtml(group.id)}"></i></div><div class="console-controls"><div class="channel-switches"><button data-mixer-switch="muted" title="Mute ${escapeHtml(group.label)}">M</button><button data-mixer-switch="solo" title="Solo ${escapeHtml(group.label)}">S</button><button data-mixer-switch="iem" title="Send ${escapeHtml(group.label)} to PB_IEM output 3">IEM</button></div><input class="channel-fader" data-mixer-fader="${escapeHtml(group.id)}" type="range" min="0" max="1.25" step="0.01" value="${group.gain}" aria-label="${escapeHtml(group.label)} fader"></div></div><output data-mixer-output="${escapeHtml(group.id)}">${Math.round(group.gain*100)}%</output><div class="channel-name" title="${escapeHtml(group.label)}">${escapeHtml(group.label)}</div>`;container.append(strip);
       const controlsLocked=group.controlsLocked;
-      for(const button of strip.querySelectorAll<HTMLButtonElement>("[data-mixer-switch]")){const autoIem=group.className==="bus"&&button.dataset.mixerSwitch==="iem";button.disabled=controlsLocked||autoIem;button.title=autoIem?"PB_IEM follows this bus mute automatically":controlsLocked?`${group.label} is fixed in Performance mode`:button.title;button.onclick=()=>{if(controlsLocked||autoIem)return;const current=performanceMixerGroups(liveState.mixer).find(item=>item.id===group.id);if(!current)return;const key=button.dataset.mixerSwitch!;void updatePerformanceMixerGroup(current,{muted:key==="muted"?!current.muted:current.muted,solo:key==="solo"?!current.solo:current.solo,iem:key==="iem"?!current.iem:current.iem});};}
+      for(const button of strip.querySelectorAll<HTMLButtonElement>("[data-mixer-switch]")){const autoIem=false;button.disabled=controlsLocked||autoIem;button.title=autoIem?"Independent pre-fader IEM send":controlsLocked?`${group.label} is fixed in Performance mode`:button.title;button.onclick=()=>{if(controlsLocked||autoIem)return;const current=performanceMixerGroups(liveState.mixer).find(item=>item.id===group.id);if(!current)return;const key=button.dataset.mixerSwitch!;void updatePerformanceMixerGroup(current,{muted:key==="muted"?!current.muted:current.muted,solo:key==="solo"?!current.solo:current.solo,iem:key==="iem"?!current.iem:current.iem});};}
       const fader=strip.querySelector<HTMLInputElement>("[data-mixer-fader]")!,levelLocked=group.levelLocked||controlsLocked;fader.disabled=levelLocked;fader.title=levelLocked?`${group.label} is fixed in Performance mode`:`${group.label} level`;strip.classList.toggle("level-locked",levelLocked);strip.classList.toggle("controls-locked",controlsLocked);if(!levelLocked)fader.oninput=()=>{const requested=Number(fader.value);strip.querySelector<HTMLOutputElement>("output")!.value=`${Math.round(requested*100)}%`;const previous=performanceMixerCommandTimers.get(group.id);if(previous)clearTimeout(previous);performanceMixerCommandTimers.set(group.id,window.setTimeout(()=>{const current=performanceMixerGroups(liveState.mixer).find(item=>item.id===group.id);if(current)void updatePerformanceMixerGroup(current,{gain:requested});},30));};
     }
   }
   for(const group of groups){const strip=container.querySelector<HTMLElement>(`[data-mixer-group="${group.id}"]`);if(!strip)continue;strip.querySelector<HTMLButtonElement>('[data-mixer-switch="muted"]')?.classList.toggle("active",group.muted);strip.querySelector<HTMLButtonElement>('[data-mixer-switch="solo"]')?.classList.toggle("active",group.solo);strip.querySelector<HTMLButtonElement>('[data-mixer-switch="iem"]')?.classList.toggle("active",group.iem);strip.classList.toggle("muted",group.muted);const fader=strip.querySelector<HTMLInputElement>("[data-mixer-fader]");if(fader&&document.activeElement!==fader){fader.value=String(group.gain);strip.querySelector<HTMLOutputElement>("output")!.value=`${Math.round(group.gain*100)}%`;}}
-  const iemReady=Boolean(data.audio.iemReady);$("#mixerIemStatus").textContent=iemReady?`PB_IEM AUTO - UNMUTED STEMS`:`PB_IEM ARMED - ${data.audio.outputChannels??0} OUTPUT DEVICE`;$("#performanceMixer").classList.toggle("iem-unavailable",!iemReady);
+  const iemReady=Boolean(data.audio.iemReady);$("#mixerIemStatus").textContent=iemReady?`PB_IEM PRE-FADER - INDEPENDENT SENDS`:`PB_IEM ARMED - ${data.audio.outputChannels??0} OUTPUT DEVICE`;$("#performanceMixer").classList.toggle("iem-unavailable",!iemReady);
 }
 
 function performanceMixerGroups(mixer:any){
@@ -1475,20 +1515,20 @@ function performanceMixerGroups(mixer:any){
 function performanceMixerSpec(channel:any){
   if(channel.kind==="click")return{id:"dynamic-click",label:"Dynamic Click",className:"click",accent:"#f0c75e",order:110};
   if(channel.kind==="cue")return{id:"dynamic-cue",label:"Dynamic Cue",className:"cue",accent:"#ff78b3",order:120};
-  if(channel.kind==="pad")return{id:"dynamic-pad",label:"Dynamic Pad",className:"pad",accent:"#b495ff",order:100};
+  if(channel.kind==="pad")return{id:"dynamic-pad",label:"Dynamic Pad",className:"pad",accent:"#8C0099",order:90};
   const label=data.stemLabels?.[channel.index]??song.stems[channel.index]?.displayName??song.stems[channel.index]?.role??`Stem ${channel.index+1}`,role=song.stems[channel.index]?.role??"";
   return performanceBusSpec(label,role);
 }
 function performanceBusSpec(label:string,role:string){
   const value=`${label} ${role}`.toLowerCase().replace(/[_-]+/g," ");
-  if(/\b(acoustic|acous|ag)\b/.test(value))return{id:"bus-acoustic",label:"Acoustic",className:"bus",accent:"#63d8ff",order:10};
-  if(/\b(electric|elec|eg)\s*\d*\b/.test(value)||/\bguitar\b/.test(value))return{id:"bus-electric",label:"Electric",className:"bus",accent:"#b69cff",order:20};
-  if(/\bbass\b/.test(value))return{id:"bus-bass",label:"Bass",className:"bus",accent:"#74efb8",order:30};
-  if(/\b(piano|keys?|organ|rhodes|synth)\b/.test(value))return{id:"bus-keys",label:"Keys",className:"bus",accent:"#84a9ff",order:40};
-  if(/\b(strings?|violin|viola|cello)\b/.test(value))return{id:"bus-strings",label:"Strings",className:"bus",accent:"#64e0d2",order:60};
-  if(/\b(drums?|kick|snare|tom|toms|cymbal|loop|loops|perc|percussion|shaker|tambourine|clap)\b/.test(value))return{id:"bus-drums",label:"Drums",className:"bus",accent:"#ff9b71",order:70};
-  if(/\b(vocals?|bgv|bgvs|choir|alto|tenor|soprano|lead vocal)\b/.test(value))return{id:"bus-vocals",label:"Vocals",className:"bus",accent:"#ff78b3",order:80};
-  return{id:"bus-other",label:"Other",className:"bus",accent:"#9fb4bf",order:90};
+  if(/\b(acoustic|acous|ag)\b/.test(value))return{id:"bus-acoustic",label:"Acoustic",className:"bus",accent:"#0066FF",order:30};
+  if(/\b(electric|elec|eg)\s*\d*\b/.test(value)||/\bguitar\b/.test(value))return{id:"bus-electric",label:"Electric",className:"bus",accent:"#8C0099",order:40};
+  if(/\bbass\b/.test(value))return{id:"bus-bass",label:"Bass",className:"bus",accent:"#00FF00",order:20};
+  if(/\b(piano|keys?|organ|rhodes|synth)\b/.test(value))return{id:"bus-keys",label:"Keys",className:"bus",accent:"#0000FF",order:50};
+  if(/\b(strings?|violin|viola|cello)\b/.test(value))return{id:"bus-strings",label:"Orchestra",className:"bus",accent:"#FFFF00",order:60};
+  if(/\b(drums?|kick|snare|tom|toms|cymbal|loop|loops|perc|percussion|shaker|tambourine|clap)\b/.test(value))return{id:"bus-drums",label:"Drums",className:"bus",accent:"#FF0000",order:10};
+  if(/\b(vocals?|bgv|bgvs|choir|alto|tenor|soprano|lead vocal)\b/.test(value))return{id:"bus-vocals",label:"Vocals",className:"bus",accent:"#FFFFFF",order:70};
+  return{id:"bus-other",label:"Other",className:"bus",accent:"#202020",order:80};
 }
 async function updatePerformanceMixerGroup(group:any,patch:Partial<{gain:number;muted:boolean;solo:boolean;iem:boolean}>){
   try{let state=liveState;for(const channel of group.sourceChannels){const current=state.mixer.channels[channel.index]??channel;state=await window.playback.performance.command({action:"mixer-channel",index:current.index,gain:patch.gain??current.gain,muted:patch.muted??current.muted,solo:patch.solo??current.solo,iem:group.levelLocked?false:patch.iem??current.iem});}if(state.songIndex!==activeSongIndex){await synchronizePerformanceSong(state.songIndex,state);return;}liveState=state;renderLiveState();}catch(error){showError(error);}
@@ -1540,7 +1580,7 @@ function renderPerformanceReadiness(report: any) {
   const faulted = Boolean(liveState.fault);
   if (faulted) { badge.classList.add("blocked"); badge.textContent = "PERFORMANCE LOCKED - ENGINE FAULT"; }
   const noLoadedSong=editMode?!workspace:String(song?.song?.id)==="__playback_empty__";
-  const locked = noLoadedSong || ((!report.ready || faulted) && !editMode);
+  const locked = noLoadedSong || (((!report.ready && !liveState.playing) || faulted) && !editMode);
   for (const control of document.querySelectorAll<HTMLInputElement | HTMLButtonElement>("#liveControls button, #liveControls input, #performanceMixer button, #performanceMixer input, #play, #pause, #pad, #slidesMidi, #surfaceMidi")) if (control.id !== "clearFault"&&control.id!=="mixerCollapse") control.disabled = locked;
   $("#performanceWorkspace").classList.toggle("performance-locked", locked);
 }
@@ -1642,10 +1682,13 @@ function regionClass(name: string) {
   return "other";
 }
 function midiKind(status: number, data2: number) { const kind = status & 240; return kind === 144 && data2 > 0 ? "NOTE ON" : kind === 128 || kind === 144 ? "NOTE OFF" : kind === 176 ? "CONTROL" : "MIDI"; }
-function drawWaveform(canvas: HTMLCanvasElement,buckets:readonly any[],color:string,options:{visualGain?:number;verticalScale?:number;alpha?:number;lineWidth?:number}={}){
+function drawWaveform(canvas: HTMLCanvasElement,buckets:readonly any[],color:string,options:{visualGain?:number;verticalScale?:number;alpha?:number;lineWidth?:number;outline?:string|undefined}={}){
   const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height){canvas.width=0;canvas.height=0;return;}canvas.width=Math.ceil(rect.width*devicePixelRatio);canvas.height=Math.ceil(rect.height*devicePixelRatio);const context=canvas.getContext("2d")!;context.scale(devicePixelRatio,devicePixelRatio);context.clearRect(0,0,rect.width,rect.height);if(!buckets.length)return;
   const performanceWaveform=canvas.id==="wave"||canvas.id==="waveProgress",magnitudes=performanceWaveform?buckets.map((bucket:any)=>Math.max(Math.abs(Number(bucket.min)||0),Math.abs(Number(bucket.max)||0))).sort((a:number,b:number)=>a-b):[],reference=performanceWaveform?magnitudes[Math.min(magnitudes.length-1,Math.floor(magnitudes.length*.985))]??1:1,visualGain=options.visualGain??(performanceWaveform?Math.max(1,Math.min(12,.92/Math.max(.02,reference))):1),mid=rect.height/2,verticalScale=options.verticalScale??(performanceWaveform ? .485 : .86),shape=(value:number)=>{const normalized=Math.min(1,Math.abs(value)*visualGain),defined=performanceWaveform?Math.pow(normalized,.76):Math.pow(normalized,.72);return Math.sign(value)*defined;};
-  context.strokeStyle=color;context.globalAlpha=performanceWaveform ? .16 : Math.min(.45,(options.alpha??.85)*.36);context.lineWidth=performanceWaveform?3:Math.max(2,options.lineWidth??2);context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}context.stroke();
+  context.strokeStyle=color;context.globalAlpha=performanceWaveform ? .16 : Math.min(.45,(options.alpha??.85)*.36);context.lineWidth=performanceWaveform?3:Math.max(2,options.lineWidth??2);context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}if (options.outline && !performanceWaveform) {
+        context.save();context.strokeStyle=options.outline;context.lineWidth+=2;context.globalAlpha=.7;context.shadowBlur=0;context.stroke();context.restore();
+    }
+    context.stroke();
   context.globalAlpha=performanceWaveform ? .96 : (options.alpha??.85);context.lineWidth=performanceWaveform?Math.max(1.1,rect.width/buckets.length):Math.max(1,options.lineWidth??1);context.shadowColor=performanceWaveform?color:color;context.shadowBlur=performanceWaveform?2:3;context.beginPath();for(const[index,bucket]of buckets.entries()){const x=(index/buckets.length)*rect.width;context.moveTo(x,mid+shape(bucket.min)*mid*verticalScale);context.lineTo(x,mid+shape(bucket.max)*mid*verticalScale);}context.stroke();context.shadowBlur=0;
   if(performanceWaveform){context.globalAlpha=.2;context.lineWidth=1;context.beginPath();context.moveTo(0,Math.round(mid)+.5);context.lineTo(rect.width,Math.round(mid)+.5);context.stroke();}
 }
@@ -1654,17 +1697,44 @@ function formatGridLocation(seconds: number, grid: readonly any[]) { if (!grid.l
 function formatMusicalLocation(position:any,fallbackSeconds:number){return position?`${position.measure}.${position.beat}${position.tick?`+${position.tick}`:""}`:formatGridLocation(fallbackSeconds,editorGrid());}
 function stemColor(label: string, role = "") {
   const value = `${label} ${role}`.toLowerCase().replace(/[_-]+/g, " ");
-  if (/\b(acoustic|acous|ag)\b/.test(value)) return "#63d8ff";
-  if (/\b(electric|elec|eg)\s*\d*\b/.test(value) || /\bguitar\b/.test(value)) return "#b69cff";
-  if (/\bbass\b/.test(value)) return "#74efb8";
-  if (/\b(piano|keys?|organ|rhodes|synth)\b/.test(value)) return "#84a9ff";
-  if (/\b(strings?|violin|viola|cello)\b/.test(value)) return "#64e0d2";
-  if (/\b(drums?|kick|snare|tom|toms|cymbal|loop|loops|perc|percussion|shaker|tambourine|clap)\b/.test(value)) return "#ff9b71";
-  if (/\b(vocals?|bgv|bgvs|choir|alto|tenor|soprano|lead vocal)\b/.test(value)) return "#ff78b3";
-  if (/\bpad\b/.test(value)) return "#d6b25e";
-  return "#9fb4bf";
+  if (/\b(acoustic|acous|ag)\b/.test(value)) return "#0066FF";
+  if (/\b(electric|elec|eg)\s*\d*\b/.test(value) || /\bguitar\b/.test(value)) return "#8C0099";
+  if (/\bbass\b/.test(value)) return "#00FF00";
+  if (/\b(piano|keys?|organ|rhodes|synth)\b/.test(value)) return "#0000FF";
+  if (/\b(strings?|violin|viola|cello)\b/.test(value)) return "#FFFF00";
+  if (/\b(drums?|kick|snare|tom|toms|cymbal|loop|loops|perc|percussion|shaker|tambourine|clap)\b/.test(value)) return "#FF0000";
+  if (/\b(vocals?|bgv|bgvs|choir|alto|tenor|soprano|lead vocal)\b/.test(value)) return "#FFFFFF";
+  if (/\bpad\b/.test(value)) return "#8C0099";
+  return "#202020";
 }
 function setEditorStatus(message: string) { $("#editorStatus").textContent = message; }
 function showError(error: unknown) { const message = error instanceof Error ? error.message : String(error); if (editMode) setEditorStatus(message); else { const fault = $("#liveFault"); fault.hidden = false; fault.querySelector("span")!.textContent = message; } }
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!); }
 
+
+function observeEditorWaveforms(jobs:Parameters<typeof drawWaveform>[]) {
+    editorWaveResizeObserver?.disconnect();
+    const alignLabels=()=>{
+        const rows=document.querySelector<HTMLElement>('#stemWaveforms'),labels=document.querySelector<HTMLElement>('#stemLabelItems');
+        if(rows && labels && !rows.hidden)labels.style.paddingTop=`${rows.offsetTop}px`;
+    };
+    alignLabels();
+
+    editorWaveResizeObserver=new ResizeObserver(entries=>{
+        for(const entry of entries){const job=jobs.find(item=>item[0]===entry.target);if(job)drawWaveform(...job);}
+    });
+    for(const job of jobs)editorWaveResizeObserver.observe(job[0]);
+}
+function editorWaveLaneBackground(color:string) {
+    return ['#202020','#0000FF','#8C0099'].includes(color.toUpperCase())?'#a9b2bc':'#18242f';
+}
+function refreshEditorStemControls(index:number) {
+    const channel=workspace?.mixer?.channels[index];if(!channel)return;
+    for(const strip of document.querySelectorAll(`[data-editor-channel="${index}"]`)) {
+        strip.classList.toggle('muted',channel.muted);
+        for(const button of strip.querySelectorAll<HTMLButtonElement>('button')) {
+            const key=button.dataset.summaryStemSwitch??button.dataset.stemSwitch;
+            if(key==='muted'||key==='solo')button.classList.toggle('active',channel[key]);
+        }
+    }
+}

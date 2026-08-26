@@ -1,6 +1,6 @@
 {
   "name": "playback-v3",
-  "version": "0.1.55",
+  "version": "0.1.56",
   "main": "dist/src/desktop/main.js",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/**/*.test.js",
+    "test": "npm run build && npm run ui:build && node --test dist/test/*.test.js test/release/*.test.js",
     "verify:stabilization": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-stabilization.ps1",
     "verify:stabilization-production": "npm run build && node tools/verify-stabilization-production.mjs",
     "verify:milestone2": "npm run build && node tools/verify-milestone2.mjs",
@@ -40,7 +40,9 @@
     "ui:build": "vite build",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/bootstrap-native.ps1",
     "desktop": "npm run build && npm run ui:build && electron dist/src/desktop/main.js",
-    "package:win": "npm run native:build && node tools/verify-packaged-runtime.mjs && npm run build && npm run ui:build && electron-builder --win nsis --config.electronDist=node_modules/electron/dist"
+    "package:win": "npm run native:build && node tools/verify-packaged-runtime.mjs && npm run build && npm run ui:build && electron-builder --win nsis --x64 --config.electronDist=node_modules/electron/dist",
+    "postbuild": "node tools/apply-release-runtime.mjs backend",
+    "postui:build": "node tools/apply-release-runtime.mjs ui"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -58,7 +60,9 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
+      "dist/src/**/*",
+      "!dist/**/*.test.js",
+      "!dist/**/*.map",
       "ui-dist/**/*",
       "desktop-preload.cjs",
       "package.json"
@@ -99,6 +103,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Playback V3",
       "artifactName": "Playback-V3-Setup-${version}.${ext}"
-    }
+    },
+    "afterPack": "tools/after-pack.cjs"
   }
 }

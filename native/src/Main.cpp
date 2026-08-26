@@ -1,5 +1,6 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "IemMixPolicy.h"
+#include "MidiOutputStream.h"
 #include <algorithm>
 #include <chrono>
 #include <atomic>
@@ -20,12 +21,20 @@ using Clock = std::chrono::steady_clock;
 double elapsedMs(Clock::time_point start) { return std::chrono::duration<double, std::milli>(Clock::now() - start).count(); }
 constexpr float globalOutputTrimGain = 1.995262315f; // +6.0 dB after the complete app mix.
 constexpr float maxMixerFader = 1.25f;
+std::atomic<std::uint64_t> gldExternalOutputMask{0};
 float mixerFaderToGain(float value) {
     const auto fader = juce::jlimit(0.0f, maxMixerFader, value);
     if (fader <= 0.0f) return 0.0f;
     if (fader <= 1.0f) return std::pow(fader, 1.6f);
     const auto boostDb = ((fader - 1.0f) / (maxMixerFader - 1.0f)) * 6.0f;
     return std::pow(10.0f, boostDb / 20.0f);
+}
+
+// GLD return controls have their own +10 dB range. Local audio retains the
+// existing fader curve and ceiling; mapped returns use only relative balance.
+constexpr float maxGldReturnFader = 3.1622776601683795f;
+float externalFaderToGain(float value) {
+    return value<=maxMixerFader ? mixerFaderToGain(value) : mixerFaderToGain(maxMixerFader)*(value/maxMixerFader);
 }
 
 using NamedBusRoutes=std::unordered_map<std::string,std::pair<int,int>>;
@@ -113,21 +122,38 @@ private:
 class GainRampAudioSource final : public juce::AudioSource {
 public:
     explicit GainRampAudioSource(juce::AudioSource& sourceToUse) : source(sourceToUse) {}
-    void prepareToPlay(int blockSize,double rate) override { sampleRate.store(rate,std::memory_order_release);source.prepareToPlay(blockSize,rate); }
+    void prepareToPlay(int blockSize,double rate) override { sampleRate.store(rate,std::memory_order_release);if(capturePreFader || fixedFirst.load()>=0)preFader.setSize(32,blockSize);source.prepareToPlay(blockSize,rate); }
     void releaseResources() override { source.releaseResources(); }
     void setGain(float value,double seconds=0) { requestedRamp.store(static_cast<int>(seconds*sampleRate.load(std::memory_order_acquire)),std::memory_order_release);target.store(value,std::memory_order_release); }
+    // Capture one source block before audience gain; never read the transport twice.
+    void enablePreFaderTap() { capturePreFader = true; }
+    const juce::AudioBuffer<float>& preFaderBuffer() const { return preFader; }
+    unsigned long long renderSerial() const { return serial; }
+    // The IEM output keeps the fixed hardware trim, independent of the audience master.
+    void setFixedGainChannels(int first, int count, float gain) { fixedFirst.store(first); fixedCount.store(count); fixedGain.store(gain); }
     float getTargetGain() const { return target.load(std::memory_order_acquire); }
     float getCurrentGain() const { return applied.load(std::memory_order_acquire); }
     float getPeakLevel() const { return peak.load(std::memory_order_acquire); }
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {
-        source.getNextAudioBlock(info);const auto requested=target.load(std::memory_order_acquire);
+        source.getNextAudioBlock(info);
+        const int first=fixedFirst.load(), count=fixedCount.load();
+        if(capturePreFader || first>=0) {
+            preFader.setSize(info.buffer->getNumChannels(),info.numSamples,false,false,true);
+            for(int ch=0;ch<info.buffer->getNumChannels();++ch) preFader.copyFrom(ch,0,*info.buffer,ch,info.startSample,info.numSamples);
+        }
+        ++serial;
+        const auto requested=target.load(std::memory_order_acquire);
         if(requested!=activeTarget){activeTarget=requested;remaining=juce::jmax(0,requestedRamp.load(std::memory_order_acquire));}
         const auto rampCount=juce::jmin(remaining,info.numSamples);
         if(rampCount>0){const auto end=current+(activeTarget-current)*static_cast<float>(rampCount)/static_cast<float>(remaining);for(int channel=0;channel<info.buffer->getNumChannels();++channel)info.buffer->applyGainRamp(channel,info.startSample,rampCount,current,end);current=end;remaining-=rampCount;}
         if(rampCount<info.numSamples){current=activeTarget;for(int channel=0;channel<info.buffer->getNumChannels();++channel)info.buffer->applyGain(channel,info.startSample+rampCount,info.numSamples-rampCount,current);}
+        if(first>=0) for(int ch=first;ch<first+count && ch<info.buffer->getNumChannels();++ch)
+            info.buffer->copyFrom(ch,info.startSample,preFader.getReadPointer(ch),info.numSamples,fixedGain.load());
         applied.store(current,std::memory_order_release);float nextPeak=0.0f;for(int channel=0;channel<info.buffer->getNumChannels();++channel)nextPeak=juce::jmax(nextPeak,info.buffer->getMagnitude(channel,info.startSample,info.numSamples));peak.store(nextPeak,std::memory_order_release);
     }
 private:
+    bool capturePreFader{false};juce::AudioBuffer<float> preFader;unsigned long long serial{0};
+    std::atomic<int> fixedFirst{-1},fixedCount{0};std::atomic<float> fixedGain{1};
     juce::AudioSource& source;std::atomic<float> target{1.0f},peak{0.0f},applied{1.0f};std::atomic<int> requestedRamp{0};std::atomic<double> sampleRate{48000.0};float current=1.0f,activeTarget=1.0f;int remaining=0;
 };
 
@@ -142,9 +168,53 @@ public:
     void releaseResources()override{source.releaseResources();scratch.setSize(0,0);}
     void setIemEnabled(bool enabled){iemEnabled.store(enabled,std::memory_order_release);}
     void setIemGain(float gain){iemGain.store(juce::jlimit(0.0f,1.0f,gain),std::memory_order_release);}
+    void setPreFaderSource(GainRampAudioSource& gain,bool externalEligible=false) { preFaderSource=&gain;allowExternal=externalEligible;gain.enablePreFaderTap(); }
+    int destination() const { return firstDestination; }
+    void setExternalFactor(float value) { externalFactor.store(value); }
     bool isIemEnabled()const{return iemEnabled.load(std::memory_order_acquire);}
-    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info)override{if(scratch.getNumSamples()<info.numSamples)scratch.setSize(sourceChannels,info.numSamples,false,false,true);scratch.clear();juce::AudioSourceChannelInfo sourceInfo(&scratch,0,info.numSamples);source.getNextAudioBlock(sourceInfo);info.clearActiveBufferRegion();const auto available=info.buffer->getNumChannels();if(available<=0)return;if(firstDestination>=0){if(destinationChannels==1){if(firstDestination<available){const float gain=sourceChannels>1?0.5f:1.0f;for(int channel=0;channel<sourceChannels;++channel)info.buffer->addFrom(firstDestination,info.startSample,scratch,juce::jmin(channel,scratch.getNumChannels()-1),0,info.numSamples,gain);}}else if(sourceChannels==1){for(int channel=0;channel<destinationChannels;++channel){const auto destination=firstDestination+channel;if(destination<available)info.buffer->addFrom(destination,info.startSample,scratch,0,0,info.numSamples);}}else for(int channel=0;channel<sourceChannels;++channel){const auto destination=firstDestination+channel;if(destination<available)info.buffer->addFrom(destination,info.startSample,scratch,juce::jmin(channel,scratch.getNumChannels()-1),0,info.numSamples);}}if(iemEnabled.load(std::memory_order_acquire)&&iemFirstDestination>=0){const float gain=(iemDestinationChannels==1&&sourceChannels>1?0.5f:1.0f)*iemGain.load(std::memory_order_acquire);for(int iemChannel=0;iemChannel<iemDestinationChannels;++iemChannel){const auto destination=iemFirstDestination+iemChannel;if(destination>=0&&destination<available){if(iemDestinationChannels==1)for(int sourceChannel=0;sourceChannel<sourceChannels;++sourceChannel)info.buffer->addFrom(destination,info.startSample,scratch,sourceChannel,0,info.numSamples,gain);else info.buffer->addFrom(destination,info.startSample,scratch,sourceChannels==1?0:juce::jmin(iemChannel,scratch.getNumChannels()-1),0,info.numSamples);}}}}
+    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {
+        if(scratch.getNumSamples()<info.numSamples) scratch.setSize(sourceChannels,info.numSamples,false,false,true);
+        scratch.clear();
+        const auto before=preFaderSource?preFaderSource->renderSerial():0;
+        juce::AudioSourceChannelInfo sourceInfo(&scratch,0,info.numSamples);
+        source.getNextAudioBlock(sourceInfo);
+        info.clearActiveBufferRegion();
+        const bool external=allowExternal && firstDestination>=0 && firstDestination<32 &&
+            (gldExternalOutputMask.load() & (std::uint64_t{1}<<firstDestination));
+        if(external && preFaderSource) {
+            if(preFaderSource->renderSerial()!=before) {
+                const auto& dry=preFaderSource->preFaderBuffer();
+                addRoute(info,dry,firstDestination,destinationChannels,externalFactor.load(),juce::jmin(info.numSamples,dry.getNumSamples()));
+            }
+        } else addRoute(info,scratch,firstDestination,destinationChannels,1.0f,info.numSamples);
+        // A closed transport must not replay the previous pre-fader block.
+        if(iemEnabled.load(std::memory_order_acquire) &&
+           (!preFaderSource || preFaderSource->renderSerial()!=before)) {
+            const auto& dry=preFaderSource?preFaderSource->preFaderBuffer():scratch;
+            addRoute(info,dry,iemFirstDestination,iemDestinationChannels,
+                     iemGain.load(std::memory_order_acquire),juce::jmin(info.numSamples,dry.getNumSamples()));
+        }
+    }
+
 private:
+    void addRoute(const juce::AudioSourceChannelInfo& info,const juce::AudioBuffer<float>& audio,
+                  int first,int width,float gain,int frames) {
+        if(first<0) return;
+        const auto available=info.buffer->getNumChannels();
+        if(width==1) {
+            if(first>=available) return;
+            const auto monoGain=gain*(sourceChannels>1?0.5f:1.0f);
+            for(int ch=0;ch<sourceChannels;++ch)
+                info.buffer->addFrom(first,info.startSample,audio,ch,0,frames,monoGain);
+        } else {
+            for(int ch=0;ch<width && first+ch<available;++ch)
+                info.buffer->addFrom(first+ch,info.startSample,audio,
+                                     sourceChannels==1?0:juce::jmin(ch,sourceChannels-1),0,frames,gain);
+        }
+    }
+
+    bool allowExternal{false};std::atomic<float> externalFactor{1.0f};
+    GainRampAudioSource* preFaderSource{nullptr};
     juce::AudioSource& source;int sourceChannels,firstDestination,destinationChannels,iemFirstDestination{30},iemDestinationChannels{1};juce::AudioBuffer<float> scratch;std::atomic<bool> iemEnabled{false};std::atomic<float> iemGain{1.0f};
 };
 
@@ -293,6 +363,9 @@ private:
 };
 
 class ArmedSetEngine {
+#ifdef PLAYBACK_IEM_TEST
+    friend void testEngineIem();
+#endif
 public:
     ArmedSetEngine() {
         formats.registerBasicFormats();
@@ -301,6 +374,8 @@ public:
         hardwareMixer.addInputSource(&deckA.output(),false);
         hardwareMixer.addInputSource(&deckB.output(),false);
         masterGain.setGain(globalOutputTrimGain);
+        masterGain.setFixedGainChannels(iemOutput,iemChannels,globalOutputTrimGain);
+        clickRoute.setPreFaderSource(clickGain);cueRoute.setPreFaderSource(cueGain);
     }
     juce::String openDefaultDevice() {
         const auto start = Clock::now();
@@ -321,7 +396,7 @@ public:
     void setMidiInputOverride(const juce::String& name,bool enabled){midiInputOverrideSet=true;midiInputOverrideEnabled=enabled;midiInputOverrideName=name;}
     void setAudioDeviceOverride(const juce::String& type,const juce::String& name){audioOverrideSet=true;audioOverrideType=type;audioOverrideName=name;}
     void setOutputChannelCount(int channels){configuredOutputCount=channels>=2?channels:0;}
-    void setRouting(const std::vector<int>& stems,const std::vector<int>& stemWidths,int click,int clickWidth,int cue,int cueWidth,int pad,int padWidth,int iem,int iemWidth){stemOutputs=stems;stemChannels=stemWidths;clickOutput=click;clickChannels=clickWidth;cueOutput=cue;cueChannels=cueWidth;padOutput=pad;padChannels=padWidth;iemOutput=iem;iemChannels=iemWidth;player.setMonitoredOutput(iemOutput);clickRoute.setFirstDestination(clickOutput);clickRoute.setDestinationChannels(clickChannels);cueRoute.setFirstDestination(cueOutput);cueRoute.setDestinationChannels(cueChannels);clickRoute.setIemFirstDestination(iemOutput);cueRoute.setIemFirstDestination(iemOutput);clickRoute.setIemDestinationChannels(iemChannels);cueRoute.setIemDestinationChannels(iemChannels);}
+    void setRouting(const std::vector<int>& stems,const std::vector<int>& stemWidths,int click,int clickWidth,int cue,int cueWidth,int pad,int padWidth,int iem,int iemWidth){stemOutputs=stems;stemChannels=stemWidths;clickOutput=click;clickChannels=clickWidth;cueOutput=cue;cueChannels=cueWidth;padOutput=pad;padChannels=padWidth;iemOutput=iem;iemChannels=iemWidth;masterGain.setFixedGainChannels(iemOutput,iemChannels,globalOutputTrimGain);player.setMonitoredOutput(iemOutput);clickRoute.setFirstDestination(clickOutput);clickRoute.setDestinationChannels(clickChannels);cueRoute.setFirstDestination(cueOutput);cueRoute.setDestinationChannels(cueChannels);clickRoute.setIemFirstDestination(iemOutput);cueRoute.setIemFirstDestination(iemOutput);clickRoute.setIemDestinationChannels(iemChannels);cueRoute.setIemDestinationChannels(iemChannels);}
     juce::Result arm(const juce::File& manifestFile, int songIndex) {
         if(dualDeckMode)return armDualDeckSet(manifestFile,songIndex);
         const auto start = Clock::now();
@@ -353,7 +428,7 @@ public:
             std::unique_ptr<juce::AudioFormatReaderSource> readerSource;std::unique_ptr<juce::AudioTransportSource> transport;
             if(stemIndex<static_cast<int>(preparedReaders.size())&&stemIndex<static_cast<int>(preparedTransports.size())){readerSource=std::move(preparedReaders[stemIndex]);transport=std::move(preparedTransports[stemIndex]);}
             else{auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(audioFile));if(!reader)return juce::Result::fail("Cannot decode cached stem: "+audioFile.getFullPathName());readerSource=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);transport=std::make_unique<juce::AudioTransportSource>();transport->setSource(readerSource.get(),32768,&readAheadThread,readerSource->getAudioFormatReader()->sampleRate,2);}++stemIndex;
-            const auto destination=stemIndex<=static_cast<int>(stemOutputs.size())?stemOutputs[stemIndex-1]:stemIndex-1,width=stemIndex<=static_cast<int>(stemChannels.size())?stemChannels[stemIndex-1]:1;auto stemGain=std::make_unique<GainRampAudioSource>(*transport);auto stemRoute=std::make_unique<RoutedAudioSource>(*stemGain,2,destination,width);stemRoute->setIemFirstDestination(iemOutput);stemRoute->setIemDestinationChannels(1);stemRoute->setIemGain(playback::iem::stemHeadroomGain);stemRoute->setIemEnabled(true);mixer.addInputSource(stemRoute.get(),false);
+            const auto destination=stemIndex<=static_cast<int>(stemOutputs.size())?stemOutputs[stemIndex-1]:stemIndex-1,width=stemIndex<=static_cast<int>(stemChannels.size())?stemChannels[stemIndex-1]:1;auto stemGain=std::make_unique<GainRampAudioSource>(*transport);auto stemRoute=std::make_unique<RoutedAudioSource>(*stemGain,2,destination,width);stemRoute->setPreFaderSource(*stemGain,true);stemRoute->setIemFirstDestination(iemOutput);stemRoute->setIemDestinationChannels(iemChannels);stemRoute->setIemGain(playback::iem::stemHeadroomGain);stemRoute->setIemEnabled(true);mixer.addInputSource(stemRoute.get(),false);
             stemFaders.push_back(1.0f);stemMuted.push_back(false);stemSolo.push_back(false);stemIem.push_back(true);stemGains.push_back(std::move(stemGain));stemRoutes.push_back(std::move(stemRoute));
             readers.push_back(std::move(readerSource));
             transports.push_back(std::move(transport));
@@ -403,7 +478,7 @@ public:
                 if(preparedPadReader&&preparedPadTransport){padReader=std::move(preparedPadReader);padTransport=std::move(preparedPadTransport);}else{auto padReaderRaw=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(padFile));if(!padReaderRaw)return juce::Result::fail("Cannot decode prepared pad");padReader=std::make_unique<juce::AudioFormatReaderSource>(padReaderRaw.release(),true);padTransport=std::make_unique<juce::AudioTransportSource>();padTransport->setSource(padReader.get(),32768,&readAheadThread,padReader->getAudioFormatReader()->sampleRate,2);}
                 padTransport->setLooping(true); padTransport->start();
                 padGain=std::make_unique<GainRampAudioSource>(*padTransport);padGain->setGain(0.0f);
-                padMix=std::make_unique<GainRampAudioSource>(static_cast<juce::AudioSource&>(*padGain));padGate=std::make_unique<TransportGate>(*padMix);padGate->setOpen(true);padRoute=std::make_unique<RoutedAudioSource>(*padGate,2,padOutput,padChannels);padRoute->setIemFirstDestination(iemOutput);padRoute->setIemDestinationChannels(iemChannels);mixer.addInputSource(padRoute.get(),false);
+                padMix=std::make_unique<GainRampAudioSource>(static_cast<juce::AudioSource&>(*padGain));padGate=std::make_unique<TransportGate>(*padMix);padGate->setOpen(true);padRoute=std::make_unique<RoutedAudioSource>(*padGate,2,padOutput,padChannels);padRoute->setPreFaderSource(*padMix,true);padRoute->setIemFirstDestination(iemOutput);padRoute->setIemDestinationChannels(iemChannels);mixer.addInputSource(padRoute.get(),false);
             }
         }
         armMs = elapsedMs(start);
@@ -474,12 +549,32 @@ public:
     int nextSongIndex()const{return dualDeckMode?(standbyDeck->armed?standbyDeck->songIndex:-1):preloadedNextIndex;}
     juce::String getPadKey() const { return dualDeckMode?activeDeck->padKey:padKey; }
     void setPad(bool enabled) { if(dualDeckMode){if(!activeDeck->padGate||!activeDeck->padGain)return;if(enabled){activeDeck->padTransport->setPosition(0);activeDeck->padGate->setOpen(true);activeDeck->padGain->setGain(1.0f,0.35);}else activeDeck->padGain->setGain(0.0f,0.35);return;}if(!padGate||!padGain)return;if(enabled){padTransport->setPosition(0);padGate->setOpen(true);padGain->setGain(1.0f,0.35);}else padGain->setGain(0.0f,0.35); }
-    void setMusic(bool enabled) { musicEnabled=enabled;if(dualDeckMode){if(!enabled)for(auto& gain:activeDeck->stemGains)gain->setGain(0,0.03);else applyDeckStemMix(*activeDeck,0.03);return;}applyStemMix(0.03); }
+    void setMusic(bool enabled) { musicEnabled=enabled;if(dualDeckMode){applyDeckStemMix(*activeDeck,0.03);return;}applyStemMix(0.03); }
     void setClick(bool enabled) { if(dualDeckMode){if(activeDeck->clickGate)activeDeck->clickGate->setOpen(enabled);return;}clickGate.setOpen(enabled); }
     void setCue(bool enabled) { if(dualDeckMode){if(activeDeck->cueGate)activeDeck->cueGate->setOpen(enabled);return;}cueGate.setOpen(enabled); }
     bool moveCue(const std::string& targetRegionId,double seconds){return seconds>=0&&(dualDeckMode?activeDeck->cueScheduled.moveEvent(targetRegionId,seconds,outputSampleRate):cueScheduled.moveEvent(targetRegionId,seconds,outputSampleRate));}
     void setBusGain(const std::string& bus,float gain){gain=juce::jlimit(0.0f,maxMixerFader,gain);if(bus=="music"){musicBusGain=gain;if(dualDeckMode)applyDeckStemMix(*activeDeck,0.03);else applyStemMix(0.03);}else if(bus=="click"){clickBusGain=gain;if(dualDeckMode&&activeDeck->clickGain)activeDeck->clickGain->setGain(mixerFaderToGain(gain),0.03);else applyAuxMix();}else if(bus=="cue"){cueBusGain=gain;if(dualDeckMode&&activeDeck->cueGain)activeDeck->cueGain->setGain(mixerFaderToGain(gain),0.03);else applyAuxMix();}else if(bus=="pad"){padBusGain=gain;if(dualDeckMode&&activeDeck->padMix)activeDeck->padMix->setGain(mixerFaderToGain(gain),0.03);else applyAuxMix();}}
-    bool setMixerChannel(int index,float gain,bool muted,bool solo,bool iem){if(dualDeckMode){auto& deck=*activeDeck;const auto count=static_cast<int>(deck.stemGains.size())+3;if(index<0||index>=count)return false;gain=juce::jlimit(0.0f,maxMixerFader,gain);if(index<static_cast<int>(deck.stemGains.size())){const auto sendEnabled=playback::iem::stemSendEnabled(muted);deck.stemFaders[index]=gain;deck.stemMuted[index]=muted;deck.stemSolo[index]=solo;deck.stemIem[index]=sendEnabled;deck.stemRoutes[index]->setIemEnabled(sendEnabled);applyDeckStemMix(deck,0.03);}else{const auto aux=index-static_cast<int>(deck.stemGains.size());const auto value=muted?0.0f:mixerFaderToGain(gain);if(aux==0&&deck.clickGain){deck.clickGain->setGain(value,0.03);deck.clickRoute->setIemEnabled(iem);}else if(aux==1&&deck.cueGain){deck.cueGain->setGain(value,0.03);deck.cueRoute->setIemEnabled(iem);}else if(aux==2&&deck.padMix){deck.padMix->setGain(value,0.03);deck.padRoute->setIemEnabled(iem);}}return true;}const auto count=static_cast<int>(stemGains.size())+3;if(index<0||index>=count)return false;gain=juce::jlimit(0.0f,maxMixerFader,gain);if(index<static_cast<int>(stemGains.size())){const auto sendEnabled=playback::iem::stemSendEnabled(muted);stemFaders[index]=gain;stemMuted[index]=muted;stemSolo[index]=solo;stemIem[index]=sendEnabled;stemRoutes[index]->setIemEnabled(sendEnabled);}else{const auto aux=index-static_cast<int>(stemGains.size());auxFaders[aux]=gain;auxMuted[aux]=muted;auxSolo[aux]=solo;auxIem[aux]=iem;if(aux==0)clickRoute.setIemEnabled(iem);else if(aux==1)cueRoute.setIemEnabled(iem);else if(padRoute)padRoute->setIemEnabled(iem);}applyStemMix(0.03);applyAuxMix();return true;}
+    bool setMixerChannel(int index,float gain,bool muted,bool solo,bool iem){if(dualDeckMode){auto& deck=*activeDeck;const auto count=static_cast<int>(deck.stemGains.size())+3;if(index<0||index>=count)return false;gain=juce::jlimit(0.0f,maxGldReturnFader,gain);if(index<static_cast<int>(deck.stemGains.size())){const auto sendEnabled=playback::iem::stemSendEnabled(iem);deck.stemFaders[index]=gain;deck.stemMuted[index]=muted;deck.stemSolo[index]=solo;deck.stemIem[index]=sendEnabled;deck.stemRoutes[index]->setIemEnabled(sendEnabled);applyDeckStemMix(deck,0.03);}else{const auto aux=index-static_cast<int>(deck.stemGains.size());const auto value=muted?0.0f:mixerFaderToGain(gain);if(aux==0&&deck.clickGain){deck.clickGain->setGain(value,0.03);deck.clickRoute->setIemEnabled(iem);}else if(aux==1&&deck.cueGain){deck.cueGain->setGain(value,0.03);deck.cueRoute->setIemEnabled(iem);}else if(aux==2&&deck.padMix){deck.padMix->setGain(value,0.03);deck.padRoute->setIemEnabled(iem);}}return true;}const auto count=static_cast<int>(stemGains.size())+3;if(index<0||index>=count)return false;gain=juce::jlimit(0.0f,maxGldReturnFader,gain);if(index<static_cast<int>(stemGains.size())){const auto sendEnabled=playback::iem::stemSendEnabled(iem);stemFaders[index]=gain;stemMuted[index]=muted;stemSolo[index]=solo;stemIem[index]=sendEnabled;stemRoutes[index]->setIemEnabled(sendEnabled);}else{const auto aux=index-static_cast<int>(stemGains.size());auxFaders[aux]=gain;auxMuted[aux]=muted;auxSolo[aux]=solo;auxIem[aux]=iem;if(aux==0)clickRoute.setIemEnabled(iem);else if(aux==1)cueRoute.setIemEnabled(iem);else if(padRoute)padRoute->setIemEnabled(iem);}applyStemMix(0.03);applyAuxMix();return true;}
+    bool setExternalOutputs(const std::vector<int>& outputs) {
+        std::uint64_t mask=0;
+        for(const auto output:outputs) {
+            if(output<1||output>32) return false;
+            const int channel=output-1;
+            if((iemOutput>=0&&channel>=iemOutput&&channel<iemOutput+iemChannels)||
+               (clickOutput>=0&&channel>=clickOutput&&channel<clickOutput+clickChannels)||
+               (cueOutput>=0&&channel>=cueOutput&&channel<cueOutput+cueChannels)) return false;
+            mask|=std::uint64_t{1}<<channel;
+        }
+        if(mask!=gldExternalOutputMask.load() && (dualDeckMode?activeDeck->playing:playing))return false;
+        gldExternalOutputMask.store(mask);return true;
+    }
+    // Preserve relative stem balance within a shared bus while removing its average fader gain.
+    float externalStemRatio(size_t index,const std::vector<std::unique_ptr<RoutedAudioSource>>& routes,const std::vector<float>& faders) {
+        float sum=0;int count=0;
+        for(size_t i=0;i<routes.size();++i) if(routes[i]->destination()==routes[index]->destination()){sum+=faders[i];++count;}
+        const auto mean=count?sum/static_cast<float>(count):0.0f;
+        return mean>0?externalFaderToGain(faders[index])/externalFaderToGain(mean):1.0f;
+    }
     void setMasterGain(float gain){masterGain.setGain(mixerFaderToGain(gain)*globalOutputTrimGain,0.03);}
     std::vector<float> mixerPeaks()const{if(dualDeckMode){std::vector<float> result;result.reserve(activeDeck->stemGains.size()+3);for(const auto& source:activeDeck->stemGains)result.push_back(source->getPeakLevel());result.push_back(activeDeck->clickGain?activeDeck->clickGain->getPeakLevel():0);result.push_back(activeDeck->cueGain?activeDeck->cueGain->getPeakLevel():0);result.push_back(activeDeck->padMix?activeDeck->padMix->getPeakLevel():0);return result;}std::vector<float> result;result.reserve(stemGains.size()+3);for(const auto& source:stemGains)result.push_back(source->getPeakLevel());result.push_back(clickGain.getPeakLevel());result.push_back(cueGain.getPeakLevel());result.push_back(padMix?padMix->getPeakLevel():0.0f);return result;}
     float masterPeak()const{return masterGain.getPeakLevel();}
@@ -517,7 +612,7 @@ private:
 #include "SongDeckLoader.inc"
 #include "DualDeckEngine.inc"
     bool anyMixerSolo()const{if(std::any_of(stemSolo.begin(),stemSolo.end(),[](bool value){return value;}))return true;return auxSolo[0]||auxSolo[1]||auxSolo[2];}
-    void applyStemMix(double rampSeconds){const auto anySolo=anyMixerSolo();for(size_t index=0;index<stemGains.size();++index){const auto audible=musicEnabled&&!stemMuted[index]&&(!anySolo||stemSolo[index]);stemGains[index]->setGain(audible?mixerFaderToGain(stemFaders[index])*mixerFaderToGain(musicBusGain)*normalizationGain*panicAttenuation:0.0f,rampSeconds);}}
+    void applyStemMix(double rampSeconds){const auto anySolo=anyMixerSolo();for(size_t index=0;index<stemGains.size();++index){const auto audible=musicEnabled&&!stemMuted[index]&&(!anySolo||stemSolo[index]);stemRoutes[index]->setIemGain(playback::iem::stemHeadroomGain*normalizationGain*panicAttenuation*(musicEnabled?1.0f:0.0f));stemRoutes[index]->setExternalFactor(audible?externalStemRatio(index,stemRoutes,stemFaders)*mixerFaderToGain(musicBusGain)*normalizationGain*panicAttenuation:0.0f);stemGains[index]->setGain(audible?mixerFaderToGain(stemFaders[index])*mixerFaderToGain(musicBusGain)*normalizationGain*panicAttenuation:0.0f,rampSeconds);}}
     void applyAuxMix(){const auto anySolo=anyMixerSolo();const auto factor=[&](int index,float busGain){return !auxMuted[index]&&(!anySolo||auxSolo[index])?mixerFaderToGain(auxFaders[index])*mixerFaderToGain(busGain):0.0f;};clickGain.setGain(factor(0,clickBusGain),0.03);cueGain.setGain(factor(1,cueBusGain),0.03);if(padMix)padMix->setGain(factor(2,padBusGain),0.03);}
     juce::AudioFormatManager formats;
     juce::AudioDeviceManager deviceManager;
@@ -581,12 +676,24 @@ private:
 };
 }
 
+#ifndef PLAYBACK_IEM_TEST
 int main(int argc, char* argv[]) {
     juce::ScopedJuceInitialiser_GUI init;
     if(argc>=2&&std::string(argv[1])=="--list-midi"){for(const auto& device:juce::MidiOutput::getAvailableDevices())std::cout<<device.name<<'\n';return 0;}
     if(argc>=2&&std::string(argv[1])=="--list-midi-inputs"){for(const auto& device:juce::MidiInput::getAvailableDevices())std::cout<<device.name<<'\n';return 0;}
     if(argc>=3&&std::string(argv[1])=="--test-midi-output"){const juce::String requested(argv[2]);for(const auto& device:juce::MidiOutput::getAvailableDevices())if(device.name==requested){auto output=juce::MidiOutput::openDevice(device.identifier);if(output){std::cout<<"MIDI_OUTPUT_READY name=\""<<device.name<<"\"\n";return 0;}std::cerr<<"MIDI output could not be opened\n";return 5;}std::cerr<<"MIDI output not found\n";return 6;}
-    if(argc>=4&&std::string(argv[1])=="--send-midi-output"){const juce::String requested(argv[2]);std::unique_ptr<juce::MidiOutput> output;for(const auto& device:juce::MidiOutput::getAvailableDevices())if(device.name==requested){output=juce::MidiOutput::openDevice(device.identifier);break;}if(!output){std::cerr<<"MIDI output not found or unavailable\n";return 6;}std::vector<juce::uint8> bytes;for(int index=3;index<argc;++index){const auto value=std::stoi(argv[index],nullptr,16);if(value<0||value>255){std::cerr<<"Invalid MIDI byte\n";return 8;}bytes.push_back(static_cast<juce::uint8>(value));}for(size_t offset=0;offset<bytes.size();){const auto status=bytes[offset];if(status<0x80){std::cerr<<"MIDI stream must begin with a status byte\n";return 8;}const auto high=status&0xf0;const size_t size=(high==0xc0||high==0xd0)?2u:3u;if(offset+size>bytes.size()){std::cerr<<"Incomplete MIDI message\n";return 8;}output->sendMessageNow(juce::MidiMessage(bytes.data()+offset,static_cast<int>(size)));offset+=size;}std::cout<<"MIDI_OUTPUT_SENT name=\""<<requested<<"\" bytes="<<bytes.size()<<"\n";return 0;}
+    if(argc>=4&&std::string(argv[1])=="--send-midi-output") {
+        try {
+            std::vector<unsigned char> bytes;
+            for(int index=3;index<argc;++index){const auto value=std::stoi(argv[index],nullptr,16);if(value<0||value>255)throw std::runtime_error("Invalid MIDI byte");bytes.push_back(static_cast<unsigned char>(value));}
+            const auto messages=midiOutputMessages(bytes);
+            const juce::String requested(argv[2]);std::unique_ptr<juce::MidiOutput> output;
+            for(const auto& device:juce::MidiOutput::getAvailableDevices())if(device.name==requested){output=juce::MidiOutput::openDevice(device.identifier);break;}
+            if(!output){std::cerr<<"MIDI output not found or unavailable\n";return 6;}
+            for(const auto& [offset,size]:messages)output->sendMessageNow(juce::MidiMessage(bytes.data()+offset,static_cast<int>(size)));
+            std::cout<<"MIDI_OUTPUT_SENT name=\""<<requested<<"\" bytes="<<bytes.size()<<"\n";return 0;
+        }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 8;}
+    }
     if(argc>=2&&std::string(argv[1])=="--list-audio-devices"){juce::AudioDeviceManager manager;manager.initialise(0,0,nullptr,true);for(auto* type:manager.getAvailableDeviceTypes()){type->scanForDevices();for(const auto& name:type->getDeviceNames(false)){std::unique_ptr<juce::AudioIODevice> device(type->createDevice(name,{}));std::cout<<type->getTypeName()<<'\t'<<name<<'\t'<<(device?device->getOutputChannelNames().size():0)<<'\n';}}return 0;}
     if (argc < 2) { std::cerr << "Usage: PlaybackEngineProbe <confirmed-set.json> [--interactive]\n"; return 2; }
     ArmedSetEngine engine;
@@ -617,6 +724,7 @@ int main(int argc, char* argv[]) {
         else if(command=="slides_midi_on"){engine.setSlidesMidiEnabled(true);std::cout<<"SLIDES_MIDI state=on\n";}
         else if(command=="slides_midi_off"){engine.setSlidesMidiEnabled(false);std::cout<<"SLIDES_MIDI state=off\n";}
         else if(command=="gain"){std::string bus;float value=1;std::cin>>bus>>value;engine.setBusGain(bus,value);std::cout<<"GAIN bus="<<bus<<" value="<<value<<"\n";}
+        else if(command=="external_returns"){int count=0;std::cin>>count;std::vector<int> outputs;bool valid=count>=0&&count<=32;for(int i=0;i<count&&i<256;++i){int output=0;std::cin>>output;outputs.push_back(output);}if(valid&&engine.setExternalOutputs(outputs))std::cout<<"EXTERNAL_RETURNS_READY\n";else std::cout<<"EXTERNAL_RETURNS_FAILED\n";}
         else if(command=="mixer_channel"){int index=0,muted=0,solo=0,iem=0;float value=1;std::cin>>index>>value>>muted>>solo>>iem;if(engine.setMixerChannel(index,value,muted!=0,solo!=0,iem!=0))std::cout<<"MIXER_CHANNEL index="<<index<<" value="<<value<<" muted="<<muted<<" solo="<<solo<<" iem="<<iem<<"\n";else std::cout<<"MIXER_CHANNEL_FAILED index="<<index<<"\n";}
         else if(command=="routing"){int count=0;std::cin>>count;std::vector<int> outputs,widths;bool valid=count>=0&&count<=256;for(int index=0;index<count;++index){int output=0,width=0;std::cin>>output>>width;valid=valid&&(width==1||width==2)&&output>=0&&output<=32&&(output==0||output+width-1<=32);outputs.push_back(output>0?output-1:-1);widths.push_back(width);}int click=0,clickWidth=0,cue=0,cueWidth=0,pad=0,padWidth=0,iem=0,iemWidth=0;std::cin>>click>>clickWidth>>cue>>cueWidth>>pad>>padWidth>>iem>>iemWidth;const auto routeValid=[](int output,int width){return(width==1||width==2)&&output>=0&&output<=32&&(output==0||output+width-1<=32);};valid=valid&&routeValid(click,clickWidth)&&routeValid(cue,cueWidth)&&routeValid(pad,padWidth)&&routeValid(iem,iemWidth);if(valid){engine.setRouting(outputs,widths,click>0?click-1:-1,clickWidth,cue>0?cue-1:-1,cueWidth,pad>0?pad-1:-1,padWidth,iem>0?iem-1:-1,iemWidth);std::cout<<"ROUTING_UPDATED stems="<<count<<"\n";}else std::cout<<"ROUTING_FAILED\n";}
         else if(command=="bus_routing"){int count=0;std::cin>>count;std::vector<std::string> buses;bool valid=count>=0&&count<=256;for(int index=0;index<count;++index){std::string bus;std::cin>>bus;buses.push_back(bus);valid=valid&&validStemBus(bus);}int routeCount=0;std::cin>>routeCount;NamedBusRoutes routes;valid=valid&&routeCount>=0&&routeCount<=32;for(int index=0;index<routeCount;++index){std::string bus;int output=0,width=0;std::cin>>bus>>output>>width;routes[bus]={output,width};valid=valid&&validStemBus(bus);}std::vector<int> outputs,widths;valid=valid&&resolveNamedBusRouting(buses,routes,outputs,widths);int click=0,clickWidth=0,cue=0,cueWidth=0,pad=0,padWidth=0,iem=0,iemWidth=0;std::cin>>click>>clickWidth>>cue>>cueWidth>>pad>>padWidth>>iem>>iemWidth;const auto routeValid=[](int output,int width){return(width==1||width==2)&&output>=0&&output<=32&&(output==0||output+width-1<=32);};valid=valid&&routeValid(click,clickWidth)&&routeValid(cue,cueWidth)&&routeValid(pad,padWidth)&&routeValid(iem,iemWidth);if(valid){engine.setRouting(outputs,widths,click>0?click-1:-1,clickWidth,cue>0?cue-1:-1,cueWidth,pad>0?pad-1:-1,padWidth,iem>0?iem-1:-1,iemWidth);std::cout<<"ROUTING_UPDATED stems="<<count<<" buses="<<routeCount<<"\n";}else std::cout<<"ROUTING_FAILED\n";}
@@ -632,3 +740,5 @@ int main(int argc, char* argv[]) {
         std::cout << std::flush;
     }
 }
+
+#endif

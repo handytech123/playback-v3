@@ -1286,15 +1286,18 @@ async function createWindow(): Promise<void> {
       console.error("Remote control adapter unavailable", error);
       remoteAddress = null;
     }
-    const readyState = await armSourceSong(manifestPath, selectedSongIndex);
-    currentReady = readyState;
-    applyPreparedSongMixer(manifest.songs[selectedSongIndex]!);
-    void primeProPresenterApiSong(controlSettings.proPresenterApi, manifest.songs, selectedSongIndex, activeProPresenterSetlist);
-    if (manifest.show)
-      for (const [bus, gain] of Object.entries(manifest.show.mixer))
-        engine.setBusGain(bus as LiveBus, gain);
-    performance.setReadiness(await readinessFor(selectedSongIndex, readyState, null));
-    sendToRenderer("performance:state", performance.snapshot);
+    try {
+            currentReady = await armSourceSong(manifestPath, selectedSongIndex);
+            await applyPreparedSongMixer(manifest.songs[selectedSongIndex]);
+            void primeProPresenterApiSong(controlSettings.proPresenterApi, manifest.songs, selectedSongIndex, activeProPresenterSetlist);
+            if (manifest.show) for (const [bus, gain] of Object.entries(manifest.show.mixer)) engine.setBusGain(bus as "music" | "click" | "cue" | "pad", gain);
+        } catch (error) {
+            currentReady = null;
+            nativeArmError = error instanceof Error ? error.message : String(error);
+            console.warn("Set confirmed; audio engine needs attention", error);
+        }
+        performance.setReadiness(await readinessFor(selectedSongIndex, currentReady, nativeArmError));
+        sendToRenderer("performance:state", performance.snapshot);
     controlBus.publishState();
     sendToRenderer("prep:confirm-status", {
       progress: 100,
@@ -1365,7 +1368,7 @@ async function createWindow(): Promise<void> {
         progress: Math.round(3 + (index / Math.max(choices.length, 1)) * 17),
         label: `Checking cue audio for ${choice.title}`,
       });
-      repaired.push(await repairLegacyReviewCues(choice));
+      repaired.push(await repairLegacyReviewCues(choice).catch(error => { console.warn(`Cue repair skipped for ${choice.title}; confirmation will continue`, error); return choice; }));
     }
     return repaired;
   };
@@ -1875,6 +1878,7 @@ async function createWindow(): Promise<void> {
       nativeArmError = null;
       const readiness = await readinessFor(performance!.snapshot.songIndex);
       performance!.setReadiness(readiness);
+        if (readiness.ready && performance!.snapshot.fault) performance!.clearFault();
       sendToRenderer("performance:state", performance!.snapshot);
       return {
         selectedDevice: device,

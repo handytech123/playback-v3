@@ -1,0 +1,12 @@
+{
+  "runtime/FFMPEG-LICENSE.txt": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+  "runtime/FFMPEG-README.txt": "09124e0f7c3d43d9054c62726a176371e8b99960732f51ddd68c6ae68982f434",
+  "runtime/ffmpeg.exe": "ad8f211bc894755e0061c55ab280ae00e8d3d4f15a8cc4372b24cfa247b5942e",
+  "runtime/RUBBERBAND-LICENSE.txt": "cedd4c1885d75991bf1077cc6e33359103cf04fbc996f20d30ab043d5fc5fcc5",
+  "runtime/rubberband.exe": "d26d81e20f48ea33070e638f58bdeb6a61ce7f0946d8f2629f30441caa2905d1",
+  "runtime/sndfile.dll": "4e3bd2de8e1485110eaebef8e1239471f73d608773831c323bf528e05645655e",
+  "native/msvcp140.dll": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9",
+  "native/vcruntime140.dll": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+  "native/vcruntime140_1.dll": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+  "runtime/JUCE-LICENSE.txt": "ca3a08368c9ed3195253f2df63ef08db1b0ea6be99388bb130c921b7c3e54616"
+}

@@ -1,0 +1,653 @@
+import { createHash, randomUUID } from "node:crypto";
+import { preparedControl } from "../domain/song.js";
+import { CLICK_TEMPLATES, requiredDefaultClickTemplate } from "../domain/click-templates.js";
+import { positionToSeconds, secondsToMusicalPosition } from "../domain/grid.js";
+export function createArrangementDraft(song, name = `${song.song.title} Arrangement`) {
+    const sections = renumberOccurrences(sourceTimelineSections(song));
+    const sourceCues = song.liveAssets?.cues?.length
+        ? song.liveAssets.cues.map((cue) => ({
+            phrase: cue.label,
+            ...(cue.position ? { position: cue.position } : {}),
+            atSeconds: cue.atSeconds,
+            targetRegionId: cue.targetRegionId,
+        }))
+        : song.cues;
+    const cues = sourceCues.flatMap((source) => {
+        const section = sections.find((candidate) => candidate.id === source.targetRegionId);
+        if (!section)
+            return [];
+        return {
+            id: `cue-${section.id}`,
+            phrase: section.name,
+            atSeconds: source.atSeconds,
+            targetRegionId: section.id,
+            enabled: true,
+            sourceRegionId: section.sourceRegionId,
+            sourceLeadSeconds: Math.max(0, section.startSeconds - source.atSeconds),
+        };
+    });
+    const midi = (preparedControl(song)?.proPresenterMidi ?? []).map((event, index) => {
+        const section = sectionAt(sections, event.atSeconds) ?? sections.at(-1);
+        return {
+            ...event,
+            id: `midi-${index + 1}`,
+            enabled: true,
+            sourceRegionId: section.sourceRegionId,
+            sourceAtSeconds: event.atSeconds,
+        };
+    });
+    return withMusicalLocations({
+        schemaVersion: 1,
+        baseSongId: String(song.song.id),
+        sourceFingerprint: arrangementSourceFingerprint(song),
+        sourceArrangementId: song.arrangement?.id ?? "original-song",
+        name,
+        baseKey: song.selectedKey,
+        baseBpm: song.selectedBpm,
+        selectedKey: song.selectedKey,
+        selectedBpm: song.selectedBpm,
+        timeSignature: song.timeSignature,
+        clickTemplateId: song.liveAssets?.click.templateId ?? requiredDefaultClickTemplate(song.timeSignature),
+        durationSeconds: song.durationSeconds,
+        sections,
+        cues,
+        midi,
+        stemMix: normalizeStemMix(song.stemMix, song.stems.length),
+        revision: 0,
+    });
+}
+export function normalizeStemMix(value, stemCount) {
+    return Array.from({ length: stemCount }, (_, index) => {
+        const source = value?.find((item) => item.index === index);
+        const gain = Number(source?.gain ?? 1);
+        return {
+            index,
+            gain: Number.isFinite(gain) ? Math.max(0, Math.min(1.25, gain)) : 1,
+            muted: Boolean(source?.muted),
+            solo: Boolean(source?.solo),
+            iem: source?.iem === undefined ? true : Boolean(source.iem),
+        };
+    });
+}
+export function arrangementSourceFingerprint(song) {
+    return createHash("sha256").update(JSON.stringify({
+        cacheFingerprint: song.cacheFingerprint,
+        arrangement: song.arrangement ? { id: song.arrangement.id, sourceSha256: song.arrangement.sourceSha256, midi: song.arrangement.proPresenterMidi } : null,
+        control: song.control ? { sourceSha256: song.control.sourceSha256, midi: song.control.proPresenterMidi } : null,
+        key: song.selectedKey,
+        bpm: song.selectedBpm,
+        meter: song.timeSignature,
+        durationSeconds: song.durationSeconds,
+        stems: song.stems.map(stem => ({ role: stem.role, sourcePath: stem.sourcePath, durationSeconds: stem.durationSeconds, displayName: stem.displayName ?? null })),
+        regions: song.regions,
+        cues: song.cues,
+        liveCues: song.liveAssets?.cues.map(cue => ({ label: cue.label, atSeconds: cue.atSeconds, targetRegionId: cue.targetRegionId, audioPath: cue.audioPath })) ?? [],
+        click: song.liveAssets?.click ? { templateId: song.liveAssets.click.templateId, events: song.liveAssets.click.events } : null,
+    })).digest("hex");
+}
+export function reconcileArrangementDraftSource(saved, fresh) {
+    if (saved.sourceFingerprint === fresh.sourceFingerprint)
+        return saved;
+    const freshBySource = new Map(fresh.sections.map(section => [section.sourceRegionId, section]));
+    let sections = saved.sections
+        .filter(section => section.id.startsWith("app-") || freshBySource.has(section.sourceRegionId))
+        .map(section => {
+        const source = freshBySource.get(section.sourceRegionId);
+        return source ? { ...section, sourceStartSeconds: source.sourceStartSeconds, sourceEndSeconds: source.sourceEndSeconds } : section;
+    });
+    const represented = new Set(sections.map(section => section.sourceRegionId));
+    sections = [...sections, ...fresh.sections.filter(section => !represented.has(section.sourceRegionId))];
+    const selectedBpm = saved.selectedBpm === saved.baseBpm ? fresh.baseBpm : saved.selectedBpm;
+    const selectedKey = saved.selectedKey === saved.baseKey ? fresh.baseKey : saved.selectedKey;
+    const scale = fresh.baseBpm / selectedBpm;
+    const reflowed = reflow(renumberOccurrences(sections), scale);
+    const savedCueBySource = new Map(saved.cues.map(cue => [cue.sourceRegionId, cue]));
+    const cues = fresh.cues.flatMap(cue => {
+        const target = reflowed.find(section => section.sourceRegionId === cue.sourceRegionId);
+        if (!target)
+            return [];
+        const previous = savedCueBySource.get(cue.sourceRegionId);
+        return [{ ...cue, id: previous?.id ?? cue.id, enabled: previous?.enabled ?? cue.enabled, phrase: target.name, targetRegionId: target.id, atSeconds: Math.max(0, target.startSeconds - cue.sourceLeadSeconds * scale) }];
+    });
+    const savedMidiById = new Map(saved.midi.map(event => [event.id, event]));
+    const midi = retimeMidi(fresh.midi.map(event => ({ ...event, enabled: savedMidiById.get(event.id)?.enabled ?? event.enabled })), reflowed, scale);
+    return withMusicalLocations({
+        ...fresh,
+        name: saved.name,
+        selectedKey,
+        selectedBpm,
+        clickTemplateId: saved.clickTemplateId,
+        durationSeconds: reflowed.at(-1)?.endSeconds ?? fresh.durationSeconds,
+        sections: reflowed,
+        cues,
+        midi,
+        stemMix: normalizeStemMix(saved.stemMix, fresh.stemMix.length),
+        revision: saved.revision + 1,
+    });
+}
+function sourceTimelineSections(song) {
+    const regions = [...song.regions].sort((a, b) => a.startSeconds - b.startSeconds);
+    const sections = [];
+    let cursor = 0;
+    for (const region of regions) {
+        if (region.startSeconds > cursor + 0.0001) {
+            sections.push({
+                id: `source-gap-${sections.length + 1}`,
+                name: cursor === 0 ? "Count Off" : "Gap",
+                startSeconds: cursor,
+                endSeconds: region.startSeconds,
+                sourceRegionId: `source-gap-${sections.length + 1}`,
+                sourceStartSeconds: cursor,
+                sourceEndSeconds: region.startSeconds,
+            });
+        }
+        sections.push({
+            ...region,
+            sourceRegionId: region.id,
+            sourceStartSeconds: region.startSeconds,
+            sourceEndSeconds: region.endSeconds,
+        });
+        cursor = Math.max(cursor, region.endSeconds);
+    }
+    if (song.durationSeconds > cursor + 0.0001) {
+        sections.push({
+            id: `source-tail-${sections.length + 1}`,
+            name: "Tail",
+            startSeconds: cursor,
+            endSeconds: song.durationSeconds,
+            sourceRegionId: `source-tail-${sections.length + 1}`,
+            sourceStartSeconds: cursor,
+            sourceEndSeconds: song.durationSeconds,
+        });
+    }
+    return sections;
+}
+export function applyArrangementCommand(draft, command) {
+    let sections = [...draft.sections];
+    let cues = [...draft.cues];
+    let midi = [...draft.midi];
+    let key = draft.selectedKey;
+    let bpm = draft.selectedBpm;
+    let name = draft.name;
+    let clickTemplateId = draft.clickTemplateId;
+    const oldScale = draft.baseBpm / draft.selectedBpm;
+    if (command.type === "rename-section") {
+        assertName(command.name);
+        sections = replace(sections, command.sectionId, (section) => ({
+            ...section,
+            name: command.name.trim(),
+        }));
+    }
+    else if (command.type === "move-section") {
+        const index = sections.findIndex((section) => section.id === command.sectionId);
+        if (index < 0)
+            throw new Error("Section not found");
+        if (command.toIndex < 0 || command.toIndex >= sections.length) {
+            throw new Error("Section destination is outside the arrangement");
+        }
+        const [item] = sections.splice(index, 1);
+        sections.splice(command.toIndex, 0, item);
+    }
+    else if (command.type === "duplicate-section") {
+        const index = sections.findIndex((section) => section.id === command.sectionId);
+        if (index < 0)
+            throw new Error("Section not found");
+        const source = sections[index];
+        const id = command.newSectionId ?? `app-${randomUUID()}`;
+        if (sections.some((section) => section.id === id))
+            throw new Error("Duplicate section ID");
+        sections.splice(index + 1, 0, { ...source, id });
+    }
+    else if (command.type === "delete-section") {
+        if (sections.length === 1)
+            throw new Error("An arrangement must retain at least one section");
+        const before = sections.length;
+        sections = sections.filter((section) => section.id !== command.sectionId);
+        if (sections.length === before)
+            throw new Error("Section not found");
+    }
+    else if (command.type === "split-section") {
+        sections = splitAt(sections, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale, command.newSectionId);
+    }
+    else if (command.type === "create-region-from-selection") {
+        assertName(command.name);
+        sections = createFromSelection(sections, positionToSeconds(command.startPosition, draft.selectedBpm, draft.timeSignature), positionToSeconds(command.endPosition, draft.selectedBpm, draft.timeSignature), command.name.trim(), oldScale);
+    }
+    else if (command.type === "trim-start") {
+        sections = trimStart(sections, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale);
+    }
+    else if (command.type === "trim-end") {
+        sections = trimEnd(sections, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale);
+    }
+    else if (command.type === "set-key-tempo") {
+        if (!command.key.trim())
+            throw new Error("Arrangement key is required");
+        if (!Number.isFinite(command.bpm) || command.bpm <= 0) {
+            throw new Error("Arrangement BPM must be positive");
+        }
+        key = command.key.trim();
+        bpm = command.bpm;
+    }
+    else if (command.type === "set-name") {
+        assertName(command.name);
+        name = command.name.trim();
+    }
+    else if (command.type === "set-click-template") {
+        const template = CLICK_TEMPLATES[command.templateId];
+        if (!template || template.meter.numerator !== draft.timeSignature.numerator || template.meter.denominator !== draft.timeSignature.denominator) {
+            throw new Error(`Click template does not match ${draft.timeSignature.numerator}/${draft.timeSignature.denominator}`);
+        }
+        clickTemplateId = command.templateId;
+    }
+    else if (command.type === "set-section-boundary") {
+        sections = setSectionBoundary(sections, command.sectionId, command.edge, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature), oldScale);
+    }
+    else if (command.type === "set-cue-enabled") {
+        cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, enabled: command.enabled }));
+    }
+    else if (command.type === "set-cue-target") {
+        const target = sections.find((section) => section.id === command.targetRegionId);
+        if (!target)
+            throw new Error("Cue destination section was not found");
+        const selected = cues.find((cue) => cue.id === command.cueId);
+        if (!selected)
+            throw new Error("Cue not found");
+        const previousTarget = sections.find((section) => section.id === selected.targetRegionId);
+        const displaced = cues.find((cue) => cue.targetRegionId === target.id && cue.id !== selected.id);
+        cues = cues.map((cue) => {
+            if (cue.id === selected.id)
+                return { ...cue, phrase: target.name, targetRegionId: target.id, sourceRegionId: target.sourceRegionId, sourceLeadSeconds: Math.max(0, target.startSeconds - cue.atSeconds) / oldScale };
+            if (displaced && cue.id === displaced.id)
+                return { ...cue, phrase: previousTarget.name, targetRegionId: previousTarget.id, sourceRegionId: previousTarget.sourceRegionId, sourceLeadSeconds: Math.max(0, previousTarget.startSeconds - cue.atSeconds) / oldScale };
+            return cue;
+        });
+    }
+    else if (command.type === "set-cue-time") {
+        const selected = cues.find((cue) => cue.id === command.cueId);
+        if (!selected)
+            throw new Error("Cue not found");
+        const target = sections.find((section) => section.id === selected.targetRegionId);
+        if (!target)
+            throw new Error("Cue destination section was not found");
+        const atSeconds = Math.max(0, Math.min(target.startSeconds, positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature)));
+        cues = replaceCue(cues, command.cueId, (cue) => ({ ...cue, atSeconds, sourceLeadSeconds: Math.max(0, target.startSeconds - atSeconds) / oldScale }));
+    }
+    else if (command.type === "set-midi-enabled") {
+        let found = false;
+        midi = midi.map((event) => {
+            if (event.id !== command.eventId)
+                return event;
+            found = true;
+            return { ...event, enabled: command.enabled };
+        });
+        if (!found)
+            throw new Error("MIDI event was not found");
+    }
+    else if (command.type === "set-midi-time") {
+        const index = midi.findIndex((event) => event.id === command.eventId);
+        if (index < 0)
+            throw new Error("MIDI event was not found");
+        const selected = midi[index];
+        if (!isEditableMidiNoteOn(selected))
+            throw new Error("Only fixed ProPresenter commands can be moved");
+        const atSeconds = positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature);
+        if (atSeconds < 0 || atSeconds > draft.durationSeconds)
+            throw new Error("MIDI position is outside the arrangement");
+        const targetSection = sectionAt(draft.sections, Math.min(atSeconds, Math.max(0, draft.durationSeconds - 0.0001)));
+        if (!targetSection)
+            throw new Error("MIDI position has no destination section");
+        const sourceAtSeconds = targetSection.sourceStartSeconds + (atSeconds - targetSection.startSeconds) / oldScale;
+        const noteOffIndex = matchingNoteOffIndex(midi, index);
+        const noteDuration = noteOffIndex >= 0 ? Math.max(0, midi[noteOffIndex].atSeconds - selected.atSeconds) : 0;
+        midi[index] = { ...selected, atSeconds, sourceAtSeconds, sourceRegionId: targetSection.sourceRegionId };
+        if (noteOffIndex >= 0)
+            midi[noteOffIndex] = { ...midi[noteOffIndex], atSeconds: Math.min(draft.durationSeconds, atSeconds + noteDuration), sourceAtSeconds: sourceAtSeconds + noteDuration / oldScale, sourceRegionId: targetSection.sourceRegionId };
+    }
+    else if (command.type === "set-midi-value") {
+        if (!Number.isInteger(command.value) || command.value < 1 || command.value > 127)
+            throw new Error("Slide value must be between 1 and 127");
+        let found = false;
+        midi = midi.map((event) => {
+            if (event.id !== command.eventId)
+                return event;
+            found = true;
+            if (!isEditableMidiNoteOn(event))
+                throw new Error("Only fixed note 17 and note 19 values can be edited");
+            return { ...event, data2: command.value };
+        });
+        if (!found)
+            throw new Error("MIDI event was not found");
+    }
+    else if (command.type === "add-slide-midi") {
+        if (!Number.isInteger(command.value) || command.value < 1 || command.value > 127)
+            throw new Error("Slide value must be between 1 and 127");
+        const atSeconds = positionToSeconds(command.atPosition, draft.selectedBpm, draft.timeSignature);
+        const targetSection = sectionAt(draft.sections, Math.min(atSeconds, Math.max(0, draft.durationSeconds - 0.0001)));
+        if (!targetSection)
+            throw new Error("MIDI position has no destination section");
+        const sourceAtSeconds = targetSection.sourceStartSeconds + (atSeconds - targetSection.startSeconds) / oldScale;
+        const id = `midi-${randomUUID()}`;
+        midi.push({ id, enabled: true, atSeconds, sourceAtSeconds, sourceRegionId: targetSection.sourceRegionId, status: 0x90, data1: 19, data2: command.value });
+        const offAt = Math.min(draft.durationSeconds, atSeconds + Math.min(0.1, 60 / draft.selectedBpm / 4));
+        midi.push({ id: `${id}-off`, enabled: true, atSeconds: offAt, sourceAtSeconds: sourceAtSeconds + (offAt - atSeconds) / oldScale, sourceRegionId: targetSection.sourceRegionId, status: 0x80, data1: 19, data2: 0 });
+    }
+    else if (command.type === "delete-midi-event") {
+        const index = midi.findIndex((event) => event.id === command.eventId);
+        if (index < 0)
+            throw new Error("MIDI event was not found");
+        if (!isEditableMidiNoteOn(midi[index]))
+            throw new Error("Only fixed ProPresenter commands can be deleted");
+        const noteOffIndex = matchingNoteOffIndex(midi, index);
+        midi = midi.filter((_event, candidate) => candidate !== index && candidate !== noteOffIndex);
+    }
+    sections = renumberOccurrences(sections);
+    const scale = draft.baseBpm / bpm;
+    const reflowed = reflow(sections, scale);
+    const retimedCues = retimeCues(draft.sections, cues, reflowed, scale);
+    const retimedMidi = retimeMidi(midi, reflowed, scale);
+    return withMusicalLocations({
+        ...draft,
+        name,
+        selectedKey: key,
+        selectedBpm: bpm,
+        clickTemplateId,
+        durationSeconds: reflowed.at(-1).endSeconds,
+        sections: reflowed,
+        cues: retimedCues,
+        midi: retimedMidi,
+        revision: draft.revision + 1,
+    });
+}
+function isEditableMidiNoteOn(event) {
+    return (event.status & 0xf0) === 0x90 && event.data2 > 0 && (event.data1 === 17 || event.data1 === 19);
+}
+function matchingNoteOffIndex(events, noteOnIndex) {
+    const noteOn = events[noteOnIndex];
+    const channel = noteOn.status & 0x0f;
+    return events.findIndex((event, index) => index > noteOnIndex && event.data1 === noteOn.data1 && (event.status & 0x0f) === channel && ((event.status & 0xf0) === 0x80 || (event.status & 0xf0) === 0x90 && event.data2 === 0));
+}
+function withMusicalLocations(draft) {
+    const locate = (seconds) => secondsToMusicalPosition(seconds, draft.selectedBpm, draft.timeSignature);
+    return {
+        ...draft,
+        sections: draft.sections.map(section => ({ ...section, startPosition: locate(section.startSeconds), endPosition: locate(section.endSeconds) })),
+        cues: draft.cues.map(cue => ({ ...cue, position: locate(cue.atSeconds) })),
+        midi: draft.midi.map(event => ({ ...event, position: locate(event.atSeconds) })),
+    };
+}
+export function arrangementFingerprint(draft) {
+    return createHash("sha256").update(JSON.stringify(draft)).digest("hex");
+}
+export function validateArrangementDraft(draft) {
+    const issues = [];
+    if (!draft.name.trim())
+        issues.push("Arrangement name is missing");
+    if (!draft.selectedKey.trim())
+        issues.push("Arrangement key is missing");
+    if (!Number.isFinite(draft.selectedBpm) || draft.selectedBpm <= 0)
+        issues.push("Arrangement BPM is invalid");
+    const clickTemplate = CLICK_TEMPLATES[draft.clickTemplateId];
+    if (!clickTemplate || clickTemplate.meter.numerator !== draft.timeSignature.numerator || clickTemplate.meter.denominator !== draft.timeSignature.denominator)
+        issues.push("Arrangement click template is invalid");
+    if (!draft.sections.length)
+        issues.push("Arrangement has no sections");
+    const ids = new Set();
+    for (const [index, section] of draft.sections.entries()) {
+        if (ids.has(section.id))
+            issues.push(`Duplicate section ID: ${section.id}`);
+        else
+            ids.add(section.id);
+        if (!section.name.trim())
+            issues.push(`Section ${index + 1} has no name`);
+        if (section.sourceEndSeconds <= section.sourceStartSeconds)
+            issues.push(`Empty source slice: ${section.name}`);
+        if (section.endSeconds <= section.startSeconds)
+            issues.push(`Empty timeline section: ${section.name}`);
+        if (index === 0 && Math.abs(section.startSeconds) > 0.0001)
+            issues.push("Arrangement does not start at zero");
+        if (index > 0 && Math.abs(draft.sections[index - 1].endSeconds - section.startSeconds) > 0.0001) {
+            issues.push(`Gap or overlap before ${section.name}`);
+        }
+    }
+    const finalEnd = draft.sections.at(-1)?.endSeconds ?? 0;
+    if (Math.abs(finalEnd - draft.durationSeconds) > 0.0001)
+        issues.push("Arrangement duration does not match its sections");
+    for (const cue of draft.cues) {
+        const target = draft.sections.find((section) => section.id === cue.targetRegionId);
+        if (!target || cue.atSeconds < 0 || cue.atSeconds > draft.durationSeconds)
+            issues.push(`Invalid cue: ${cue.phrase}`);
+        else if (cue.phrase !== target.name)
+            issues.push(`Cue ${cue.phrase} does not announce ${target.name}`);
+    }
+    for (const event of draft.midi) {
+        if (event.atSeconds < 0 || event.atSeconds > draft.durationSeconds)
+            issues.push(`Invalid MIDI event at ${event.atSeconds}`);
+    }
+    return issues;
+}
+export class ArrangementEditorHistory {
+    current;
+    past = [];
+    future = [];
+    constructor(current) {
+        this.current = current;
+    }
+    get draft() { return this.current; }
+    get canUndo() { return this.past.length > 0; }
+    get canRedo() { return this.future.length > 0; }
+    execute(command) {
+        this.past.push(this.current);
+        this.current = applyArrangementCommand(this.current, command);
+        this.future = [];
+        return this.current;
+    }
+    undo() {
+        const value = this.past.pop();
+        if (!value)
+            throw new Error("Nothing to undo");
+        this.future.push(this.current);
+        return (this.current = value);
+    }
+    redo() {
+        const value = this.future.pop();
+        if (!value)
+            throw new Error("Nothing to redo");
+        this.past.push(this.current);
+        return (this.current = value);
+    }
+    replace(draft) {
+        this.current = draft;
+        this.past = [];
+        this.future = [];
+        return this.current;
+    }
+}
+function reflow(sections, scale = 1) {
+    let at = 0;
+    return sections.map((section) => {
+        const duration = (section.sourceEndSeconds - section.sourceStartSeconds) * scale;
+        const result = { ...section, startSeconds: at, endSeconds: at + duration };
+        at += duration;
+        return result;
+    });
+}
+function setSectionBoundary(sections, sectionId, edge, atSeconds, scale) {
+    if (!Number.isFinite(atSeconds))
+        throw new Error("Region boundary is invalid");
+    const index = sections.findIndex(section => section.id === sectionId);
+    if (index < 0)
+        throw new Error("Section not found");
+    const leftIndex = edge === "start" ? index - 1 : index;
+    const rightIndex = leftIndex + 1;
+    if (leftIndex < 0)
+        throw new Error("The arrangement must begin at 1.1; trim the song start to change it");
+    if (rightIndex >= sections.length)
+        throw new Error("Use Trim End to change the final song boundary");
+    const left = sections[leftIndex];
+    const right = sections[rightIndex];
+    const minimum = Math.max(0.001, (60 / 400) * scale);
+    if (atSeconds <= left.startSeconds + minimum || atSeconds >= right.endSeconds - minimum) {
+        throw new Error("A region boundary must leave playable audio on both sides");
+    }
+    const delta = (atSeconds - left.endSeconds) / scale;
+    const nextLeft = { ...left, sourceEndSeconds: left.sourceEndSeconds + delta };
+    const nextRight = { ...right, sourceStartSeconds: right.sourceStartSeconds + delta };
+    if (nextLeft.sourceEndSeconds <= nextLeft.sourceStartSeconds || nextRight.sourceEndSeconds <= nextRight.sourceStartSeconds) {
+        throw new Error("That boundary would create an empty region");
+    }
+    return sections.map((section, itemIndex) => itemIndex === leftIndex ? nextLeft : itemIndex === rightIndex ? nextRight : section);
+}
+function retimeCues(oldSections, cues, next, scale) {
+    return next.flatMap((section) => {
+        const existing = cues.find((cue) => cue.targetRegionId === section.id);
+        const source = existing ?? cues.find((cue) => cue.sourceRegionId === section.sourceRegionId);
+        if (!source)
+            return [];
+        const oldTarget = source
+            ? oldSections.find((item) => item.id === source.targetRegionId)
+            : undefined;
+        const sourceLead = source.sourceLeadSeconds ?? (oldTarget ? Math.max(0, oldTarget.startSeconds - source.atSeconds) / scale : 0);
+        return {
+            id: existing?.id ?? `cue-${section.id}`,
+            phrase: section.name,
+            atSeconds: Math.max(0, section.startSeconds - sourceLead * scale),
+            targetRegionId: section.id,
+            enabled: source?.enabled ?? true,
+            sourceRegionId: section.sourceRegionId,
+            sourceLeadSeconds: sourceLead,
+        };
+    });
+}
+function retimeMidi(events, sections, scale) {
+    const templates = new Map();
+    for (const event of events) {
+        const key = `${event.sourceRegionId}:${event.sourceAtSeconds}:${event.status}:${event.data1}:${event.data2}`;
+        if (!templates.has(key))
+            templates.set(key, event);
+    }
+    const result = [];
+    for (const section of sections) {
+        for (const template of templates.values()) {
+            if (template.sourceRegionId !== section.sourceRegionId ||
+                template.sourceAtSeconds < section.sourceStartSeconds ||
+                template.sourceAtSeconds >= section.sourceEndSeconds)
+                continue;
+            const existing = events.find((event) => event.id.startsWith(`${section.id}:`) &&
+                event.sourceAtSeconds === template.sourceAtSeconds &&
+                event.status === template.status &&
+                event.data1 === template.data1 &&
+                event.data2 === template.data2);
+            result.push({
+                ...template,
+                enabled: existing?.enabled ?? template.enabled,
+                id: `${section.id}:${template.sourceAtSeconds}:${template.status}:${template.data1}`,
+                atSeconds: section.startSeconds + (template.sourceAtSeconds - section.sourceStartSeconds) * scale,
+            });
+        }
+    }
+    return result.sort((a, b) => a.atSeconds - b.atSeconds);
+}
+function splitAt(sections, at, scale, newSectionId = `app-${randomUUID()}`) {
+    if (!Number.isFinite(at))
+        throw new Error("Split position is invalid");
+    const index = sections.findIndex((section) => at > section.startSeconds + 0.0001 && at < section.endSeconds - 0.0001);
+    if (index < 0)
+        throw new Error("Split must be inside a section");
+    const source = sections[index];
+    const sourceSplit = source.sourceStartSeconds + (at - source.startSeconds) / scale;
+    const left = { ...source, endSeconds: at, sourceEndSeconds: sourceSplit };
+    const right = {
+        ...source,
+        id: newSectionId,
+        startSeconds: at,
+        sourceStartSeconds: sourceSplit,
+    };
+    return [...sections.slice(0, index), left, right, ...sections.slice(index + 1)];
+}
+function createFromSelection(sections, start, end, name, scale) {
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end)
+        throw new Error("Selection must have a start before its end");
+    const containing = sections.find((section) => start >= section.startSeconds && end <= section.endSeconds);
+    if (!containing)
+        throw new Error("Create Region currently requires a selection inside one source section");
+    let result = [...sections];
+    if (start > containing.startSeconds + 0.0001)
+        result = splitAt(result, start, scale);
+    if (end < containing.endSeconds - 0.0001)
+        result = splitAt(result, end, scale);
+    const selected = result.find((section) => Math.abs(section.startSeconds - start) < 0.0001 && Math.abs(section.endSeconds - end) < 0.0001);
+    if (!selected)
+        throw new Error("Selection could not be aligned to a region");
+    return replace(result, selected.id, (section) => ({ ...section, name }));
+}
+function trimStart(sections, at, scale) {
+    if (!Number.isFinite(at) || at < 0 || at >= sections.at(-1).endSeconds)
+        throw new Error("Trim start is outside the arrangement");
+    return sections
+        .filter((section) => section.endSeconds > at)
+        .map((section, index) => index === 0 && section.startSeconds < at
+        ? { ...section, sourceStartSeconds: section.sourceStartSeconds + (at - section.startSeconds) / scale }
+        : section);
+}
+function trimEnd(sections, at, scale) {
+    if (!Number.isFinite(at) || at <= 0 || at > sections.at(-1).endSeconds)
+        throw new Error("Trim end is outside the arrangement");
+    return sections
+        .filter((section) => section.startSeconds < at)
+        .map((section, index, array) => index === array.length - 1 && section.endSeconds > at
+        ? { ...section, sourceEndSeconds: section.sourceStartSeconds + (at - section.startSeconds) / scale }
+        : section);
+}
+function replace(items, id, change) {
+    let found = false;
+    const result = items.map((item) => {
+        if (item.id !== id)
+            return item;
+        found = true;
+        return change(item);
+    });
+    if (!found)
+        throw new Error("Section not found");
+    return result;
+}
+function replaceCue(items, id, change) {
+    let found = false;
+    const result = items.map((item) => {
+        if (item.id !== id)
+            return item;
+        found = true;
+        return change(item);
+    });
+    if (!found)
+        throw new Error("Cue not found");
+    return result;
+}
+function sectionAt(sections, at) {
+    return sections.find((section, index) => at >= section.startSeconds && (at < section.endSeconds || index === sections.length - 1));
+}
+function renumberOccurrences(sections) {
+    const parsed = sections.map((section) => ({ section, match: section.name.trim().match(/^(Intro|Verse|Pre[- ]Chorus|Chorus|Bridge|Tag|Turnaround|Interlude|Instrumental|Breakdown|Outro|End)(?:\s+\d+)?$/i) }));
+    const totals = new Map();
+    for (const item of parsed)
+        if (item.match) {
+            const key = item.match[1].toLowerCase().replace("-", " ");
+            totals.set(key, (totals.get(key) ?? 0) + 1);
+        }
+    const seen = new Map();
+    return parsed.map(({ section, match }) => {
+        if (!match)
+            return section;
+        const key = match[1].toLowerCase().replace("-", " "), total = totals.get(key) ?? 1;
+        if (total < 2)
+            return section;
+        const occurrence = (seen.get(key) ?? 0) + 1;
+        seen.set(key, occurrence);
+        const canonical = key.split(" ").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
+        return { ...section, name: `${canonical} ${occurrence}` };
+    });
+}
+function assertName(value) {
+    if (!value.trim())
+        throw new Error("Arrangement name must not be empty");
+}
+//# sourceMappingURL=arrangement-editor.js.map

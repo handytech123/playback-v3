@@ -20,11 +20,14 @@ $rubberExtract = Join-Path $downloads "rubberband-4.0.0"
 if (-not (Test-Path -LiteralPath $rubberZip)) {
     Invoke-WebRequest -Uri $rubberUrl -OutFile $rubberZip
 }
-if (Test-Path -LiteralPath $rubberExtract) { Remove-Item -LiteralPath $rubberExtract -Recurse -Force }
+# Do not recursively delete an existing runtime preparation folder.
 Expand-Archive -LiteralPath $rubberZip -DestinationPath $rubberExtract -Force
 $rubberExe = Get-ChildItem -LiteralPath $rubberExtract -Recurse -File -Filter "rubberband.exe" | Select-Object -First 1
 if (-not $rubberExe) { throw "The official Rubber Band archive did not contain rubberband.exe." }
 Copy-Item -LiteralPath $rubberExe.FullName -Destination (Join-Path $runtime "rubberband.exe") -Force
+$sndfile = Get-ChildItem -LiteralPath $rubberExtract -Recurse -File -Filter 'sndfile.dll' | Select-Object -First 1
+if (-not $sndfile) { throw 'Rubber Band requires sndfile.dll; installer preparation is incomplete.' }
+Copy-Item -LiteralPath $sndfile.FullName -Destination (Join-Path $runtime 'sndfile.dll') -Force
 $rubberLicense = Get-ChildItem -LiteralPath $rubberExtract -Recurse -File | Where-Object { $_.Name -match '^(COPYING|LICENSE)(\.|$)' } | Select-Object -First 1
 if ($rubberLicense) { Copy-Item -LiteralPath $rubberLicense.FullName -Destination (Join-Path $runtime "RUBBERBAND-LICENSE.txt") -Force }
 

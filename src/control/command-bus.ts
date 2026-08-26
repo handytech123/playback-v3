@@ -67,7 +67,7 @@ export class PlaybackCommandBus {
       else if (command.type === "mixer.channel") this.session.setMixerChannel(command.index,command);
       else if (command.type === "mixer.master") this.session.setMasterGain(command.gain);
       else if (command.type === "midi.slides") this.session.setSlidesMidiEnabled(command.enabled);
-      else if (command.type === "midi.surface") this.session.setSurfaceMixerMidiEnabled(command.enabled);
+      else if (command.type === "midi.surface") await this.session.setSurfaceMixerMidiEnabled(command.enabled);
       else throw new Error("Unsupported normalized command");
       const state = this.publishState(), result: CommandResult = { id: envelope.id, ok: true, completedAt: new Date().toISOString(), state: state.performance };
       for (const listener of this.resultListeners) listener(result);

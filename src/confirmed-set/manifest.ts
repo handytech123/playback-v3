@@ -37,8 +37,17 @@ export interface ReadinessReport {
   readonly issues: readonly ReadinessIssue[];
 }
 
-export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessReport {
+export function validateConfirmedSet(manifest: ConfirmedSetManifest, options: { readonly requireSongAnnotations?: boolean; readonly performanceOnly?: boolean } = {}): ReadinessReport {
   const issues: ReadinessIssue[] = [];
+    if (options.performanceOnly) {
+        if (!manifest.songs.length) issues.push({ message: "No playable music stems: set is empty" });
+        for (const prepared of manifest.songs) {
+            if (!prepared.stems.length) issues.push({ songTitle: prepared.song.title, message: "No playable music stems" });
+            for (const stem of prepared.stems) if (!stem.sourcePath) issues.push({ songTitle: prepared.song.title, message: `Stem ${stem.role} has no cache path` });
+        }
+        return { ready: issues.length === 0, issues };
+    }
+
   if (manifest.schemaVersion !== CONFIRMED_SET_SCHEMA_VERSION) {
     issues.push({ message: `Unsupported schema version: ${manifest.schemaVersion}` });
   }
@@ -61,7 +70,7 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
       if (prepared.liveAssets) {
         if (!prepared.liveAssets.click.regularPath || !prepared.liveAssets.click.accentPath || prepared.liveAssets.click.events.length === 0) issues.push({ songTitle, message: "Dynamic click plan is incomplete" });
         if (prepared.liveAssets.click.events[0]?.atSeconds !== 0) issues.push({ songTitle, message: "Dynamic click must begin at measure 1 beat 1" });
-        if (prepared.liveAssets.cues.length === 0) issues.push({ songTitle, message: "Dynamic cue plan is empty" });
+        if (options.requireSongAnnotations !== false && prepared.liveAssets.cues.length === 0) issues.push({ songTitle, message: "Dynamic cue plan is empty" });
         if (!prepared.liveAssets.repeatCuePath) issues.push({ songTitle, message: "Repeat cue is missing" });
         if (!prepared.liveAssets.pad.audioPath || prepared.liveAssets.pad.key !== prepared.selectedKey) issues.push({ songTitle, message: "Dynamic pad does not match selected key" });
         if (prepared.liveAssets.cues.some((cue) => cue.atSeconds < 0 || cue.atSeconds > prepared.durationSeconds || !cue.audioPath)) issues.push({ songTitle, message: "Dynamic cue plan contains an invalid event" });
@@ -71,8 +80,8 @@ export function validateConfirmedSet(manifest: ConfirmedSetManifest): ReadinessR
     for (const stem of prepared.stems) {
       if (!stem.sourcePath) issues.push({ songTitle, message: `Stem ${stem.role} has no cache path` });
     }
-    if (!mediaOnly && requiresMusicalLocations && prepared.regions.some(region => !region.startPosition || !region.endPosition)) issues.push({ songTitle, message: "A region is missing its measure-and-beat boundary" });
-    if (!mediaOnly && requiresMusicalLocations && prepared.cues.some(cue => !cue.position)) issues.push({ songTitle, message: "A cue is missing its measure-and-beat location" });
+    if (options.requireSongAnnotations !== false && !mediaOnly && requiresMusicalLocations && prepared.regions.some(region => !region.startPosition || !region.endPosition)) issues.push({ songTitle, message: "A region is missing its measure-and-beat boundary" });
+    if (options.requireSongAnnotations !== false && !mediaOnly && requiresMusicalLocations && prepared.cues.some(cue => !cue.position)) issues.push({ songTitle, message: "A cue is missing its measure-and-beat location" });
   }
   return { ready: issues.length === 0, issues };
 }

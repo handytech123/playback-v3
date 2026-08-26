@@ -4,6 +4,7 @@ external/JUCE/
 dist/
 release*/
 native/build/
+native/build-local/
 ui-dist/
 .playback-cache/
 .playback-data/
@@ -11,3 +12,7 @@ ui-dist/
 artifacts/
 vendor/
 *.log
+!release-runtime/
+!release-runtime/**
+!test/release/
+!test/release/**

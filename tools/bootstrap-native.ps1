@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $nativeBuild = Join-Path $projectRoot 'native\build-local'
-$jucePath = Join-Path $projectRoot 'external\JUCE'
+$jucePath = if ($env:PLAYBACK_JUCE_SOURCE) { $env:PLAYBACK_JUCE_SOURCE } else { Join-Path $projectRoot 'external\JUCE' }
 if (-not (Test-Path -LiteralPath (Join-Path $jucePath 'CMakeLists.txt'))) {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $jucePath) | Out-Null
   git clone --depth 1 --branch 8.0.15 https://github.com/juce-framework/JUCE.git $jucePath
@@ -9,7 +9,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $jucePath 'CMakeLists.txt'))) {
 $cmake = (Get-Command cmake -ErrorAction SilentlyContinue).Source
 if (-not $cmake) { $cmake = 'C:\Program Files\CMake\bin\cmake.exe' }
 if (-not (Test-Path -LiteralPath $cmake)) { throw 'CMake is not installed.' }
-& $cmake -S (Join-Path $projectRoot 'native') -B $nativeBuild -G 'Visual Studio 17 2022'
+& $cmake -S (Join-Path $projectRoot 'native') -B $nativeBuild -G 'Visual Studio 17 2022' -A x64 "-DPLAYBACK_JUCE_SOURCE=$jucePath"
 if ($LASTEXITCODE -ne 0) { throw "Native CMake configure failed with exit code $LASTEXITCODE" }
-& $cmake --build $nativeBuild --config Release --target PlaybackEngineProbe --parallel 4
+& $cmake --build $nativeBuild --config Release --target PlaybackEngineProbe PlaybackEngineCoreTests PlaybackIemTests --parallel 4
 if ($LASTEXITCODE -ne 0) { throw "Native PlaybackEngineProbe build failed with exit code $LASTEXITCODE" }
+& (Join-Path (Split-Path -Parent $cmake) 'ctest.exe') --test-dir $nativeBuild -C Release --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw 'Native regression tests failed.' }

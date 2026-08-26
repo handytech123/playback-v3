@@ -1,0 +1,7 @@
+* text=auto eol=lf
+# Preserve the exact integrity-checked field-tested runtime bytes.
+release-runtime/** -text -whitespace
+*.exe -text
+*.dll -text
+*.asar -text
+*.wav -text

@@ -28,7 +28,7 @@ export interface SongPreparationInput {
 }
 
 export interface LiveAssetSources {
-  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly { atSeconds: number; accent: boolean }[]; readonly templateId: ClickTemplateId };
+  readonly click: { readonly regularPath: string; readonly accentPath: string; readonly events: readonly { atSeconds: number; accent: boolean }[]; readonly templateId?: ClickTemplateId | undefined };
   readonly cues: readonly { position?: MusicalPosition; atSeconds: number; label: string; sourcePath: string; targetRegionId: string }[];
   readonly countIn?: readonly { atSeconds: number; label: string; sourcePath: string }[];
   readonly repeatCuePath: string;
@@ -92,6 +92,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
         completedUnits+=1;report(`Caching ${inputSong.preparedSong.song.title} · ${source.role}`);
       }
 
+      const preparationWarnings: string[] = [];
       const waveformPath = join(songDirectory, "waveform.json");
       if (!cachedStems.length) throw new Error(`No waveform sources available for ${inputSong.preparedSong.song.title}`);
       const waveformSources = cachedStems.map((stem, index) => {
@@ -99,13 +100,16 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
         if (!source) throw new Error(`Missing source fingerprint for ${stem.sourcePath}`);
         return { path: stem.sourcePath, sha256: source.sha256, durationSeconds: stem.durationSeconds };
       });
-      await writeCachedCombinedWaveformSummary(waveformSources, waveformPath, join(dirname(input.cacheRoot), "waveform-peaks"));
+      try { await writeCachedCombinedWaveformSummary(waveformSources, waveformPath, join(dirname(input.cacheRoot), "waveform-peaks")); } catch (error) {
+        preparationWarnings.push(`${inputSong.preparedSong.song.title}: waveform preview unavailable (${String(error)})`);
+        await writeFile(waveformPath, JSON.stringify({ schemaVersion: 1, source: "preview-unavailable", sampleRate: 48000, channels: 2, durationSeconds: inputSong.preparedSong.durationSeconds, buckets: [] }));
+      }
       completedUnits+=1;report(`Building ${inputSong.preparedSong.song.title} waveform`);
       report(`Matching ${inputSong.preparedSong.song.title} loudness`);
-      const loudnessNormalization=await measureSongLoudness({stemPaths:cachedStems.map(stem=>stem.sourcePath),...(inputSong.preparedSong.stemMix?{stemMix:inputSong.preparedSong.stemMix}:{}),...(input.ffmpegPath?{ffmpegPath:input.ffmpegPath}:{})});
-      const liveAssets = inputSong.liveAssets ? await prepareLiveAssets(inputSong.liveAssets, inputSong.preparedSong, songDirectory, input.ffmpegPath) : undefined;
+      const loudnessNormalization=await measureSongLoudness({stemPaths:cachedStems.map(stem=>stem.sourcePath),...(inputSong.preparedSong.stemMix?{stemMix:inputSong.preparedSong.stemMix}:{}),...(input.ffmpegPath?{ffmpegPath:input.ffmpegPath}:{})}).catch(error => { preparationWarnings.push(`${inputSong.preparedSong.song.title}: loudness analysis unavailable (${String(error)})`); return inputSong.preparedSong.loudnessNormalization; });
+      const liveAssets = inputSong.liveAssets ? await prepareLiveAssets(inputSong.liveAssets, inputSong.preparedSong, songDirectory, input.ffmpegPath, preparationWarnings) : undefined;
       completedUnits+=1;report(`Preparing ${inputSong.preparedSong.song.title} click, cues, and pad`);
-      const preparedSong = { ...inputSong.preparedSong, stems: cachedStems, waveformPath, loudnessNormalization, ...(liveAssets ? { liveAssets } : {}) };
+      const preparedSong = { ...inputSong.preparedSong, stems: cachedStems, waveformPath, ...(loudnessNormalization ? { loudnessNormalization } : {}), preparationWarnings, ...(liveAssets ? { liveAssets } : {}) };
       const proPresenterPosition = isMediaOnlySong(preparedSong) ? null : ++proPresenterSongPosition;
       songs.push(resolveSetlistPositionMidi(preparedSong, proPresenterPosition));
     }
@@ -119,7 +123,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
       ...(input.transitions?{transitions:input.transitions}:{}),
       show: input.show ?? DEFAULT_SHOW_STATE,
     };
-    const draftReport = validateConfirmedSet(draftManifest);
+    const draftReport = validateConfirmedSet(draftManifest, { performanceOnly: true });
     report("Validating the complete performance package",94);
     if (!draftReport.ready) {
       throw new Error(`Readiness validation failed: ${draftReport.issues.map((issue) => issue.message).join("; ")}`);
@@ -133,7 +137,7 @@ export async function confirmSet(input: ConfirmSetInput): Promise<ConfirmSetResu
     const manifest = replacePathPrefix(draftManifest, temporaryDirectory, finalDirectory);
     const manifestPath = join(finalDirectory, "confirmed-set.json");
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
-    report("Confirmed Set ready · opening Performance",100);return { manifestPath, manifest, readiness: validateConfirmedSet(manifest), copiedBytes };
+    report("Confirmed Set ready · opening Performance",100);return { manifestPath, manifest, readiness: validateConfirmedSet(manifest, { performanceOnly: true }), copiedBytes };
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true });
     throw error;
@@ -197,15 +201,15 @@ function replacePathPrefix(manifest: ConfirmedSetManifest, from: string, to: str
   };
 }
 
-async function prepareLiveAssets(sources: LiveAssetSources, song: PreparedSong, songDirectory: string, ffmpegPath?: string) {
+async function prepareLiveAssets(sources: LiveAssetSources, song: PreparedSong, songDirectory: string, ffmpegPath?: string, notices: string[] = []) {
   const assetDirectory = join(songDirectory, "live-assets"); await mkdir(assetDirectory, { recursive: true });
   const regularPath = join(assetDirectory, "click-regular.wav"), accentPath = join(assetDirectory, "click-accent.wav");
-  await prepareAudioSource(sources.click.regularPath, regularPath, ffmpegPath); await prepareAudioSource(sources.click.accentPath, accentPath, ffmpegPath);
+  await prepareOptionalAudio(sources.click.regularPath, regularPath, ffmpegPath, notices); await prepareOptionalAudio(sources.click.accentPath, accentPath, ffmpegPath, notices);
   const cueDirectory = join(assetDirectory, "cues"); await mkdir(cueDirectory, { recursive: true });
   // Reserve the Repeat command asset first. A song map can also contain a
   // visible cue named "Repeat" that points at this same source file.
   const repeatCuePath = join(cueDirectory, "repeat-command.wav");
-  await prepareAudioSource(sources.repeatCuePath, repeatCuePath, ffmpegPath);
+  await prepareOptionalAudio(sources.repeatCuePath, repeatCuePath, ffmpegPath, notices);
   const copied = new Map<string, string>();
   const usedNames = new Set<string>(["repeat-command.wav"]);
   const cues = [];
@@ -217,15 +221,30 @@ async function prepareLiveAssets(sources: LiveAssetSources, song: PreparedSong, 
       let suffix = 2;
       while (usedNames.has(filename.toLowerCase())) filename = `${base}-${suffix++}.wav`;
       usedNames.add(filename.toLowerCase());
-      audioPath = join(cueDirectory, filename);
-      if(song.liveAssets?.cueCountVersion===2)await prepareAudioSource(cue.sourcePath,audioPath,ffmpegPath);
-      else await writeCountedCue({ sourcePath: cue.sourcePath, destinationPath: audioPath, numberDirectory: dirname(sources.repeatCuePath), bpm: song.selectedBpm, meter: song.timeSignature, ...(ffmpegPath ? { ffmpegPath } : {}) });
+      const destination = join(cueDirectory, filename);
+      audioPath = destination;
+      if(song.liveAssets?.cueCountVersion===2)await prepareOptionalAudio(cue.sourcePath,destination,ffmpegPath,notices);
+      else await writeCountedCue({ sourcePath: cue.sourcePath, destinationPath: destination, numberDirectory: dirname(sources.repeatCuePath), bpm: song.selectedBpm, meter: song.timeSignature, ...(ffmpegPath ? { ffmpegPath } : {}) }).catch(async error => { notices.push(`${song.song.title}: counted cue unavailable; using its original announcement (${String(error)})`); await prepareOptionalAudio(cue.sourcePath, destination, ffmpegPath, notices); });
       copied.set(cue.sourcePath, audioPath);
     }
     cues.push({ ...(cue.position ? { position: cue.position } : {}), atSeconds: cue.atSeconds, label: cue.label, audioPath, targetRegionId: cue.targetRegionId });
   }
-  const padPath = join(assetDirectory, `pad-${safeFilename(sources.pad.key)}.wav`); await prepareAudioSource(sources.pad.sourcePath, padPath, ffmpegPath);
-  return { click: { regularPath, accentPath, events: sources.click.events, templateId: sources.click.templateId }, cues, cueCountVersion: 2 as const, repeatCuePath, pad: { key: sources.pad.key, audioPath: padPath } };
+  const padPath = join(assetDirectory, `pad-${safeFilename(sources.pad.key)}.wav`); await prepareOptionalAudio(sources.pad.sourcePath, padPath, ffmpegPath, notices);
+  return { click: { regularPath, accentPath, events: sources.click.events, ...(sources.click.templateId ? { templateId: sources.click.templateId } : {}) }, cues, cueCountVersion: 2 as const, repeatCuePath, pad: { key: sources.pad.key, audioPath: padPath } };
 }
 
 function safeFilename(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+
+async function prepareOptionalAudio(sourcePath:string, destinationPath:string, ffmpegPath:string|undefined, notices:string[]) {
+    try { await prepareAudioSource(sourcePath, destinationPath, ffmpegPath); }
+    catch (error) {
+        notices.push(`Optional audio unavailable: ${sourcePath || destinationPath}; silent in this confirmed set (${String(error)})`);
+        // A short PCM silence keeps the native auxiliary reader valid; no music stem is substituted.
+        const dataBytes = 4800 * 2 * 3, wav = Buffer.alloc(44 + dataBytes);
+        wav.write("RIFF", 0); wav.writeUInt32LE(36 + dataBytes, 4); wav.write("WAVEfmt ", 8);
+        wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(2, 22);
+        wav.writeUInt32LE(48000, 24); wav.writeUInt32LE(288000, 28); wav.writeUInt16LE(6, 32); wav.writeUInt16LE(24, 34);
+        wav.write("data", 36); wav.writeUInt32LE(dataBytes, 40);
+        await writeFile(destinationPath, wav);
+    }
+}

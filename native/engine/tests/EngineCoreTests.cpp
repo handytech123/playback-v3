@@ -360,9 +360,9 @@ void testMixerSoloMutePanAndMeters() {
     require(meters.masterPeak == 0.25, "master meter does not match routed output");
 }
 
-void testAutomaticIemPolicyAndIsolation() {
-    require(playback::iem::stemSendEnabled(false), "unmuted stem did not enable its IEM send");
-    require(!playback::iem::stemSendEnabled(true), "muted stem leaked into its IEM send");
+void testIemSendFlagAndGenericRouterIsolation() {
+    require(playback::iem::stemSendEnabled(true), "explicit IEM enable was ignored");
+    require(!playback::iem::stemSendEnabled(false), "explicit IEM disable was ignored");
     require(playback::iem::routeGain(2, 1, playback::iem::stemHeadroomGain) == 0.0625f, "stereo-to-mono IEM headroom is wrong");
     auto liveStem = std::make_shared<ConstantSource>(1.0, 1.0);
     auto mutedStem = std::make_shared<ConstantSource>(8.0, 8.0);
@@ -567,7 +567,7 @@ int main() {
         &testStreamingCallbackDoesNotAllocate,
         &testNamedBusAndMultichannelRouting,
         &testMixerSoloMutePanAndMeters,
-        &testAutomaticIemPolicyAndIsolation,
+        &testIemSendFlagAndGenericRouterIsolation,
         &testAtomicRoutingGraphSwap,
         &testMixerRoutingValidationAndNoAllocation,
         &testSampleRateExactBypass,
