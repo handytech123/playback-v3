@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import * as asar from '@electron/asar';
 import {verifyProgramming} from '../../tools/verify-programming.mjs';
+import {verifyPackageDependencies} from '../../tools/verify-package-dependencies.mjs';
 const apply=path.resolve('tools/apply-release-runtime.mjs');
 const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
 async function fixture(t){
@@ -58,4 +59,22 @@ test('destination-PC checker detects missing and corrupted DLLs without launchin
  const valid=check();assert.equal(valid.status,0,valid.stderr||valid.stdout);
  await f.write('resources/native/runtime.dll','corrupt');const corrupted=check();assert.notEqual(corrupted.status,0);assert.match(corrupted.stderr,/Changed or incomplete/);
  await fs.unlink(path.join(f.root,'resources/native/runtime.dll'));const missing=check();assert.notEqual(missing.status,0);assert.match(missing.stderr,/Missing native/);
+});
+
+test('package audit rejects a missing transitive runtime dependency',async t=>{
+ const f=await fixture(t),staging=path.join(f.root,'package'),archive=path.join(f.root,'app.asar');
+ await f.write('package/package.json',JSON.stringify({dependencies:{parent:'1.0.0'}}));
+ await f.write('package/node_modules/parent/package.json',JSON.stringify({dependencies:{child:'1.0.0'}}));
+ await asar.createPackage(staging,archive);
+ assert.throws(()=>verifyPackageDependencies(archive),/child required by node_modules\/parent/);
+ await f.write('package/node_modules/child/package.json','{}');await asar.createPackage(staging,archive);asar.uncache(archive);
+ assert.equal(verifyPackageDependencies(archive),2);
+});
+
+test('package audit supports nested scoped dependencies, cycles, and absent optional packages',async t=>{
+ const f=await fixture(t),staging=path.join(f.root,'package'),archive=path.join(f.root,'app.asar');
+ await f.write('package/package.json',JSON.stringify({dependencies:{parent:'1.0.0'},optionalDependencies:{platformOnly:'1.0.0'}}));
+ await f.write('package/node_modules/parent/package.json',JSON.stringify({dependencies:{'@scope/child':'1.0.0',platformOnly:'1.0.0'},optionalDependencies:{platformOnly:'1.0.0'}}));
+ await f.write('package/node_modules/parent/node_modules/@scope/child/package.json',JSON.stringify({dependencies:{parent:'1.0.0'}}));
+ await asar.createPackage(staging,archive);assert.equal(verifyPackageDependencies(archive),2);
 });

@@ -18,13 +18,15 @@ export interface CommandEnvelope { readonly id: string; readonly source: Control
 export interface CommandResult { readonly id: string; readonly ok: boolean; readonly completedAt: string; readonly state: PerformanceSnapshot; readonly error?: string; }
 export interface ControlState { readonly revision: number; readonly updatedAt: string; readonly setName: string; readonly songs: readonly { index: number; title: string; artist: string; arrangement:string;key:string;bpm:number;timeSignature:TimeSignature;durationSeconds:number;waveformPath?:string;regions: readonly { id: string; name: string; startSeconds: number; endSeconds: number; startPosition?:MusicalPosition; endPosition?:MusicalPosition }[];cues:readonly { phrase:string; atSeconds:number; targetRegionId:string; position?:MusicalPosition }[];proPresenterMidi:readonly {atSeconds:number;status:number;data1:number;data2:number}[] }[]; readonly transitions:readonly {fromSongIndex:number;toSongIndex:number;type:string;durationSeconds:number;continuePad:boolean}[];readonly performance: PerformanceSnapshot; }
 
-type StateListener = (state: ControlState) => void;
-type ResultListener = (result: CommandResult) => void;
+type Listener<T> = (value: T) => unknown;
+type StateListener = Listener<ControlState>;
+type ResultListener = Listener<CommandResult>;
 
 export class PlaybackCommandBus {
   private revision = 0;
   private readonly stateListeners = new Set<StateListener>();
   private readonly resultListeners = new Set<ResultListener>();
+  private readonly reportedListeners = new WeakSet<object>();
   private chain: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly session: PerformanceSession, private readonly setName: string) {}
@@ -41,9 +43,26 @@ export class PlaybackCommandBus {
     return task;
   }
 
-  publishState(): ControlState { this.revision += 1; const state = this.state(); for (const listener of this.stateListeners) listener(state); return state; }
+  publishState(): ControlState { this.revision += 1; const state = this.state(); this.notify(this.stateListeners, state); return state; }
   onState(listener: StateListener): () => void { this.stateListeners.add(listener); return () => this.stateListeners.delete(listener); }
   onResult(listener: ResultListener): () => void { this.resultListeners.add(listener); return () => this.resultListeners.delete(listener); }
+
+  private notify<T>(listeners: Set<Listener<T>>, value: T): void {
+    // Observers cannot change the outcome of an already-applied playback action.
+    for (const listener of [...listeners]) {
+      try {
+        const pending = listener(value);
+        if (pending) void Promise.resolve(pending).catch(error => this.reportListener(listener, error));
+      } catch (error) { this.reportListener(listener, error); }
+    }
+  }
+
+  private reportListener(listener: object, error: unknown): void {
+    if (this.reportedListeners.has(listener)) return;
+    this.reportedListeners.add(listener);
+    // One diagnostic per subscriber; a disconnected UI must not flood logs.
+    try { console.warn("Playback control subscriber failed; transport result is unchanged.", error); } catch {}
+  }
 
   private async execute(envelope: CommandEnvelope): Promise<CommandResult> {
     try {
@@ -70,11 +89,11 @@ export class PlaybackCommandBus {
       else if (command.type === "midi.surface") await this.session.setSurfaceMixerMidiEnabled(command.enabled);
       else throw new Error("Unsupported normalized command");
       const state = this.publishState(), result: CommandResult = { id: envelope.id, ok: true, completedAt: new Date().toISOString(), state: state.performance };
-      for (const listener of this.resultListeners) listener(result);
+      this.notify(this.resultListeners, result);
       return result;
     } catch (error) {
       const result: CommandResult = { id: envelope.id, ok: false, completedAt: new Date().toISOString(), state: this.session.snapshot, error: error instanceof Error ? error.message : String(error) };
-      for (const listener of this.resultListeners) listener(result);
+      this.notify(this.resultListeners, result);
       return result;
     }
   }
@@ -94,7 +113,7 @@ export function parsePlaybackCommand(value: unknown): PlaybackCommand {
   if (type === "song.select") { if (!Number.isInteger(item.index) || Number(item.index) < 0) throw new Error("index must be a non-negative integer"); return { type, index: Number(item.index) }; }
   if (type === "bus.set") { const bus = parseBus(item.bus); if (typeof item.enabled !== "boolean") throw new Error("enabled must be boolean"); return { type, bus, enabled: item.enabled }; }
   if (type === "bus.gain") { const bus = parseBus(item.bus), gain = Number(item.gain); if (!Number.isFinite(gain) || gain < 0 || gain > 1.25) throw new Error("gain must be between 0 and 1.25"); return { type, bus, gain }; }
-  if(type==="mixer.channel"){const index=Number(item.index),gain=Number(item.gain);if(!Number.isInteger(index)||index<0)throw new Error("index must be a non-negative integer");if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("gain must be between 0 and 1.25");if(typeof item.muted!=="boolean"||typeof item.solo!=="boolean"||typeof item.iem!=="boolean")throw new Error("mixer channel switches must be boolean");return{type,index,gain,muted:item.muted,solo:item.solo,iem:item.iem};}
+  if(type==="mixer.channel"){const index=Number(item.index),gain=Number(item.gain);if(!Number.isInteger(index)||index<0)throw new Error("index must be a non-negative integer");if(!Number.isFinite(gain)||gain<0||gain>3.1622776601683795)throw new Error("gain must be between 0 and 3.1622776601683795");if(typeof item.muted!=="boolean"||typeof item.solo!=="boolean"||typeof item.iem!=="boolean")throw new Error("mixer channel switches must be boolean");return{type,index,gain,muted:item.muted,solo:item.solo,iem:item.iem};}
   if(type==="mixer.master"){const gain=Number(item.gain);if(!Number.isFinite(gain)||gain<0||gain>1.25)throw new Error("gain must be between 0 and 1.25");return{type,gain};}
   if(type==="midi.slides"){if(typeof item.enabled!=="boolean")throw new Error("enabled must be boolean");return{type,enabled:item.enabled};}
   if(type==="midi.surface"){if(typeof item.enabled!=="boolean")throw new Error("enabled must be boolean");return{type,enabled:item.enabled};}

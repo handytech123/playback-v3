@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import * as asar from '@electron/asar';
 import { verifyRuntime,sha256 } from './runtime-contract.mjs';
 import { verifyProgramming } from './verify-programming.mjs';
+import { verifyPackageDependencies } from './verify-package-dependencies.mjs';
+import { smokePackagedLibraries } from './smoke-packaged-libraries.mjs';
 export async function verifyPackage(appDirectory){
  const resources=path.join(appDirectory,'resources'),archive=path.join(resources,'app.asar');
  const manifest=JSON.parse(await fs.readFile('release-runtime/manifest.json','utf8'));
@@ -16,9 +18,10 @@ export async function verifyPackage(appDirectory){
   if(/(^|\/)(\.playback-data|\.playback-cache|\.git)(\/|$)|\.test\.js$/.test(name))throw Error(`Private or development data in installer: ${name}`);
  }
  const pkg=JSON.parse(asar.extractFile(archive,'package.json'));
- for(const dependency of Object.keys(pkg.dependencies))asar.statFile(archive,path.normalize(`node_modules/${dependency}/package.json`));
+ const productionPackages=verifyPackageDependencies(archive);
  const runtime=await verifyRuntime(resources);
- const result={version:pkg.version,archiveSha256:sha256(await fs.readFile(archive)),preservedProgrammingFiles:Object.keys(manifest.files).length,programmingFiles,runtime};
+ smokePackagedLibraries(appDirectory);
+ const result={version:pkg.version,archiveSha256:sha256(await fs.readFile(archive)),preservedProgrammingFiles:Object.keys(manifest.files).length,programmingFiles,productionPackages,runtime};
  await fs.writeFile(path.join(resources,'release-integrity.json'),JSON.stringify(result,null,2)+'\n');
  console.log(`Verified complete ${pkg.version} package: release code, production modules, native engine, DLLs, and audio tools.`);
  return result;
