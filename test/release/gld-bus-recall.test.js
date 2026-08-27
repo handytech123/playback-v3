@@ -43,6 +43,15 @@ async function setup(overrides={}) {
  await service.load();return {service,sent,root};
 }
 async function approvePad(service) {const response=await service.testBus({mix:33,db:-20,confirmation:'TEST RETURN 33'});service.acknowledge(response.test.id);service.arm();}
+test('save all captures every confirmed song mix for Performance recall',async()=>{
+ const {service,root}=await setup();
+ const second={...song,song:{id:'song2',title:'Song two'}};
+ const secondMixer={channels:mixer.channels.map(channel=>({...channel,gain:channel.kind==='pad'?.25:channel.gain}))};
+ const result=await service.saveAll([{song,mixer},{song:second,mixer:secondMixer}]);
+ assert.equal(result.savedCount,2);assert.equal(service.songs.song1.buses.pad.gain,.8);assert.equal(service.songs.song2.buses.pad.gain,.25);
+ const persisted=JSON.parse(await readFile(join(root,'gld-bus-recall.json'),'utf8'));
+ assert.deepEqual(Object.keys(persisted.songs).sort(),['song1','song2']);assert.match(service.status,/Saved mixes for 2 songs from Edit\/Arrange/);
+});
 async function exclusiveSetup(overrides={}) {
  const events=[];let stopped=true;
  const root=await mkdtemp(join(tmpdir(),'gld-exclusive-test-'));
@@ -259,7 +268,8 @@ test('shipped desktop reserves the matching GLD input and suppresses MIDI feedba
  assert.match(main,/if\(!applyingGldFeedback && gldRecall\.config\.mapping/);
  assert.match(main,/handleGldMidiFeedback=event=>/);
  const panel=await readFile(new URL('../../release-runtime/ui-dist/gld-bus-panel.js',import.meta.url),'utf8');
- assert.match(panel,/TWO-WAY MIDI/);assert.match(panel,/MIDI FEEDBACK OFF/);
+ assert.match(panel,/TWO-WAY MIDI/);assert.match(panel,/MIDI FEEDBACK OFF/);assert.match(panel,/SAVE ALL SONG MIXES/);assert.match(panel,/MutationObserver/);
+ assert.doesNotMatch(panel,/save\.textContent='SAVE MIX'/);
 });
 
 async function surfaceSetup(root=undefined) {

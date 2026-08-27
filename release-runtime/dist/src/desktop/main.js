@@ -717,6 +717,12 @@ async function createWindow() {
     ipcMain.handle("gld-bus:disarm",async()=>{const result=await controlBus.dispatch({type:"midi.surface",enabled:false},"ui");if(!result.ok)throw Error(result.error);return gldRecall.state();});
     ipcMain.handle("gld-bus:preview",()=>{const {song,state}=currentGldSong();return gldRecall.preview(song,state.mixer);});
     ipcMain.handle("gld-bus:save",async()=>{const {song,state}=currentGldSong();const result=await gldRecall.save(song,state.mixer);publishGld();return result;});
+    ipcMain.handle("gld-bus:save-all",async()=>{
+        const entries=manifest.songs.filter(song=>song.song.id!==EMPTY_SONG_ID&&!isMediaOnlySong(song)).map(song=>({song,mixer:createMixerState(song)}));
+        const activeState=performance?.snapshot,activeSong=manifest.songs[activeState?.songIndex];
+        const recallSong=activeSong&&activeSong.song.id!==EMPTY_SONG_ID&&!isMediaOnlySong(activeSong)?activeSong:null;
+        const result=await gldRecall.saveAll(entries,recallSong);publishGld();return result;
+    });
     for(const song of manifest.songs) gldRecall.prepare(song);
     let activeProPresenterSetlist = null;
     const proPresenterApiSlides = new ProPresenterApiSlideScheduler(() => ({

@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld("playback", {
     get:()=>ipcRenderer.invoke("gld-bus:get"), configure:value=>ipcRenderer.invoke("gld-bus:configure",value),
     connectionTest:()=>ipcRenderer.invoke("gld-bus:connection-test"), test:value=>ipcRenderer.invoke("gld-bus:test",value),
     confirm:id=>ipcRenderer.invoke("gld-bus:confirm",id), arm:()=>ipcRenderer.invoke("gld-bus:arm"),
-    disarm:()=>ipcRenderer.invoke("gld-bus:disarm"), preview:()=>ipcRenderer.invoke("gld-bus:preview"),save:()=>ipcRenderer.invoke("gld-bus:save"),
+    disarm:()=>ipcRenderer.invoke("gld-bus:disarm"), preview:()=>ipcRenderer.invoke("gld-bus:preview"),save:()=>ipcRenderer.invoke("gld-bus:save"),saveAll:()=>ipcRenderer.invoke("gld-bus:save-all"),
     onState:listener=>ipcRenderer.on("gld-bus:state",(_event,state)=>listener(state)),
   },
   bootstrap: () => ipcRenderer.invoke("playback:bootstrap"),

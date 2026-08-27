@@ -2,10 +2,10 @@ const expected={drums:10,bass:12,acoustic:14,electric:16,keys:36,strings:37,voca
 const labels={drums:'Drums',bass:'Bass',acoustic:'Acoustic',electric:'Electric',keys:'Keys',strings:'Orchestra',vocals:'Vocals',other:'Other',pad:'Dynamic Pad'};
 const api=window.playback.gldBus;
 if(api){
- const timer=setInterval(()=>{const header=document.querySelector('#performanceMixer header');if(!header)return;clearInterval(timer);mount(header);},200);
+ const timer=setInterval(()=>{const toolbar=document.querySelector('.editor-setlist-toolbar'),header=document.querySelector('#performanceMixer header');if(!toolbar||!header)return;clearInterval(timer);mount(toolbar,header);},200);
 }
-function mount(header){
- const save=document.createElement('button');save.textContent='SAVE MIX';save.title='Save Performance bus levels for this song; send to GLD when Surface Mixer is ON';header.append(save);
+function mount(toolbar,header){
+ const save=document.createElement('button');save.textContent='SAVE ALL SONG MIXES';save.title='Save the Editor mixes for every confirmed song. Entering Performance does this automatically.';toolbar.append(save);
  const setup=document.createElement('button');setup.textContent='GLD RETURNS';header.append(setup);
  const status=document.createElement('small');status.style.cssText='display:block;padding:6px 12px;color:#8ed8c0';header.after(status);
  const dialog=document.createElement('dialog');dialog.style.cssText='max-width:850px;width:85vw;max-height:88vh;overflow:auto;background:#151c24;color:#eef4fa;border:1px solid #426076;border-radius:12px;padding:22px';
@@ -28,7 +28,11 @@ function mount(header){
   for(const check of dialog.querySelectorAll('[data-bus]'))check.checked=c.mapping[check.dataset.bus]===expected[check.dataset.bus];
  }
  setup.onclick=()=>run(async()=>{await load();dialog.showModal();});$('gbClose').onclick=()=>dialog.close();
- save.onclick=()=>run(async()=>{save.disabled=true;try{return await api.save();}finally{save.disabled=false;}});
+ async function saveAllMixes(){save.disabled=true;try{const result=await api.saveAll();if(result)save.textContent=`SAVED ${result.savedCount} SONG MIX${result.savedCount===1?'':'ES'}`;return result;}finally{save.disabled=false;setTimeout(()=>save.textContent='SAVE ALL SONG MIXES',1800);}}
+ save.onclick=()=>run(saveAllMixes);
+ let wasPerformance=document.body.classList.contains('performance-mode'),autoSaving=false;
+ const autoSaveOnPerformance=()=>{const isPerformance=document.body.classList.contains('performance-mode');if(isPerformance&&!wasPerformance&&!autoSaving){autoSaving=true;void run(saveAllMixes).finally(()=>{autoSaving=false;});}wasPerformance=isPerformance;};
+ new MutationObserver(autoSaveOnPerformance).observe(document.body,{attributes:true,attributeFilter:['class']});
  $('gbSaveConfig').onclick=()=>run(async()=>{pending=null;$('gbConfirm').disabled=true;const mapping={};for(const c of dialog.querySelectorAll('[data-bus]:checked'))mapping[c.dataset.bus]=expected[c.dataset.bus];return api.configure({exclusiveEnabled:$('gbExclusive').checked,transport:$('gbTransport').value,midiOutputName:$('gbMidi').value,midiChannel:Number($('gbChannel').value),host:$('gbHost').value,port:Number($('gbPort').value),mapping});});
  $('gbConnect').onclick=()=>run(()=>api.connectionTest());
  $('gbPreview').onclick=()=>run(async()=>{$('gbDetails').textContent=JSON.stringify(await api.preview(),null,2);});

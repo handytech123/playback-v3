@@ -2,14 +2,14 @@
   "schema": 1,
   "archiveSha256": "cb6ecbb5c77ae827dae03e22dfdae39bd64327a7a71aa72ccd3ad5eb2189b2e3",
   "files": {
-    "desktop-preload.cjs": "cfcf406d7299b75e15857bddbb1acdcc2333d7acaafa71b103b14b1eddd4951e",
+    "desktop-preload.cjs": "e4020e4f60ffdeb6ced9250087f11e37863888c11cd6027aaa1ee968f094323e",
     "dist/src/confirmed-set/prepare.js": "0e01ca5fd371af03d12f5a6be6f350daab06141483ca75676ca83beea5566278",
     "dist/src/control/mixers/gld112.js": "3b66511cb34591bd2085860a893aad23bc323e556af1da3a4fb9772ce1f36d6b",
     "dist/src/control/mixers/gld-bus-mix.js": "8ba8fad9ad617979703fb38ead28e1528cfd5f561b9ab307a366dfe6df6175b4",
-    "dist/src/control/mixers/gld-bus-recall.js": "59e3bcc7ee8ad901ce1f1ac65667bcbf497516d6dfead6f8d10e630855551d53",
+    "dist/src/control/mixers/gld-bus-recall.js": "bbde487c51873ad5cebb55be2c2e3a4287904085e217befafa9b349ba6125362",
     "dist/src/control/mixers/gld-exclusive-recall.js": "df0cdd99e40abd955c1574f66223a70b1f82a04e612c9f151f58c4d940c0f6ae",
     "dist/src/control/mixers/gld-surface-recall.js": "f0adf97cdedbe76232a199e97acb9dae95d2b77adcd2453d06ac652f3bdabef0",
-    "dist/src/desktop/main.js": "01f1285767a54e10da5ecf499eb72826202078bd42f238c8b9ffcbbc1f1d395f",
+    "dist/src/desktop/main.js": "73fd622ae4e4acb585117a50dd2525f3f8637f82c616824965dba3386e385c20",
     "dist/src/desktop/preload.js": "dc12e977f49dd28d0fb86fcb35b094ab47cde06b6a1807eac20d385857ddfc70",
     "dist/src/edit/arrangement-editor.js": "7d120ad6ed55fdf82235b8131648588c30f43a33186c94448df46c0deb7b8366",
     "dist/src/library/key-analyzer-client.js": "4da6957882aaac4058ff3dc362409530b25c3ba9c363b3ce5188af1c0bbc898a",
@@ -19,7 +19,7 @@
     "ui-dist/assets/index-D4O1TRe-.css": "d2d30a87c39396e795c051cb975f5bfaf2d3ba85d075b817b6aa0c42528e975c",
     "ui-dist/assets/index-DjlP38JI.js": "57b8dd148dbafb10f3f6e5a41666256f21115957193c3f98e4bf74ed8b90801d",
     "ui-dist/index.html": "79eb72f281abfc5570c87ab69dc5687a7c6936d3082b0b68efb8e81c7e275678",
-    "ui-dist/gld-bus-panel.js": "01e7d63c14299612fba963fd70fdf19a2c142c8f84cc36560014fa4421f9c67f",
+    "ui-dist/gld-bus-panel.js": "cea4a54c3d2e60d8913ba07ac0b66ccb68af69cf1cf08c2fec01e53c1c08e5cb",
     "dist/src/control/mixers/gld-midi-feedback.js": "a0c62436a9b250fed0f0a7fc27d59002528491faadf609b001f5382484d53661"
   },
   "sourceHashes": {
@@ -89,7 +89,7 @@
     "src/ui/mode.css": "e46826e5f38bcf02891e2b17219d221991e701b531be06dacb21b3962ecd836b",
     "src/ui/style.css": "f8c4b41c03342a76adacd6c814e76b061e7d0bb84b0af287536cc6dcf125de50",
     "index.html": "37be4404e24b4026ac4e9bac3102e6df5be3777f31f9b336ab3bc58eac5646e9",
-    "desktop-preload.cjs": "34e6cfe6b6b4285e70d6599457c79d6b34a78a1e5462dda92bd14fdb7f957465",
+    "desktop-preload.cjs": "cabed4492ccbc4bc03aac530acdcf960e2c2c20ac25c72a2b438c0e029eb1792",
     "vite.config.ts": "5dbe347d330cc5d28ce571bcfbca8f52b5c1c6795fe2dc56fab9ffcf75dece2c",
     "tsconfig.json": "def6789f59c22723a4b26b376df5c8c681ffbd87fe74fd937766da6b1f647b91"
   }

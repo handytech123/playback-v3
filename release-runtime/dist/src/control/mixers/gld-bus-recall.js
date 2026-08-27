@@ -82,6 +82,20 @@ export class GldBusRecall {
         this.status=`Saved ${song.song.title}${this.armed?' locally; sending GLD buses':' locally; GLD disarmed'}`;
         await this.recall(song);return this.state();
     }
+    async saveAll(entries,activeSong=null) {
+        const savedAt=new Date().toISOString();let count=0;
+        for(const entry of entries??[]){
+            const song=entry?.song,mixer=entry?.mixer;
+            if(!song?.song?.id||!mixer)continue;
+            const buses=captureBusMix(song,mixer);
+            this.songs[song.song.id]={songId:song.song.id,title:song.song.title,buses,savedAt};
+            this.prepare(song);count++;
+        }
+        await this.persist();
+        this.status=`Saved mixes for ${count} song${count===1?'':'s'} from Edit/Arrange`;
+        if(activeSong)await this.recall(activeSong);
+        return {...this.state(),savedCount:count};
+    }
     recall(song) {
         const generation=(this.recallGeneration??0)+1;this.recallGeneration=generation;
         const saved=this.songs[song.song.id];
