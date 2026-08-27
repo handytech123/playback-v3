@@ -9,7 +9,7 @@
     "dist/src/control/mixers/gld-bus-recall.js": "59e3bcc7ee8ad901ce1f1ac65667bcbf497516d6dfead6f8d10e630855551d53",
     "dist/src/control/mixers/gld-exclusive-recall.js": "df0cdd99e40abd955c1574f66223a70b1f82a04e612c9f151f58c4d940c0f6ae",
     "dist/src/control/mixers/gld-surface-recall.js": "f0adf97cdedbe76232a199e97acb9dae95d2b77adcd2453d06ac652f3bdabef0",
-    "dist/src/desktop/main.js": "970c968f9e2bccd38e00c3e423a2435a277c3c285d3aa1f53c1cdfffcb1de72a",
+    "dist/src/desktop/main.js": "01f1285767a54e10da5ecf499eb72826202078bd42f238c8b9ffcbbc1f1d395f",
     "dist/src/desktop/preload.js": "dc12e977f49dd28d0fb86fcb35b094ab47cde06b6a1807eac20d385857ddfc70",
     "dist/src/edit/arrangement-editor.js": "7d120ad6ed55fdf82235b8131648588c30f43a33186c94448df46c0deb7b8366",
     "dist/src/library/key-analyzer-client.js": "4da6957882aaac4058ff3dc362409530b25c3ba9c363b3ce5188af1c0bbc898a",
@@ -19,7 +19,8 @@
     "ui-dist/assets/index-D4O1TRe-.css": "d2d30a87c39396e795c051cb975f5bfaf2d3ba85d075b817b6aa0c42528e975c",
     "ui-dist/assets/index-DjlP38JI.js": "57b8dd148dbafb10f3f6e5a41666256f21115957193c3f98e4bf74ed8b90801d",
     "ui-dist/index.html": "79eb72f281abfc5570c87ab69dc5687a7c6936d3082b0b68efb8e81c7e275678",
-    "ui-dist/gld-bus-panel.js": "a5c15b00e7b67ded7f693cd3e4a346b9f1ed821c3ffda2115424f35963600a95"
+    "ui-dist/gld-bus-panel.js": "01e7d63c14299612fba963fd70fdf19a2c142c8f84cc36560014fa4421f9c67f",
+    "dist/src/control/mixers/gld-midi-feedback.js": "a0c62436a9b250fed0f0a7fc27d59002528491faadf609b001f5382484d53661"
   },
   "sourceHashes": {
     "src/audio/click-sound-settings.ts": "8f211b95e8bf32bf54f37ad19bc75fee8c1b0903b1ad9645ee781bcaba29dbea",

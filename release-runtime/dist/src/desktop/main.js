@@ -41,6 +41,7 @@ import { externalOutputs } from "../control/mixers/gld-exclusive-recall.js";
 import { SurfaceGldRecall as GldBusRecall } from "../control/mixers/gld-surface-recall.js";
 import { PLAYBACK_RETURNS, busId } from "../control/mixers/gld-bus-mix.js";
 import { encodeGldIntent, Gld112SafeClient, } from "../control/mixers/gld112.js";
+import { GldMidiFeedback } from "../control/mixers/gld-midi-feedback.js";
 import { proPresenterApiSlideEvents, proPresenterCueIndexFromMidiValue, proPresenterDueSlideEvents, } from "../control/propresenter-api-slides.js";
 import { parseAudioDeviceList, reconcileAudioDevice, } from "../audio/device-selection.js";
 import { classifyStemOutput, DEFAULT_INSTRUMENT_OUTPUTS, PLAYBACK_OUTPUT_PROFILE, } from "../audio/output-layout.js";
@@ -81,6 +82,7 @@ let cachedAudioDevices = [];
 let selectedAudioRouting = null;
 let selectedStereoRouting = null;
 let gldOnNativeFault=()=>{};
+let handleGldMidiFeedback=()=>false;
 let globalBusRouting = null;
 let globalBusRoutingLocked = true;
 let selectedMidiInput = null;
@@ -229,7 +231,8 @@ async function armNativeSong(songIndex, sourceManifestPath = manifestPath, routi
         controlBus?.publishState();
     });
     engine.on("midi-input", (event) => {
-        void midiInputRouter?.handle(event);
+        const handledByGld=handleGldMidiFeedback(event);
+        if(!handledByGld)void midiInputRouter?.handle(event);
         sendToRenderer("control:midi-input", event);
     });
     engine.on("meters", (meters) => sendToRenderer("mixer:meters", meters));
@@ -671,16 +674,42 @@ async function createWindow() {
         },
     });
     await gldRecall.load();
+    const gldInputs=await listMidiInputs(),gldInputName=gldRecall.config.transport==="midi"&&gldInputs.includes(gldRecall.config.midiOutputName)?gldRecall.config.midiOutputName:"";
+    if(gldInputName&&selectedMidiInput!==gldInputName){selectedMidiInput=gldInputName;await saveDeviceSettings();}
+    let applyingGldFeedback=false;
+    const gldFeedback=new GldMidiFeedback({midiChannel:gldRecall.config.midiChannel,midiInputName:gldInputName,mapping:gldRecall.config.mapping,onFeedback:feedback=>{
+        if(!gldRecall.armed||!gldRecall.surfaceEnabled||!performance)return;
+        const state=performance.snapshot,song=manifest.songs[state.songIndex];if(!song)return;
+        const targets=state.mixer.channels.filter(channel=>busId(song,channel)===feedback.bus);
+        applyingGldFeedback=true;
+        try {
+            for(const channel of targets) {
+                const patch=feedback.type==="fader"?{gain:feedback.gain}:{muted:feedback.muted};
+                if(feedback.type==="fader"&&Math.abs(channel.gain-feedback.gain)<1e-9||feedback.type==="mute"&&channel.muted===feedback.muted)continue;
+                performance.setMixerChannel(channel.index,patch);
+            }
+            gldRecall.status=`Surface Mixer ON: GLD input ${feedback.input} ${feedback.type} received`;
+            sendToRenderer("performance:state",performance.snapshot);controlBus?.publishState();publishGld();
+        } catch(error) {console.warn("GLD feedback was ignored; playback continues",error);}
+        finally {applyingGldFeedback=false;}
+    }});
+    handleGldMidiFeedback=event=>{const channel=(Number(event?.status)&0x0f)+1;if(channel!==gldRecall.config.midiChannel)return false;gldFeedback.handle(event);return true;};
+    const gldState=()=>({...gldRecall.state(),feedback:gldFeedback.state()});
     gldOnNativeFault=()=>gldRecall.nativeFault();
-    publishGld = () => sendToRenderer("gld-bus:state",gldRecall.state());
+    publishGld = () => sendToRenderer("gld-bus:state",gldState());
     const recallGldSong = async song => { try{await gldRecall.recall(song);}catch(error){gldRecall.disarm(error.message);}publishGld(); };
     const currentGldSong = () => {
         const state=performance?.snapshot, song=manifest.songs[state?.songIndex];
         if(!song || song.song.id===EMPTY_SONG_ID || isMediaOnlySong(song)) throw new Error("Load a song in Performance mode first");
         return {song,state};
     };
-    ipcMain.handle("gld-bus:get",async()=>({...gldRecall.state(),midiOutputs:await listMidiOutputs()}));
-    ipcMain.handle("gld-bus:configure",async(_event,value)=>{await gldRecall.configure(value);await gldRecall.restoreNativeOwnership();publishGld();return gldRecall.state();});
+    ipcMain.handle("gld-bus:get",async()=>({...gldState(),midiOutputs:await listMidiOutputs(),midiInputs:await listMidiInputs()}));
+    ipcMain.handle("gld-bus:configure",async(_event,value)=>{await gldRecall.configure(value);
+        const inputs=await listMidiInputs(),input=gldRecall.config.transport==="midi"&&inputs.includes(gldRecall.config.midiOutputName)?gldRecall.config.midiOutputName:"";
+        if(gldRecall.config.transport==="midi"&&!input)throw Error("The selected GLD MIDI device has no matching input for two-way control");
+        gldFeedback.configure({midiChannel:gldRecall.config.midiChannel,midiInputName:input,mapping:gldRecall.config.mapping});
+        if(input&&selectedMidiInput!==input){selectedMidiInput=input;await saveDeviceSettings();if(performance){currentReady=await armNativeSong(performance.snapshot.songIndex);performance.setReadiness(await readinessFor(performance.snapshot.songIndex,currentReady,null));}}
+        await gldRecall.restoreNativeOwnership();publishGld();return gldState();});
     ipcMain.handle("gld-bus:connection-test",async()=>gldRecall.transportTest());
     ipcMain.handle("gld-bus:test",async(_event,value)=>gldRecall.testBus(value));
     ipcMain.handle("gld-bus:confirm",(_event,id)=>gldRecall.acknowledge(id));
@@ -808,7 +837,7 @@ async function createWindow() {
                 throw Error("Levels above the local limit require a mapped GLD return with GLD-only audio levels enabled");
             engine.setMixerChannel(channel.index, channel.gain, channel.muted, channel.solo, channel.iem);
             const previous=state.mixer.channels[channel.index];
-            if(gldRecall.config.mapping[busId(song,channel)] && (previous?.gain!==channel.gain || previous?.muted!==channel.muted)) {
+            if(!applyingGldFeedback && gldRecall.config.mapping[busId(song,channel)] && (previous?.gain!==channel.gain || previous?.muted!==channel.muted)) {
                 const mixer={...state.mixer,channels:state.mixer.channels.map(c=>c.index===channel.index?channel:c)};
                 void gldRecall.live(song,mixer).then(publishGld).catch(error=>{gldRecall.disarm(error.message);publishGld();});
             }
@@ -817,6 +846,7 @@ async function createWindow() {
         setSlidesMidiEnabled: (enabled) => enabled ? engine.slidesMidiOn() : engine.slidesMidiOff(),
         setSurfaceMixerMidiEnabled: async (enabled) => {
             const current=enabled?currentGldSong():{};
+            if(enabled&&gldRecall.config.transport==="midi"&&!gldFeedback.state().enabled)throw Error("GLD two-way MIDI input is unavailable");
             try {await gldRecall.setSurfaceEnabled(enabled,current.song,current.state?.mixer);}
             finally {publishGld();}
         },
@@ -1719,6 +1749,8 @@ async function createWindow() {
         const devices = await listMidiInputs();
         if (next.name !== null && !devices.includes(next.name))
             throw new Error("MIDI input is no longer available");
+        if(gldRecall.config.transport==="midi"&&gldRecall.enabled()&&next.name!==gldFeedback.midiInputName)
+            throw new Error("GLD two-way control reserves the MIDISPORT Uno input; turn off GLD-only levels before choosing another MIDI input");
         if (!(next.profile in FOOT_CONTROLLER_PROFILES))
             throw new Error("Unknown foot controller profile");
         selectedMidiInput = next.name;

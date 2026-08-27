@@ -10,6 +10,7 @@ import {createMixerState} from '../../dist/src/live/performance-session.js';
 import {GldBusRecall,sendTcpBytes} from '../../dist/src/control/mixers/gld-bus-recall.js';
 import {ExclusiveGldRecall,externalOutputs} from '../../dist/src/control/mixers/gld-exclusive-recall.js';
 import {SurfaceGldRecall} from '../../dist/src/control/mixers/gld-surface-recall.js';
+import {GldMidiFeedback,gldDbFromFaderValue} from '../../dist/src/control/mixers/gld-midi-feedback.js';
 import {PLAYBACK_RETURNS,validateConfig,captureBusMix,busIntents,applyBusMix} from '../../dist/src/control/mixers/gld-bus-mix.js';
 const config={transport:'midi',midiChannel:2,midiOutputName:'test',host:'127.0.0.1',port:51325,mapping:{pad:33}};
 test('shipped Performance UI lets buses toggle IEM independently and retains click/cue locks',async()=>{
@@ -222,6 +223,43 @@ test('TCP transport sends the exact same MIDI bytes to a local test server',asyn
  const received=new Promise(resolve=>server.once('connection',socket=>{const chunks=[];socket.on('data',b=>chunks.push(b));socket.on('close',()=>resolve(Buffer.concat(chunks)));}));
  try {await sendTcpBytes({...config,port:server.address().port},[0xB1,0x63,0x40]);assert.deepEqual([...await received],[0xB1,0x63,0x40]);}
  finally {server.close();}
+});
+
+test('GLD MIDI feedback decodes mapped faders and mutes without accepting other console controls',()=>{
+ const received=[],feedback=new GldMidiFeedback({midiChannel:2,midiInputName:'M-Audio MIDISPORT Uno',mapping:{pad:33,drums:10},onFeedback:value=>received.push(value)});
+ assert.equal(feedback.handle({status:0xb1,data1:0x63,data2:0x40},1000),null); // input 33
+ assert.equal(feedback.handle({status:0xb1,data1:0x62,data2:0x17},1001),null);
+ const fader=feedback.handle({status:0xb1,data1:0x06,data2:0x6b},1002);
+ assert.equal(fader.bus,'pad');assert.equal(fader.input,33);assert.equal(fader.db,0);assert.equal(fader.gain,1);
+ const mute=feedback.handle({status:0x91,data1:0x29,data2:0x7f},1003); // input 10
+ assert.equal(mute.bus,'drums');assert.equal(mute.muted,true);
+ assert.equal(feedback.handle({status:0x91,data1:0x29,data2:0},1004),null); // note release
+ assert.equal(feedback.handle({status:0x90,data1:0x29,data2:0x3f},1005),null); // wrong MIDI channel
+ assert.equal(feedback.handle({status:0x91,data1:0x20,data2:0x7f},1006),null); // unmapped input 1
+ assert.equal(feedback.state().received,2);assert.equal(received.length,2);
+});
+
+test('GLD feedback rejects incomplete and stale NRPN while preserving the full console scale',()=>{
+ const feedback=new GldMidiFeedback({midiChannel:2,midiInputName:'Uno',mapping:{pad:33}});
+ feedback.handle({status:0xb1,data1:0x63,data2:0x40},1000);
+ feedback.handle({status:0xb1,data1:0x62,data2:0x17},1001);
+ assert.equal(feedback.handle({status:0xb1,data1:0x06,data2:0x7f},1600),null);
+ assert.equal(gldDbFromFaderValue(0),'-inf');assert.equal(gldDbFromFaderValue(0x1b),-40);assert.equal(gldDbFromFaderValue(0x6b),0);assert.equal(gldDbFromFaderValue(0x7f),10);
+ assert.throws(()=>gldDbFromFaderValue(128));
+ feedback.configure({midiChannel:3,midiInputName:'Uno',mapping:{pad:33}});
+ assert.equal(feedback.handle({status:0xb1,data1:0x63,data2:0x40},2000),null);
+ assert.equal(feedback.state().midiChannel,3);
+});
+
+test('shipped desktop reserves the matching GLD input and suppresses MIDI feedback echo',async()=>{
+ const main=await readFile(new URL('../../release-runtime/dist/src/desktop/main.js',import.meta.url),'utf8');
+ const setup=main.indexOf('const gldInputs=await listMidiInputs()'),initialArm=main.indexOf('void armSourceSong(manifestPath, selectedSongIndex)');
+ assert.ok(setup>0&&initialArm>setup,'GLD input must be selected before the native engine is initially armed');
+ assert.match(main,/selectedMidiInput=gldInputName;await saveDeviceSettings/);
+ assert.match(main,/if\(!applyingGldFeedback && gldRecall\.config\.mapping/);
+ assert.match(main,/handleGldMidiFeedback=event=>/);
+ const panel=await readFile(new URL('../../release-runtime/ui-dist/gld-bus-panel.js',import.meta.url),'utf8');
+ assert.match(panel,/TWO-WAY MIDI/);assert.match(panel,/MIDI FEEDBACK OFF/);
 });
 
 async function surfaceSetup(root=undefined) {
