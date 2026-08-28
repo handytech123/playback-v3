@@ -393,6 +393,14 @@ test('expanded editor dark waveform outline keeps the actual GLD stroke color',a
   assert.deepEqual(strokes,['#8a98a6','#202020','#202020']);
  }
 });
+test('arrangement version changes accept waveform results only from the matching manifest',async()=>{
+ const desktop=await readFile(new URL('../../release-runtime/dist/src/desktop/main.js',import.meta.url),'utf8');
+ const renderer=await readFile(new URL('../../ui-dist/assets/index-DjlP38JI.js',import.meta.url),'utf8');
+ assert.match(desktop,/"editor:waveforms-ready",\s*\{\s*itemId,\s*manifestPath: choice\.manifestPath/);
+ assert.match(renderer,/`\$\{e\.itemId\}\|\$\{e\.manifestPath\}`/);
+ assert.match(renderer,/playbackLoadedEditorManifestPath===e\.manifestPath/);
+ assert.match(renderer,/playbackLoadedEditorManifestPath=n\.manifestPath/);
+});
 test('Surface arming sends colors once; fader moves do not flood color SysEx',async()=>{
  const {service,events}=await surfaceSetup();await service.restoreNativeOwnership();events.length=0;
  await service.setSurfaceEnabled(true,song,mixer);

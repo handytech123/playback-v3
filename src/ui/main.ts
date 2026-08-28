@@ -155,6 +155,7 @@ let performanceRegionSelectionExplicit=false;
 let setCardContextMenu:HTMLElement|null=null;
 let pendingLibraryInsertIndex:number|null=null;
 const pendingEditorWaveforms=new Map<string,any>();
+let loadedEditorManifestPath:string|null=null;
 const transitionLabels:Record<SongTransitionType,{label:string;detail:string}>={
   "cue-next":{label:"CUE NEXT",detail:"SELECT NEXT"},
   "stay-in-song":{label:"STAY",detail:"KEEP CURRENT"},
@@ -976,7 +977,7 @@ function confirmedSetMatchesDraft(){
 function setupPrep() {
   window.playback.prep.onConfirmStatus((state)=>{const progress=Math.max(0,Math.min(100,Math.round(state.progress))),status=$("#confirmSetProgress");status.hidden=false;status.classList.remove("fault");($<HTMLProgressElement>("#confirmSetProgressBar")).value=progress;$("#confirmSetProgressPercent").textContent=`${progress}%`;$("#confirmSetProgressLabel").textContent=state.label;setSetlistStatus(state.label,true);if(globalLoadingDepth>0)showGlobalLoading("CONFIRMING SET",state.label);});
   window.playback.prep.onLoadStatus((state)=>{loadingSetItemId=state.itemId;loadingProgress=Math.max(0,Math.min(100,Math.round(state.progress)));loadingLabel=state.label;renderEditorSetBuilder();if(loadingProgress===100)window.setTimeout(()=>{if(loadingSetItemId===state.itemId&&loadingProgress===100){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}},650);});
-  window.playback.prep.onWaveformsReady((state)=>{pendingEditorWaveforms.set(state.itemId,state.waveforms);if(selectedSetItemId===state.itemId&&workspace){workspace={...workspace,waveforms:state.waveforms};pendingEditorWaveforms.delete(state.itemId);requestAnimationFrame(()=>renderEditorTimeline());}});
+  window.playback.prep.onWaveformsReady((state)=>{const key=`${state.itemId}|${state.manifestPath}`;pendingEditorWaveforms.set(key,state.waveforms);if(selectedSetItemId===state.itemId&&loadedEditorManifestPath===state.manifestPath&&workspace){workspace={...workspace,waveforms:state.waveforms};pendingEditorWaveforms.delete(key);requestAnimationFrame(()=>renderEditorTimeline());}});
   $("#libraryFilter").oninput = () => renderCatalog();
   $("#setlistName").onchange = () => void prepCommand({ action: "rename", name: ($("#setlistName") as HTMLInputElement).value });
   $("#clearSetlist").onclick = () => void prepCommand({ action: "clear" });
@@ -999,6 +1000,7 @@ async function setPrepMode() {
 
 function clearEditorSelectionState(){
   workspace=null;
+  loadedEditorManifestPath=null;
   pendingEditorWaveforms.clear();
   loadingSetItemId=null;
   loadingProgress=0;
@@ -1109,7 +1111,7 @@ function showSetCardContextMenu(clientX:number,clientY:number,itemId:string,titl
   const bounds=menu.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(clientX,innerWidth-bounds.width-8))}px`;menu.style.top=`${Math.max(8,Math.min(clientY,innerHeight-bounds.height-8))}px`;
   window.setTimeout(()=>document.addEventListener("pointerdown",closeSetCardContextMenu,{once:true}),0);
 }
-function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{if(selectedSetItemId!==itemId)return;try{const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;prepState=await window.playback.prep.get();workspace=result.workspace;const preparedWaveforms=pendingEditorWaveforms.get(itemId);if(preparedWaveforms){workspace={...workspace,waveforms:preparedWaveforms};pendingEditorWaveforms.delete(itemId);}selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
+function loadEditorItem(itemId:string){const request=editorLoadSerial.then(async()=>{if(selectedSetItemId!==itemId)return;try{loadedEditorManifestPath=null;const result=await window.playback.prep.loadItem(itemId);if(selectedSetItemId!==itemId)return;prepState=await window.playback.prep.get();loadedEditorManifestPath=result.manifestPath;workspace=result.workspace;const waveformKey=`${itemId}|${result.manifestPath}`,preparedWaveforms=pendingEditorWaveforms.get(waveformKey);if(preparedWaveforms){workspace={...workspace,waveforms:preparedWaveforms};pendingEditorWaveforms.delete(waveformKey);}selectedRegionId=workspace.draft.sections[0]?.id??null;selectionStart=null;selectionEnd=null;currentPosition=0;renderEditorSetBuilder();renderEditor();requestAnimationFrame(()=>{if(selectedSetItemId===itemId&&loadedEditorManifestPath===result.manifestPath)renderEditorTimeline();});}catch(error){if(selectedSetItemId===itemId){loadingSetItemId=null;loadingProgress=0;loadingLabel="";renderEditorSetBuilder();}throw error;}});editorLoadSerial=request.catch(()=>{});return request;}
 function renderEditorLoadStatus(){const status=$("#editorLoadStatus"),visible=loadingSetItemId!==null;status.hidden=!visible;if(!visible)return;status.style.setProperty("--load-angle",`${loadingProgress*3.6}deg`);$("#editorLoadPercent").textContent=`${loadingProgress}%`;$("#editorLoadLabel").textContent=loadingLabel;($<HTMLProgressElement>("#editorLoadProgress")).value=loadingProgress;}
 function renderPrep() {
   if (!prepState) return;

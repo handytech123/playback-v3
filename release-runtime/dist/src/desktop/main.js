@@ -1331,6 +1331,7 @@ async function createWindow() {
                 return;
             sendToRenderer("editor:waveforms-ready", {
                 itemId,
+                manifestPath: choice.manifestPath,
                 waveforms: projectEditorWaveforms(bundle, arrangementEditor.draft),
             });
         })

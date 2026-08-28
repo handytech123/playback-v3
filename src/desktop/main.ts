@@ -1748,6 +1748,7 @@ async function createWindow(): Promise<void> {
         if (editorContext !== loadContext) return;
         sendToRenderer("editor:waveforms-ready", {
           itemId,
+          manifestPath: choice.manifestPath,
           waveforms: projectEditorWaveforms(bundle, arrangementEditor!.draft),
         });
       })

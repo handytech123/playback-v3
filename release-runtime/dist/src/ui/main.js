@@ -236,6 +236,7 @@ let performanceRegionSelectionExplicit = false;
 let setCardContextMenu = null;
 let pendingLibraryInsertIndex = null;
 const pendingEditorWaveforms = new Map();
+let loadedEditorManifestPath = null;
 const transitionLabels = {
     "cue-next": { label: "CUE NEXT", detail: "SELECT NEXT" },
     "stay-in-song": { label: "STAY", detail: "KEEP CURRENT" },
@@ -1639,9 +1640,9 @@ function setupPrep() {
             loadingLabel = "";
             renderEditorSetBuilder();
         } }, 650); });
-    window.playback.prep.onWaveformsReady((state) => { pendingEditorWaveforms.set(state.itemId, state.waveforms); if (selectedSetItemId === state.itemId && workspace) {
+    window.playback.prep.onWaveformsReady((state) => { const key = `${state.itemId}|${state.manifestPath}`; pendingEditorWaveforms.set(key, state.waveforms); if (selectedSetItemId === state.itemId && loadedEditorManifestPath === state.manifestPath && workspace) {
         workspace = { ...workspace, waveforms: state.waveforms };
-        pendingEditorWaveforms.delete(state.itemId);
+        pendingEditorWaveforms.delete(key);
         requestAnimationFrame(() => renderEditorTimeline());
     } });
     $("#libraryFilter").oninput = () => renderCatalog();
@@ -1691,6 +1692,7 @@ async function setPrepMode() {
 }
 function clearEditorSelectionState() {
     workspace = null;
+    loadedEditorManifestPath = null;
     pendingEditorWaveforms.clear();
     loadingSetItemId = null;
     loadingProgress = 0;
@@ -1856,15 +1858,17 @@ function showSetCardContextMenu(clientX, clientY, itemId, title) {
 }
 function loadEditorItem(itemId) { const request = editorLoadSerial.then(async () => { if (selectedSetItemId !== itemId)
     return; try {
+    loadedEditorManifestPath = null;
     const result = await window.playback.prep.loadItem(itemId);
     if (selectedSetItemId !== itemId)
         return;
     prepState = await window.playback.prep.get();
+    loadedEditorManifestPath = result.manifestPath;
     workspace = result.workspace;
-    const preparedWaveforms = pendingEditorWaveforms.get(itemId);
+    const waveformKey = `${itemId}|${result.manifestPath}`, preparedWaveforms = pendingEditorWaveforms.get(waveformKey);
     if (preparedWaveforms) {
         workspace = { ...workspace, waveforms: preparedWaveforms };
-        pendingEditorWaveforms.delete(itemId);
+        pendingEditorWaveforms.delete(waveformKey);
     }
     selectedRegionId = workspace.draft.sections[0]?.id ?? null;
     selectionStart = null;
@@ -1872,7 +1876,7 @@ function loadEditorItem(itemId) { const request = editorLoadSerial.then(async ()
     currentPosition = 0;
     renderEditorSetBuilder();
     renderEditor();
-    requestAnimationFrame(() => { if (selectedSetItemId === itemId)
+    requestAnimationFrame(() => { if (selectedSetItemId === itemId && loadedEditorManifestPath === result.manifestPath)
         renderEditorTimeline(); });
 }
 catch (error) {
