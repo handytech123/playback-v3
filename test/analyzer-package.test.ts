@@ -77,3 +77,28 @@ test("Playback derives regions from Analyzer cue facts when regions are omitted"
     {phrase:"Chorus",position:{measure:6,beat:1,tick:0},atSeconds:10,targetRegionId:"derived-region-002"},
   ]);
 });
+
+test("Playback repairs a cue assigned to a much later duplicate section",()=>{
+  const result=mapAnalyzerTimelinePackage({
+    schema:"playback-analyzer-package/v1",
+    schemaVersion:1,
+    generatedAt:"2026-08-27T00:00:00.000Z",
+    review:{status:"ready"},
+    master:{catalogId:"song-3",title:"Duplicate Sections"},
+    timeline:{durationMs:40000},
+    audioFiles:[],
+    regions:[
+      {id:"r1",name:"Verse",start:{position:{measure:1,beat:1,tick:0}},end:{position:{measure:5,beat:1,tick:0}}},
+      {id:"r2",name:"Turn Around",start:{position:{measure:5,beat:1,tick:0}},end:{position:{measure:9,beat:1,tick:0}}},
+      {id:"r3",name:"Verse",start:{position:{measure:9,beat:1,tick:0}},end:{position:{measure:13,beat:1,tick:0}}},
+      {id:"r4",name:"Turn Around",start:{position:{measure:13,beat:1,tick:0}},end:{position:{measure:17,beat:1,tick:0}}},
+    ],
+    cues:[
+      {id:"c1",phrase:"Turn Around",leadGridBeats:36,cueStart:{position:{measure:4,beat:1,tick:0}},targetRegionId:"r4"},
+      {id:"c2",phrase:"Turn Around",leadGridBeats:4,cueStart:{position:{measure:12,beat:1,tick:0}},targetRegionId:"r4"},
+    ],
+  },40,120,{numerator:4,denominator:4});
+
+  assert.ok(result);
+  assert.deepEqual(result.cues.map(cue=>cue.targetRegionId),["r2","r4"]);
+});

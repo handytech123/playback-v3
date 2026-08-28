@@ -155,11 +155,27 @@ export function mapAnalyzerTimelineFacts(sourceRegions: readonly AnalyzerRegionF
     const start = timingFromAnalyzer(timelineCue.cueStart ?? timelineCue.start, timelineCue.atSeconds, bpm, meter);
     if (!phrase || !start) return null;
     const cueId = normalizedAnalyzerId(timelineCue.id);
-    const targetRegionId = timelineCue.targetRegionId ?? timelineCue.destinationRegionId ?? sourceCueToRegion.get(cueId) ?? targetRegionByLead(cue as AnalyzerCueFact, start, regions, bpm, meter);
+    const declaredTargetRegionId = timelineCue.targetRegionId ?? timelineCue.destinationRegionId ?? sourceCueToRegion.get(cueId) ?? targetRegionByLead(cue as AnalyzerCueFact, start, regions, bpm, meter);
+    const targetRegionId = repairImplausibleCueTarget(declaredTargetRegionId, start.seconds, regions, bpm, meter);
     if (!targetRegionId || !regions.some(region => region.id === targetRegionId)) return null;
     return { phrase, position: start.position, atSeconds: start.seconds, targetRegionId };
   }).filter((cue): cue is { phrase: string; position: MusicalPosition; atSeconds: number; targetRegionId: string } => cue !== null && cue.atSeconds <= durationSeconds);
   return { regions, cues };
+}
+
+function repairImplausibleCueTarget(declaredTargetRegionId: string | undefined, cueSeconds: number, regions: readonly Region[], bpm: number, meter: TimeSignature): string | undefined {
+  const declared = regions.find(region => region.id === declaredTargetRegionId);
+  const nearestFollowing = regions
+    .filter(region => region.startSeconds >= cueSeconds)
+    .sort((a, b) => a.startSeconds - b.startSeconds)[0];
+  if (!declared || !nearestFollowing || declared.id === nearestFollowing.id) return declaredTargetRegionId;
+  const measureSeconds = (60 / bpm) * meter.numerator * (4 / meter.denominator);
+  const maximumNormalLead = measureSeconds * 2 + 0.001;
+  const declaredLead = declared.startSeconds - cueSeconds;
+  const nearestLead = nearestFollowing.startSeconds - cueSeconds;
+  return declaredLead > maximumNormalLead && nearestLead <= maximumNormalLead
+    ? nearestFollowing.id
+    : declaredTargetRegionId;
 }
 
 export function analyzerPackageHasTimeline(packageData: PlaybackAnalyzerPackage): boolean {

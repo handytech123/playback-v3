@@ -54,7 +54,7 @@
     "src/edit/map-editor.ts": "896283698ef82f53e717672d396ab4712743ddd70213ccd799af65b2efd1c891",
     "src/edit/map-persistence.ts": "8e6283998c480a763325631139c0db3f67ff60219cae441c2e698aa64fe21fdd",
     "src/edit/song-map.ts": "1d8c58eb78a711f5e65bf75b32f12c012e89fd1a879b5eb378a3501bef770254",
-    "src/library/analyzer-package.ts": "c28f373cb5463496de8c9c4b6da7d5258ce90811394069b677653c20360a8982",
+    "src/library/analyzer-package.ts": "c71c8862cc23782675ee4d5b50a84ca88dcc5a830df9260c806f40ca001584d3",
     "src/library/audio-role.ts": "1961922c12fd16a6b95d7470d14e35d27327b99169ff342795b260339ddc6656",
     "src/library/key-approval-persistence.ts": "654cdc5dc5c28bc2393e6056a02efa05a30a72a74b813cfff471709e0526e353",
     "src/library/key-diagnostics.ts": "b2887bdd594b0fa1b5237f8b39db304a7ed9af8f130ec8655fe287fc147eac31",
