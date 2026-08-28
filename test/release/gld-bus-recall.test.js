@@ -407,6 +407,13 @@ test('loading an editor workspace re-enables Edit transport controls',async()=>{
  assert.match(renderEditor,/ze\(E\.readiness\)/);
  assert.ok(renderEditor.indexOf('ze(E.readiness)')>renderEditor.indexOf('ne()'),'control lock must refresh after the loaded editor is rendered');
 });
+test('restoring Edit mode loads the selected song so transport is armed',async()=>{
+ const renderer=await readFile(new URL('../../src/ui/main.ts',import.meta.url),'utf8');
+ const start=renderer.indexOf('async function setMode(edit: boolean)'),end=renderer.indexOf('async function enterPerformanceMode',start),setMode=renderer.slice(start,end);
+ assert.match(setMode,/prepState = await window\.playback\.prep\.get\(\)/);
+ assert.match(setMode,/if \(!workspace && selectedSetItemId && selected\?\.kind !== "media"\)/);
+ assert.match(setMode,/await loadEditorItem\(selectedSetItemId\)/);
+});
 test('Surface arming sends colors once; fader moves do not flood color SysEx',async()=>{
  const {service,events}=await surfaceSetup();await service.restoreNativeOwnership();events.length=0;
  await service.setSurfaceEnabled(true,song,mixer);
