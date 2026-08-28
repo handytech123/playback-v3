@@ -1973,6 +1973,7 @@ function renderEditor() {
     renderSelectedInspector();
     renderReadiness();
     renderEditorTimeline();
+    renderPerformanceReadiness(liveState.readiness);
 }
 function renderRegionList() {
     const list = $("#regionList");

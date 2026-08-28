@@ -401,6 +401,12 @@ test('arrangement version changes accept waveform results only from the matching
  assert.match(renderer,/playbackLoadedEditorManifestPath===e\.manifestPath/);
  assert.match(renderer,/playbackLoadedEditorManifestPath=n\.manifestPath/);
 });
+test('loading an editor workspace re-enables Edit transport controls',async()=>{
+ const source=await readFile(new URL('../../ui-dist/assets/index-DjlP38JI.js',import.meta.url),'utf8');
+ const start=source.indexOf('function $e()'),end=source.indexOf('function ',start+12),renderEditor=source.slice(start,end);
+ assert.match(renderEditor,/ze\(E\.readiness\)/);
+ assert.ok(renderEditor.indexOf('ze(E.readiness)')>renderEditor.indexOf('ne()'),'control lock must refresh after the loaded editor is rendered');
+});
 test('Surface arming sends colors once; fader moves do not flood color SysEx',async()=>{
  const {service,events}=await surfaceSetup();await service.restoreNativeOwnership();events.length=0;
  await service.setSurfaceEnabled(true,song,mixer);

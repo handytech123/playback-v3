@@ -1163,6 +1163,7 @@ function renderEditor() {
   ($("#arrangementUndo") as HTMLButtonElement).disabled = !workspace.canUndo;
   ($("#arrangementRedo") as HTMLButtonElement).disabled = !workspace.canRedo;
   renderRegionList(); renderCueList(); renderSelectedInspector(); renderReadiness(); renderEditorTimeline();
+  renderPerformanceReadiness(liveState.readiness);
 }
 
 function renderRegionList() {
