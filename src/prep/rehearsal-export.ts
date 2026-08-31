@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 import { promisify } from "node:util";
 import type { PreparedSong, StemMixSetting } from "../domain/song.js";
@@ -38,7 +38,11 @@ export async function exportRehearsalSong(
 
   await mkdir(dirname(outputPath), { recursive: true });
   const temporaryPath = `${outputPath}.${process.pid}.tmp.wav`;
-  await rm(temporaryPath, { force: true });
+  const filterScriptPath = `${temporaryPath}.filters.txt`;
+  await Promise.all([
+    rm(temporaryPath, { force: true }),
+    rm(filterScriptPath, { force: true }),
+  ]);
 
   const args = ["-hide_banner", "-loglevel", "error", "-nostdin", "-y"];
   const liveInputPaths = [...new Set(liveEvents.map((event) => event.sourcePath))];
@@ -74,7 +78,8 @@ export async function exportRehearsalSong(
   filters.push(
     `${mixInputs}amix=inputs=${mixLabels.length}:duration=longest:normalize=0,alimiter=limit=0.98,atrim=duration=${Math.max(0.1, input.song.durationSeconds).toFixed(3)},aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo[out]`,
   );
-  args.push("-filter_complex", filters.join(";"), "-map", "[out]", "-c:a", "pcm_s16le", outputPath === temporaryPath ? outputPath : temporaryPath);
+  await writeFile(filterScriptPath, filters.join(";"), "utf8");
+  args.push("-filter_complex_script", filterScriptPath, "-map", "[out]", "-c:a", "pcm_s16le", outputPath === temporaryPath ? outputPath : temporaryPath);
 
   try {
     await run(input.ffmpegPath ?? "ffmpeg", args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
@@ -86,6 +91,8 @@ export async function exportRehearsalSong(
   } catch (error) {
     await rm(temporaryPath, { force: true });
     throw error;
+  } finally {
+    await rm(filterScriptPath, { force: true });
   }
 }
 

@@ -47,10 +47,10 @@ test("exports the active song as a rehearsal WAV mixdown", async () => {
       click: {
         regularPath: click,
         accentPath: accent,
-        events: [
-          { atSeconds: 0, accent: true },
-          { atSeconds: 0.5, accent: false },
-        ],
+        events: Array.from({ length: 800 }, (_, index) => ({
+          atSeconds: index / 100,
+          accent: index % 4 === 0,
+        })),
         templateId: "4-4-quarter",
       },
       cues: [{ atSeconds: 0, label: "Verse", audioPath: cue, targetRegionId: "r1" }],
@@ -68,7 +68,7 @@ test("exports the active song as a rehearsal WAV mixdown", async () => {
   });
   const output = await readFile(result.path);
   assert.equal(result.stemCount, 1);
-  assert.equal(result.liveEventCount, 3);
+  assert.equal(result.liveEventCount, 801);
   assert.equal(result.path.endsWith(".wav"), true);
   assert.equal(output.toString("ascii", 0, 4), "RIFF");
   assert.equal(output.toString("ascii", 8, 12), "WAVE");

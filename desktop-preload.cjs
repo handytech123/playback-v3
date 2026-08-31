@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld("playback", {
   command: (command, value) => ipcRenderer.send("playback:command", command, value),
   onTransport: (listener) => ipcRenderer.on("playback:transport", (_event, state) => listener(state)),
   windows: { onMenuAction:(listener)=>ipcRenderer.on("windows:menu",(_event,action)=>listener(action)) },
-  performance: { get:()=>ipcRenderer.invoke("performance:get"), command:(value)=>ipcRenderer.invoke("performance:command",value), exportSong:()=>ipcRenderer.invoke("performance:export-song"), onState:(listener)=>ipcRenderer.on("performance:state",(_event,state)=>listener(state)), onMeters:(listener)=>ipcRenderer.on("mixer:meters",(_event,meters)=>listener(meters)) },
+  performance: { get:()=>ipcRenderer.invoke("performance:get"), command:(value)=>ipcRenderer.invoke("performance:command",value), exportSong:(options)=>ipcRenderer.invoke("performance:export-song",options), onState:(listener)=>ipcRenderer.on("performance:state",(_event,state)=>listener(state)), onMeters:(listener)=>ipcRenderer.on("mixer:meters",(_event,meters)=>listener(meters)) },
   set: { getSong:(index)=>ipcRenderer.invoke("set:get-song",index), selectSong:(index)=>ipcRenderer.invoke("set:select-song",index) },
   arrangements: { previewReaper:()=>ipcRenderer.invoke("reaper:preview"), commitReaper:(action)=>ipcRenderer.invoke("reaper:commit",action) },
   midi: { setOutput:(name)=>ipcRenderer.invoke("midi:set-output",name) },

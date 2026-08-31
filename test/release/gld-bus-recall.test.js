@@ -407,12 +407,44 @@ test('loading an editor workspace re-enables Edit transport controls',async()=>{
  assert.match(renderEditor,/ze\(E\.readiness\)/);
  assert.ok(renderEditor.indexOf('ze(E.readiness)')>renderEditor.indexOf('ne()'),'control lock must refresh after the loaded editor is rendered');
 });
-test('restoring Edit mode loads the selected song so transport is armed',async()=>{
+test('GLD surface mode never blocks Editor transport commands',async()=>{
+ const main=await readFile(new URL('../../release-runtime/dist/src/desktop/main.js',import.meta.url),'utf8');
+ const start=main.indexOf('ipcMain.on("playback:command"'),end=main.indexOf('await window.loadFile',start),handler=main.slice(start,end);
+ assert.ok(start>=0,'shipped desktop must register Editor transport commands');
+ assert.doesNotMatch(handler,/gldRecall\.enabled\(\).*\["play","pad_on"\]/);
+ assert.doesNotMatch(handler,/Disable GLD-only levels while stopped before editor audition/);
+ assert.match(handler,/command === "play"[\s\S]*engine\.play\(\)/);
+});
+test('restoring Edit mode shows set cards without automatically loading audio',async()=>{
  const renderer=await readFile(new URL('../../src/ui/main.ts',import.meta.url),'utf8');
  const start=renderer.indexOf('async function setMode(edit: boolean)'),end=renderer.indexOf('async function enterPerformanceMode',start),setMode=renderer.slice(start,end);
- assert.match(setMode,/prepState = await window\.playback\.prep\.get\(\)/);
- assert.match(setMode,/if \(!workspace && selectedSetItemId && selected\?\.kind !== "media"\)/);
- assert.match(setMode,/await loadEditorItem\(selectedSetItemId\)/);
+ assert.match(setMode,/Select a song card to load it into Edit/);
+ assert.doesNotMatch(setMode,/await loadEditorItem\(selectedSetItemId\)/);
+ assert.match(renderer,/card\.onclick = async \(\) => \{ selectedSetItemId = item\.itemId;.*await loadEditorItem\(item\.itemId\)/);
+});
+test('Edit arrangement replacement accepts generated Original Song versions',async()=>{
+ const main=await readFile(new URL('../../release-runtime/dist/src/desktop/main.js',import.meta.url),'utf8');
+ const start=main.indexOf('else if (command.action === "replace")'),end=main.indexOf('else if (command.action === "remove")',start),replace=main.slice(start,end);
+ assert.ok(start>=0,'shipped desktop must contain the setlist Replace handler');
+ assert.match(main,/preparedChoiceCache = prepared/);
+ assert.match(main,/const cached = preparedChoiceCache\.find\(\(item\) => item\.id === choiceId\)/);
+ assert.match(replace,/await preparedChoiceById\(command\.choiceId\)/);
+ assert.doesNotMatch(replace,/ensureSetlistOriginalVersions/);
+});
+test('Editor WAV export targets the selected set card instead of Performance song one',async()=>{
+ const sourceUi=await readFile(new URL('../../src/ui/main.ts',import.meta.url),'utf8');
+ const preload=await readFile(new URL('../../desktop-preload.cjs',import.meta.url),'utf8');
+ const main=await readFile(new URL('../../release-runtime/dist/src/desktop/main.js',import.meta.url),'utf8');
+ const bundle=await readFile(new URL('../../ui-dist/assets/index-DjlP38JI.js',import.meta.url),'utf8');
+ const start=main.indexOf('ipcMain.handle("performance:export-song"'),end=main.indexOf('ipcMain.handle("set:get-song"',start),handler=main.slice(start,end);
+ assert.match(sourceUi,/exportSong\(\s*editMode && selectedSetItemId\s*\? \{ itemId: selectedSetItemId \}/);
+ assert.match(preload,/exportSong:\(options\)=>ipcRenderer\.invoke\("performance:export-song",options\)/);
+ assert.match(handler,/options\?\.itemId/);
+ assert.match(handler,/operatorSetlist\.items\.findIndex/);
+ assert.match(handler,/readFile\(item\.manifestPath, "utf8"\)/);
+ assert.match(handler,/selectedManifest\.songs\[item\.songIndex\]/);
+ assert.match(handler,/exportSetName = operatorSetlist\.name/);
+ assert.match(bundle,/exportSong\(Q&&F\?\{itemId:F\}:void 0\)/);
 });
 test('Surface arming sends colors once; fader moves do not flood color SysEx',async()=>{
  const {service,events}=await surfaceSetup();await service.restoreNativeOwnership();events.length=0;

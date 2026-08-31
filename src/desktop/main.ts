@@ -179,6 +179,7 @@ import {
   validateClickSound,
   type ClickSoundSettings,
 } from "../audio/click-sound-settings.js";
+import { clearGeneratedSongStateAtStartup } from "./startup-cleanup.js";
 
 const sourceRoot = resolve(import.meta.dirname, "../../..");
 const projectRoot = app.isPackaged ? app.getPath("userData") : sourceRoot;
@@ -431,6 +432,7 @@ async function armNativeSong(
 }
 
 async function createWindow(): Promise<void> {
+  await clearGeneratedSongStateAtStartup(projectRoot, app.isPackaged);
   await preparePackagedRuntime();
   window = new BrowserWindow({
     width: 1600,
@@ -1376,6 +1378,7 @@ async function createWindow(): Promise<void> {
     repairPreparedChoices(
       await discoverPreparedLibrary(await allPreparedManifestPaths(operatorSetlist)),
     );
+  let preparedChoiceCache: PreparedLibraryChoice[] = [];
   const prepResponse = async <T extends Record<string, unknown>>(
     extra: T = {} as T,
   ) => {
@@ -1385,6 +1388,7 @@ async function createWindow(): Promise<void> {
       clickSoundSettings,
       runtimeFfmpegPath,
     );
+    preparedChoiceCache = prepared;
     try {
       const relinked = relinkImportedSetlist(operatorSetlist, prepared);
       if (JSON.stringify(relinked.items) !== JSON.stringify(operatorSetlist.items)) {
@@ -1398,6 +1402,17 @@ async function createWindow(): Promise<void> {
       prepared,
       versionRegistry: preparedVersionRegistry(prepared),
     };
+  };
+  const preparedChoiceById = async (choiceId: string) => {
+    const cached = preparedChoiceCache.find((item) => item.id === choiceId);
+    if (cached) return cached;
+    preparedChoiceCache = await ensureSetlistOriginalVersions(
+      await preparedChoices(),
+      operatorSetlist,
+      clickSoundSettings,
+      runtimeFfmpegPath,
+    );
+    return preparedChoiceCache.find((item) => item.id === choiceId);
   };
   ipcMain.handle("prep:get", async () => prepResponse());
   ipcMain.handle("prep:status", async () => ({
@@ -1548,9 +1563,7 @@ async function createWindow(): Promise<void> {
   });
   ipcMain.handle("prep:command", async (_event, command: any) => {
     if (command.action === "add") {
-      const choice = (await preparedChoices()).find(
-        (item) => item.id === command.choiceId,
-      );
+      const choice = await preparedChoiceById(command.choiceId);
       if (!choice)
         throw new Error("Prepared song version is no longer available");
       const index =
@@ -1577,9 +1590,7 @@ async function createWindow(): Promise<void> {
           : operatorSetlist.items.length;
       operatorSetlist = addMediaFile(operatorSetlist, sourcePath, index);
     } else if (command.action === "replace") {
-      const choice = (await preparedChoices()).find(
-        (item) => item.id === command.choiceId,
-      );
+      const choice = await preparedChoiceById(command.choiceId);
       if (!choice)
         throw new Error("Prepared song version is no longer available");
       operatorSetlist = replacePreparedSong(
@@ -2147,9 +2158,31 @@ async function createWindow(): Promise<void> {
     },
   );
   ipcMain.handle("performance:get", () => performance!.snapshot);
-  ipcMain.handle("performance:export-song", async () => {
-    const songIndex = performance?.snapshot.songIndex ?? selectedSongIndex;
-    const activeSong = manifest.songs[songIndex];
+  ipcMain.handle(
+    "performance:export-song",
+    async (_event, options?: { itemId?: string }) => {
+    let songIndex = performance?.snapshot.songIndex ?? selectedSongIndex;
+    let activeSong: PreparedSong | undefined = manifest.songs[songIndex];
+    let exportSetName = manifest.name;
+    if (options?.itemId) {
+      songIndex = operatorSetlist.items.findIndex(
+        (item) => item.itemId === options.itemId,
+      );
+      if (songIndex < 0) throw new Error("The selected Editor song was not found");
+      const item = operatorSetlist.items[songIndex]!;
+      if (isMediaSetlistItem(item))
+        throw new Error("The selected WAV media item does not need rehearsal export");
+      const selectedManifest = JSON.parse(
+        await readFile(item.manifestPath, "utf8"),
+      ) as ConfirmedSetManifest;
+      const sourceSong = selectedManifest.songs[item.songIndex];
+      if (!sourceSong || String(sourceSong.song.id) !== item.songId)
+        throw new Error(`${item.title} no longer matches its prepared source`);
+      activeSong = item.stemMix
+        ? { ...sourceSong, stemMix: item.stemMix }
+        : sourceSong;
+      exportSetName = operatorSetlist.name;
+    }
     if (!activeSong || activeSong.song.id === EMPTY_SONG_ID)
       throw new Error("Select a confirmed song before exporting rehearsal audio");
     await mkdir(REHEARSAL_EXPORT_DIRECTORY, { recursive: true });
@@ -2164,12 +2197,13 @@ async function createWindow(): Promise<void> {
     if (chosen.canceled || !chosen.filePath) return { cancelled: true };
     return exportRehearsalSong({
       song: activeSong,
-      setName: manifest.name,
+      setName: exportSetName,
       songIndex,
       destinationPath: chosen.filePath,
       ffmpegPath: runtimeFfmpegPath,
     });
-  });
+    },
+  );
   ipcMain.handle("set:get-song", async (_event, index: number) =>
     performanceSongPayload(index),
   );

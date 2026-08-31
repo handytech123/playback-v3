@@ -719,7 +719,12 @@ function setupPerformance() {
       const result = await withGlobalLoading(
         "EXPORTING SONG",
         "Rendering the current song as a rehearsal WAV.",
-        () => window.playback.performance.exportSong(),
+        () =>
+          window.playback.performance.exportSong(
+            editMode && selectedSetItemId
+              ? { itemId: selectedSetItemId }
+              : undefined,
+          ),
       );
       if (result?.cancelled) setSetlistStatus("Song export cancelled.");
       else setSetlistStatus(`Song exported: ${result.path}`);
@@ -915,24 +920,19 @@ async function setMode(edit: boolean) {
   $("#modeLabel").textContent = edit ? "EDIT · SONG MAP + ARRANGEMENT WORKSPACE" : "PERFORMANCE MODE · CONFIRMED SET";
   if (edit && !prepState) {
     setSetlistStatus("Loading setlist...",true);
-    try { prepState = await window.playback.prep.get(); }
-    catch (error) { showError(error); }
+    void window.playback.prep.get().then((state) => {
+      prepState = state;
+      if (editMode) renderEditorSetBuilder();
+    }).catch(showError);
   }
-  if (edit && !workspace) $("#editorStatus").textContent = "Loading the selected song into Edit...";
+  if (edit && !workspace) $("#editorStatus").textContent = "Select a song card to load it into Edit.";
   if (edit && workspace) {
     try {
       const pending = JSON.parse(localStorage.getItem("playback.editor.createNew") ?? "null");
       if (pending?.songId === String(song.song.id)) { await window.playback.arrange.command({ type: "set-name", name: pending.name }); localStorage.removeItem("playback.editor.createNew"); await refreshWorkspace(); setEditorStatus(`New arrangement ready: ${pending.name}`); }
     } catch { localStorage.removeItem("playback.editor.createNew"); }
   }
-  if (edit && prepState) {
-    renderEditorSetBuilder();
-    const selected = prepState.setlist.items.find((item: any) => item.itemId === selectedSetItemId);
-    if (!workspace && selectedSetItemId && selected?.kind !== "media") {
-      try { await loadEditorItem(selectedSetItemId); }
-      catch (error) { showError(error); }
-    }
-  }
+  if (edit && prepState) renderEditorSetBuilder();
   renderEditorSnapMode();
   renderPerformanceReadiness(liveState.readiness);
 }
