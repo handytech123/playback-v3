@@ -117,6 +117,7 @@ export class NativeEngineClient extends EventEmitter {
   cancelTransition(): void { this.send("cancel_transition"); } recover(): void { this.send("recover"); }
   setBusGain(bus: "music" | "click" | "cue" | "pad", gain: number): void { validateGain(gain); this.send(`gain ${bus} ${gain}`); }
   setMixerChannel(index: number, gain: number, muted: boolean, solo: boolean, iem: boolean): void { if (!Number.isInteger(index) || index < 0) throw new Error("Mixer channel index must be non-negative"); validateGain(gain); this.send(`mixer_channel ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
+  setStemTrim(index: number, gain: number, muted: boolean, solo: boolean, iem: boolean): void { if (!Number.isInteger(index) || index < 0) throw new Error("Stem trim index must be non-negative"); validateGain(gain); this.send(`stem_trim ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
   setMasterGain(gain: number): void { validateGain(gain); this.send(`master_gain ${gain}`); }
   setRouting(routing:NativeAudioRouting):Promise<void>{
     if(routing.stems.length!==routing.stemChannels.length||routing.stemBuses&&routing.stemBuses.length!==routing.stems.length)throw new Error("Every stem route requires one bus and channel width");

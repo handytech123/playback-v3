@@ -265,11 +265,14 @@ test('shipped desktop reserves the matching GLD input and suppresses MIDI feedba
  const setup=main.indexOf('const gldInputs=await listMidiInputs()'),initialArm=main.indexOf('void armSourceSong(manifestPath, selectedSongIndex)');
  assert.ok(setup>0&&initialArm>setup,'GLD input must be selected before the native engine is initially armed');
  assert.match(main,/selectedMidiInput=gldInputName;await saveDeviceSettings/);
- assert.match(main,/if\(!applyingGldFeedback && gldRecall\.config\.mapping/);
+ assert.match(main,/if\(!applyingGldFeedback && !applyingPerformanceStemTrim && gldRecall\.config\.mapping/);
  assert.match(main,/handleGldMidiFeedback=event=>/);
  const panel=await readFile(new URL('../../release-runtime/ui-dist/gld-bus-panel.js',import.meta.url),'utf8');
  assert.match(panel,/TWO-WAY MIDI/);assert.match(panel,/MIDI FEEDBACK OFF/);assert.match(panel,/SAVE ALL SONG MIXES/);assert.match(panel,/MutationObserver/);
- assert.doesNotMatch(panel,/save\.textContent='SAVE MIX'/);
+ assert.match(panel,/SAVE SONG MIX/);assert.match(panel,/SAVE CURRENT MIX/);assert.match(panel,/BUS MIXER/);assert.match(panel,/STEM MIXER/);
+ assert.match(panel,/window\.playback\.editor\.mixerChannel/);assert.match(panel,/stem-mixer-channel/);
+ assert.match(panel,/signature!==stemSignature/);assert.match(panel,/document\.activeElement!==fader/);assert.match(panel,/data-mixer-fader/);assert.match(panel,/gld-fader-wrap/);assert.match(panel,/BUS ROUTING ACTIVE/);
+ assert.match(main,/applyingPerformanceStemTrim/);assert.match(main,/value\.action === "stem-mixer-channel"/);
 });
 
 async function surfaceSetup(root=undefined) {

@@ -678,7 +678,7 @@ async function createWindow() {
     await gldRecall.load();
     const gldInputs=await listMidiInputs(),gldInputName=gldRecall.config.transport==="midi"&&gldInputs.includes(gldRecall.config.midiOutputName)?gldRecall.config.midiOutputName:"";
     if(gldInputName&&selectedMidiInput!==gldInputName){selectedMidiInput=gldInputName;await saveDeviceSettings();}
-    let applyingGldFeedback=false;
+    let applyingGldFeedback=false,applyingPerformanceStemTrim=false;
     const gldFeedback=new GldMidiFeedback({midiChannel:gldRecall.config.midiChannel,midiInputName:gldInputName,mapping:gldRecall.config.mapping,onFeedback:feedback=>{
         if(!gldRecall.armed||!gldRecall.surfaceEnabled||!performance)return;
         const state=performance.snapshot,song=manifest.songs[state.songIndex];if(!song)return;
@@ -843,9 +843,10 @@ async function createWindow() {
             const state=performance.snapshot,song=manifest.songs[state.songIndex];
             if(channel.gain > 1.25 && (!gldRecall.enabled() || !gldRecall.ownershipReady || !gldRecall.config.mapping[busId(song,channel)]))
                 throw Error("Levels above the local limit require a mapped GLD return with GLD-only audio levels enabled");
-            engine.setMixerChannel(channel.index, channel.gain, channel.muted, channel.solo, channel.iem);
+            if(applyingPerformanceStemTrim)engine.setStemTrim(channel.index,channel.gain,channel.muted,channel.solo,channel.iem);
+            else engine.setMixerChannel(channel.index, channel.gain, channel.muted, channel.solo, channel.iem);
             const previous=state.mixer.channels[channel.index];
-            if(!applyingGldFeedback && gldRecall.config.mapping[busId(song,channel)] && (previous?.gain!==channel.gain || previous?.muted!==channel.muted)) {
+            if(!applyingGldFeedback && !applyingPerformanceStemTrim && gldRecall.config.mapping[busId(song,channel)] && (previous?.gain!==channel.gain || previous?.muted!==channel.muted)) {
                 const mixer={...state.mixer,channels:state.mixer.channels.map(c=>c.index===channel.index?channel:c)};
                 void gldRecall.live(song,mixer).then(publishGld).catch(error=>{gldRecall.disarm(error.message);publishGld();});
             }
@@ -1712,6 +1713,14 @@ async function createWindow() {
             await rename(temporary, manifestPath);
             controlBus.publishState();
             return { ...performance.snapshot, transitionPlan: plan };
+        }
+        if (value.action === "stem-mixer-channel") {
+            applyingPerformanceStemTrim=true;
+            try {
+                const result=await controlBus.dispatch(toPlaybackCommand({...value,action:"mixer-channel"}),"ui");
+                if(!result.ok)throw new Error(result.error);
+                return result.state;
+            } finally {applyingPerformanceStemTrim=false;}
         }
         const result = await controlBus.dispatch(toPlaybackCommand(value), "ui");
         if (!result.ok)

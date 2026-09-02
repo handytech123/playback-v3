@@ -68,6 +68,7 @@ void testEngineIem() {
         auto& gains=dual?deck.stemGains:engine.stemGains;
         auto& routes=dual?deck.stemRoutes:engine.stemRoutes;
         (dual?deck.stemFaders:engine.stemFaders).push_back(1);
+        (dual?deck.stemTrims:engine.stemTrims).push_back(1);
         (dual?deck.stemMuted:engine.stemMuted).push_back(false);
         (dual?deck.stemSolo:engine.stemSolo).push_back(false);
         (dual?deck.stemIem:engine.stemIem).push_back(true);
@@ -100,6 +101,11 @@ void testEngineIem() {
         for(int i=0;i<30;++i)rendered->getNextAudioBlock(info);
         near(buffer.getSample(0,32),0.25f,"native mapped bus still attenuated");
         near(buffer.getSample(2,32),0.03125f,"native ownership affected IEM feed");
+        engine.setStemTrim(0,0.1f,false,false,true);
+        for(int i=0;i<30;++i)rendered->getNextAudioBlock(info);
+        near(buffer.getSample(0,32),0.25f*mixerFaderToGain(0.1f),"individual stem trim did not affect mapped bus audio");
+        near(buffer.getSample(2,32),0.03125f,"individual stem trim affected pre-fader IEM");
+        engine.setStemTrim(0,1.0f,false,false,true);
         for(float level : {1.25f,1.7782794f,maxGldReturnFader}) {
             engine.setMixerChannel(0,level,false,false,true);
             for(int i=0;i<30;++i)rendered->getNextAudioBlock(info);

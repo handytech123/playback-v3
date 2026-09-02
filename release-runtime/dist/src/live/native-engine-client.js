@@ -147,6 +147,8 @@ export class NativeEngineClient extends EventEmitter {
     setBusGain(bus, gain) { validateGain(gain); this.send(`gain ${bus} ${gain}`); }
     setMixerChannel(index, gain, muted, solo, iem) { if (!Number.isInteger(index) || index < 0)
         throw new Error("Mixer channel index must be non-negative"); validateGain(gain, 3.1622776601683795); this.send(`mixer_channel ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
+    setStemTrim(index, gain, muted, solo, iem) { if (!Number.isInteger(index) || index < 0)
+        throw new Error("Stem trim index must be non-negative"); validateGain(gain); this.send(`stem_trim ${index} ${gain} ${muted ? 1 : 0} ${solo ? 1 : 0} ${iem ? 1 : 0}`); }
     setExternalOutputs(outputs) {
         if(!Array.isArray(outputs)||outputs.some(n=>!Number.isInteger(n)||n<1||n>32)||new Set(outputs).size!==outputs.length)
             return Promise.reject(new Error("Invalid external return outputs"));
